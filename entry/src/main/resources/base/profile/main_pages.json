@@ -1,5 +1,11 @@
 {
   "src": [
-    "pages/Index"
+    "pages/tabs/FocusHomePage",
+    "pages/quickStart/QuickStartPage",
+    "pages/plans/PlanListPage",
+    "pages/plans/PlanAddPage",
+    "pages/plans/PlanDetailPage",
+    "pages/settings/SettingsPage",
+    "pages/settings/PermissionPage"
   ]
 }

@@ -1,3 +1,10 @@
+export type RestrictionMode = 'shield' | 'allow';
+
+export enum FocusSource {
+  QuickStart = 'quick_start',
+  Plan = 'plan'
+}
+
 export enum FocusRunStatus {
   Idle = 'idle',
   Running = 'running',
@@ -11,9 +18,36 @@ export interface FocusSession {
   startAt: number;
   endAt: number;
   status: FocusRunStatus;
+  source: FocusSource;
+  planId: string;
+  planName: string;
+  mode: RestrictionMode;
 }
 
-export function createFocusSession(selectedTokens: string[], durationMinutes: number, startAt: number): FocusSession {
+export function createIdleFocusSession(durationMinutes: number = 25): FocusSession {
+  return {
+    selectedTokens: [],
+    selectedCount: 0,
+    durationMinutes,
+    startAt: 0,
+    endAt: 0,
+    status: FocusRunStatus.Idle,
+    source: FocusSource.QuickStart,
+    planId: '',
+    planName: '',
+    mode: 'shield'
+  };
+}
+
+export function createFocusSession(
+  selectedTokens: string[],
+  durationMinutes: number,
+  startAt: number,
+  source: FocusSource = FocusSource.QuickStart,
+  planId: string = '',
+  planName: string = '',
+  mode: RestrictionMode = 'shield'
+): FocusSession {
   const safeDuration = durationMinutes > 0 ? durationMinutes : 25;
 
   return {
@@ -22,7 +56,11 @@ export function createFocusSession(selectedTokens: string[], durationMinutes: nu
     durationMinutes: safeDuration,
     startAt,
     endAt: startAt + safeDuration * 60 * 1000,
-    status: FocusRunStatus.Running
+    status: FocusRunStatus.Running,
+    source,
+    planId,
+    planName,
+    mode
   };
 }
 

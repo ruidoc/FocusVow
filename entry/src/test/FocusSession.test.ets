@@ -1,22 +1,26 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
+  FocusSource,
   createFocusSession,
   formatRemainingSeconds,
   getRemainingSeconds,
   isFocusSessionFinished
-} from '../main/ets/common/FocusSession';
+} from '../main/ets/models/FocusSession';
 
 export default function focusSessionTest() {
   describe('focusSessionTest', () => {
     it('creates a running session with expected timestamps', 0, () => {
       const startAt = 1_700_000_000_000;
-      const session = createFocusSession(['token-a', 'token-b'], 25, startAt);
+      const session = createFocusSession(['token-a', 'token-b'], 25, startAt, FocusSource.Plan, 'plan-1', '晨间专注');
 
       expect(session.durationMinutes).assertEqual(25);
       expect(session.selectedCount).assertEqual(2);
       expect(session.startAt).assertEqual(startAt);
       expect(session.endAt).assertEqual(startAt + 25 * 60 * 1000);
       expect(session.status).assertEqual('running');
+      expect(session.source).assertEqual('plan');
+      expect(session.planId).assertEqual('plan-1');
+      expect(session.planName).assertEqual('晨间专注');
     });
 
     it('calculates remaining seconds and finish state', 0, () => {
