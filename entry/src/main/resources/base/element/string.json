@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "专注契约"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "专注契约"
+    }
+  ]
+}
