@@ -4,6 +4,7 @@
 /.idea
 **/build
 /.hvigor
+.DS_Store
 .cxx
 /.clangd
 /.clang-format

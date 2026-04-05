@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { PageHeader } from '../../components/common/PageHeader';
+import { AppTheme } from '../../constants/Theme';
 import { FocusSource } from '../../models/FocusSession';
 import { FocusPlan, PlanDraft, getPlanDurationMinutes } from '../../models/PlanModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
@@ -176,11 +177,13 @@ struct PlanDetailPage {
           Text('计划名称')
             .fontSize(15)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           TextInput({ text: this.planName, placeholder: '例如：工作日上午专注' })
             .height(48)
-            .backgroundColor('#FFFFFF')
+            .backgroundColor(AppTheme.colors.surface)
+            .fontColor(AppTheme.colors.textPrimary)
             .borderRadius(16)
+            .border({ width: 1, color: AppTheme.colors.border })
             .padding({ left: 16, right: 16 })
             .onChange((value: string) => {
               this.planName = value;
@@ -193,14 +196,16 @@ struct PlanDetailPage {
           Text('时间区间')
             .fontSize(15)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
 
           Row({ space: 12 }) {
             TextInput({ text: this.startTime, placeholder: '09:00' })
               .width('48%')
               .height(48)
-              .backgroundColor('#FFFFFF')
+              .backgroundColor(AppTheme.colors.surface)
+              .fontColor(AppTheme.colors.textPrimary)
               .borderRadius(16)
+              .border({ width: 1, color: AppTheme.colors.border })
               .padding({ left: 16, right: 16 })
               .onChange((value: string) => {
                 this.startTime = value;
@@ -208,8 +213,10 @@ struct PlanDetailPage {
             TextInput({ text: this.endTime, placeholder: '18:00' })
               .width('48%')
               .height(48)
-              .backgroundColor('#FFFFFF')
+              .backgroundColor(AppTheme.colors.surface)
+              .fontColor(AppTheme.colors.textPrimary)
               .borderRadius(16)
+              .border({ width: 1, color: AppTheme.colors.border })
               .padding({ left: 16, right: 16 })
               .onChange((value: string) => {
                 this.endTime = value;
@@ -223,16 +230,16 @@ struct PlanDetailPage {
           Text('重复日期')
             .fontSize(15)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Row({ space: 8 }) {
             ForEach(this.dayOptions, (item: number) => {
               Button(this.getWeekdayLabel(item))
                 .width(40)
                 .height(40)
                 .type(ButtonType.Capsule)
-                .backgroundColor(this.repeatDays.includes(item) ? '#111827' : '#FFFFFF')
-                .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : '#111827')
-                .border({ width: 1, color: '#D1D5DB' })
+                .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.surface)
+                .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
+                .border({ width: 1, color: this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.border })
                 .onClick(() => {
                   this.toggleRepeatDay(item);
                 })
@@ -246,21 +253,21 @@ struct PlanDetailPage {
           Text('限制模式')
             .fontSize(15)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Row({ space: 10 }) {
             Button('锁定黑名单')
               .type(ButtonType.Capsule)
-              .backgroundColor(this.mode === 'shield' ? '#111827' : '#FFFFFF')
-              .fontColor(this.mode === 'shield' ? '#FFFFFF' : '#111827')
-              .border({ width: 1, color: '#D1D5DB' })
+              .backgroundColor(this.mode === 'shield' ? AppTheme.colors.primary : AppTheme.colors.surface)
+              .fontColor(this.mode === 'shield' ? '#FFFFFF' : AppTheme.colors.textPrimary)
+              .border({ width: 1, color: this.mode === 'shield' ? AppTheme.colors.primary : AppTheme.colors.border })
               .onClick(() => {
                 this.mode = 'shield';
               })
             Button('仅放行白名单')
               .type(ButtonType.Capsule)
-              .backgroundColor(this.mode === 'allow' ? '#111827' : '#FFFFFF')
-              .fontColor(this.mode === 'allow' ? '#FFFFFF' : '#111827')
-              .border({ width: 1, color: '#D1D5DB' })
+              .backgroundColor(this.mode === 'allow' ? AppTheme.colors.primary : AppTheme.colors.surface)
+              .fontColor(this.mode === 'allow' ? '#FFFFFF' : AppTheme.colors.textPrimary)
+              .border({ width: 1, color: this.mode === 'allow' ? AppTheme.colors.primary : AppTheme.colors.border })
               .onClick(() => {
                 this.mode = 'allow';
               })
@@ -272,7 +279,7 @@ struct PlanDetailPage {
         Row() {
           Text(`计划状态：${this.planEnabled ? '启用中' : '已暂停'}`)
             .fontSize(14)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Blank()
           Toggle({ type: ToggleType.Switch, isOn: this.planEnabled })
             .onChange((isOn: boolean) => {
@@ -284,21 +291,23 @@ struct PlanDetailPage {
         }
         .width('100%')
         .padding(18)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 1, color: AppTheme.colors.border })
         .borderRadius(24)
 
         Column({ space: 8 }) {
           Text(`当前已选应用：${this.selectedTokens.length} 个`)
             .fontSize(14)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Text(this.statusMessage)
             .fontSize(12)
-            .fontColor('#6B7280')
+            .fontColor(AppTheme.colors.textSecondary)
             .width('100%')
         }
         .width('100%')
         .padding(20)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 1, color: AppTheme.colors.border })
         .borderRadius(24)
         .alignItems(HorizontalAlign.Start)
 
@@ -306,9 +315,9 @@ struct PlanDetailPage {
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
-          .backgroundColor('#FFFFFF')
-          .fontColor('#111827')
-          .border({ width: 1, color: '#D1D5DB' })
+          .backgroundColor(AppTheme.colors.surface)
+          .fontColor(AppTheme.colors.textPrimary)
+          .border({ width: 1, color: AppTheme.colors.border })
           .onClick(() => {
             this.chooseApps();
           })
@@ -317,7 +326,7 @@ struct PlanDetailPage {
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
-          .backgroundColor('#111827')
+          .backgroundColor(AppTheme.colors.primary)
           .fontColor('#FFFFFF')
           .onClick(() => {
             this.savePlan();
@@ -327,7 +336,7 @@ struct PlanDetailPage {
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
-          .backgroundColor('#2563EB')
+          .backgroundColor(AppTheme.colors.primary)
           .fontColor('#FFFFFF')
           .onClick(() => {
             this.startPlanFocus();
@@ -337,15 +346,16 @@ struct PlanDetailPage {
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
-          .backgroundColor('#FEE2E2')
-          .fontColor('#B91C1C')
+          .backgroundColor(AppTheme.colors.dangerSoft)
+          .fontColor(AppTheme.colors.danger)
+          .border({ width: 1, color: AppTheme.colors.danger })
           .onClick(() => {
             this.deletePlan();
           })
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor('#F7F8FA')
+      .backgroundColor(AppTheme.colors.background)
     }
     .scrollBar(BarState.Off)
     .width('100%')

@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { PageHeader } from '../../components/common/PageHeader';
+import { AppTheme } from '../../constants/Theme';
 import { backRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
@@ -53,18 +54,19 @@ struct PermissionPage {
         Column({ space: 10 }) {
           Text(`系统授权：${this.hasAuthorized ? '已完成' : '未完成'}`)
             .fontSize(15)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Text(`已选择应用：${this.selectedAppCount} 个`)
             .fontSize(15)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Text(this.statusMessage)
             .fontSize(13)
-            .fontColor('#6B7280')
+            .fontColor(AppTheme.colors.textSecondary)
             .width('100%')
         }
         .width('100%')
         .padding(20)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 1, color: AppTheme.colors.border })
         .borderRadius(24)
         .alignItems(HorizontalAlign.Start)
 
@@ -72,8 +74,9 @@ struct PermissionPage {
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
-          .backgroundColor('#E5E7EB')
-          .fontColor('#111827')
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .fontColor(AppTheme.colors.textPrimary)
+          .border({ width: 1, color: AppTheme.colors.border })
           .onClick(() => {
             this.authorize();
           })
@@ -82,16 +85,16 @@ struct PermissionPage {
           .width('100%')
           .height(48)
           .type(ButtonType.Capsule)
-          .backgroundColor('#FFFFFF')
-          .fontColor('#111827')
-          .border({ width: 1, color: '#D1D5DB' })
+          .backgroundColor(AppTheme.colors.surface)
+          .fontColor(AppTheme.colors.textPrimary)
+          .border({ width: 1, color: AppTheme.colors.border })
           .onClick(() => {
             this.chooseApps();
           })
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor('#F7F8FA')
+      .backgroundColor(AppTheme.colors.background)
     }
     .scrollBar(BarState.Off)
     .width('100%')

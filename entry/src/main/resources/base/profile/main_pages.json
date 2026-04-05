@@ -1,6 +1,6 @@
 {
   "src": [
-    "pages/tabs/FocusHomePage",
+    "pages/tabs/MainTabPage",
     "pages/quickStart/QuickStartPage",
     "pages/plans/PlanListPage",
     "pages/plans/PlanAddPage",

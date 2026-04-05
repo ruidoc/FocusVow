@@ -1,4 +1,5 @@
 import { FocusPlan, summarizeRepeatDays } from '../../models/PlanModel';
+import { AppTheme } from '../../constants/Theme';
 
 @Component
 export struct PlanCard {
@@ -24,22 +25,22 @@ export struct PlanCard {
           Text(this.plan.name)
             .fontSize(17)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
           Blank()
           Text(this.plan.enabled ? '已启用' : '已暂停')
             .fontSize(12)
-            .fontColor(this.plan.enabled ? '#2563EB' : '#9CA3AF')
+            .fontColor(this.plan.enabled ? AppTheme.colors.primary : AppTheme.colors.textMuted)
         }
         .width('100%')
 
         Text(`${this.plan.startTime} - ${this.plan.endTime}`)
           .fontSize(14)
-          .fontColor('#374151')
+          .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
 
         Text(`${summarizeRepeatDays(this.plan.repeatDays)} · ${this.plan.selectedCount} 个应用 · ${this.plan.mode === 'shield' ? '锁定模式' : '放行模式'}`)
           .fontSize(12)
-          .fontColor('#6B7280')
+          .fontColor(AppTheme.colors.textMuted)
           .width('100%')
       }
       .width('100%')
@@ -47,8 +48,9 @@ export struct PlanCard {
     }
     .width('100%')
     .type(ButtonType.Capsule)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(24)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
     .padding(18)
     .onClick(() => {
       this.onPress?.();

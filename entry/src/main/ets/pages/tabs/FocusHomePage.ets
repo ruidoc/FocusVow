@@ -1,10 +1,10 @@
 import { common } from '@kit.AbilityKit';
-import { PageHeader } from '../../components/common/PageHeader';
-import { HomeNavButton } from '../../components/home/HomeNavButton';
+import { PageScaffold } from '../../components/common/PageScaffold';
+import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
 import { FocusRunStatus, FocusSession, createIdleFocusSession } from '../../models/FocusSession';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
-import { releaseScreenRestriction } from '../../services/ScreenTimeService';
+import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
 import { FocusStore } from '../../stores/FocusStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
@@ -13,9 +13,8 @@ import { StoreKeys } from '../../stores/StoreKeys';
 
 bootstrapStores();
 
-@Entry
 @Component
-struct FocusHomePage {
+export struct FocusHomePage {
   @StorageLink(StoreKeys.FocusCurrentSession) currentSession: FocusSession = createIdleFocusSession();
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
@@ -55,9 +54,6 @@ struct FocusHomePage {
 
   private syncRemainingLabel(): void {
     this.remainingLabel = FocusStore.getRemainingLabel();
-    if (FocusStore.shouldAutoFinish()) {
-      this.finishCurrentFocus(true);
-    }
   }
 
   private async finishCurrentFocus(isAutoFinished: boolean): Promise<void> {
@@ -68,14 +64,11 @@ struct FocusHomePage {
     this.isStopping = true;
     this.clearTimer();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const result = await releaseScreenRestriction(this.currentSession.selectedTokens, this.currentSession.mode);
-
-    FocusStore.finishSession(hostContext);
-    SettingsStore.updateStatusMessage(
+    await finishRunningFocusSession(
       hostContext,
-      result.ok
-        ? (isAutoFinished ? '专注已完成，限制已自动解除' : '你已手动结束专注')
-        : (isAutoFinished ? `专注已结束，但解除限制失败：${result.message}` : `结束专注失败：${result.message}`)
+      this.currentSession,
+      isAutoFinished ? '专注已完成，限制已自动解除' : '你已手动结束专注',
+      isAutoFinished ? '专注已结束，但解除限制失败' : '结束专注失败'
     );
 
     this.remainingLabel = FocusStore.getRemainingLabel();
@@ -83,95 +76,207 @@ struct FocusHomePage {
     this.startTimer();
   }
 
-  build() {
-    Scroll() {
-      Column({ space: 18 }) {
-        PageHeader({
-          title: '专注契约',
-          subtitle: '本地版主链路：首页、快速专注、计划、设置已经拆开'
-        })
+  private getGreeting(): string {
+    const currentHour = new Date().getHours();
+    if (currentHour < 12) {
+      return '上午好';
+    }
+    if (currentHour < 18) {
+      return '下午好';
+    }
+    return '晚上好';
+  }
 
-        Column({ space: 10 }) {
-          Text(this.currentSession.status === FocusRunStatus.Running ? this.remainingLabel : '准备开始')
-            .fontSize(this.currentSession.status === FocusRunStatus.Running ? 44 : 24)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#111827')
+  private getTodayPlanBadge(): string {
+    return this.planCollection.length > 0 ? `今日 ${this.planCollection.length} 个契约` : '今日无契约';
+  }
 
-          Text(this.currentSession.status === FocusRunStatus.Running
-            ? `${this.currentSession.planName.length > 0 ? this.currentSession.planName : '快速专注'} 进行中`
-            : '先完成授权和应用选择，再开始你的第一段专注')
-            .fontSize(14)
-            .fontColor(this.currentSession.status === FocusRunStatus.Running ? '#2563EB' : '#6B7280')
-            .width('100%')
+  private getHeaderStatusText(): string {
+    if (this.currentSession.status === FocusRunStatus.Running) {
+      return '这段专注正在进行，继续保持。';
+    }
+    return '今天还没开始，加油！';
+  }
 
-          if (this.currentSession.status === FocusRunStatus.Running) {
-            Button('结束当前专注')
-              .width('100%')
-              .height(48)
-              .type(ButtonType.Capsule)
-              .backgroundColor('#EF4444')
-              .fontColor('#FFFFFF')
-              .onClick(() => {
-                this.finishCurrentFocus(false);
-              })
-          }
-        }
+  @Builder
+  private buildHomeHeader(): void {
+    Row() {
+      Column({ space: 6 }) {
+        Text(`${this.getGreeting()}，专注者！`)
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+
+        Text(this.getHeaderStatusText())
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.calendar'))
+          .fontSize(16)
+          .fontColor([AppTheme.colors.textPrimary])
+        Text(this.getTodayPlanBadge())
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+      }
+      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+      .backgroundColor(AppTheme.colors.surfaceRaised)
+      .borderRadius(AppTheme.radius.pill)
+      .border({ width: 1, color: AppTheme.colors.border })
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
+  private buildRunningState(): void {
+    Column({ space: 18 }) {
+      Text(this.remainingLabel)
+        .fontSize(56)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.textPrimary)
+
+      Text(this.currentSession.planName.length > 0 ? this.currentSession.planName : '快速专注进行中')
+        .fontSize(24)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .textAlign(TextAlign.Center)
+
+      Text(`已限制 ${this.currentSession.selectedCount} 个应用，结束后会自动解除限制`)
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textSecondary)
+        .textAlign(TextAlign.Center)
+
+      Button('结束当前专注')
         .width('100%')
-        .padding(22)
-        .backgroundColor('#F3F7FF')
-        .borderRadius(28)
-        .alignItems(HorizontalAlign.Start)
-
-        Column({ space: 8 }) {
-          Text('当前本地状态')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
-
-          Text(`授权状态：${this.hasAuthorized ? '已授权' : '未授权'}`)
-            .fontSize(14)
-            .fontColor('#374151')
-          Text(`已选应用：${this.selectedAppCount} 个`)
-            .fontSize(14)
-            .fontColor('#374151')
-          Text(`本地计划：${this.planCollection.length} 条`)
-            .fontSize(14)
-            .fontColor('#374151')
-          Text(this.statusMessage)
-            .fontSize(13)
-            .fontColor('#6B7280')
-            .width('100%')
-        }
-        .width('100%')
-        .padding(20)
-        .backgroundColor('#FFFFFF')
-        .borderRadius(24)
-        .alignItems(HorizontalAlign.Start)
-
-        HomeNavButton({
-          title: '快速专注',
-          description: '即时授权、选应用、开始本次专注',
-          onPress: () => pushRoute(PageRoutes.QuickStart)
+        .height(56)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.dangerSoft)
+        .fontColor(AppTheme.colors.danger)
+        .border({ width: 1, color: AppTheme.colors.danger })
+        .onClick(() => {
+          this.finishCurrentFocus(false);
         })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12 })
+    .alignItems(HorizontalAlign.Center)
+  }
 
-        HomeNavButton({
-          title: '计划列表',
-          description: '查看和维护本地契约计划',
-          onPress: () => pushRoute(PageRoutes.PlanList)
-        })
+  @Builder
+  private buildEmptyState(): void {
+    Column({ space: 18 }) {
+      Stack() {
+        Column()
+          .width(112)
+          .height(112)
+          .borderRadius(56)
+          .backgroundColor(AppTheme.colors.primarySoft)
+          .opacity(0.22)
+          .blur(40)
 
-        HomeNavButton({
-          title: '设置与权限',
-          description: '系统授权、应用选择、清空本地状态',
-          onPress: () => pushRoute(PageRoutes.Settings)
-        })
+        Column()
+          .width(72)
+          .height(72)
+          .borderRadius(36)
+          .backgroundColor('#2B213D')
+          .opacity(0.75)
+
+        SymbolGlyph($r('sys.symbol.timer'))
+          .fontSize(40)
+          .fontColor(['#F3B562'])
+          .fontWeight(500)
+      }
+      .width(120)
+      .height(120)
+      .alignContent(Alignment.Center)
+
+      Column({ space: 10 }) {
+        Text('改变，从一个契约开始')
+          .fontSize(30)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .textAlign(TextAlign.Center)
+
+        Text('设定时间段，每日自动锁定分心应用')
+          .fontSize(16)
+          .fontColor(AppTheme.colors.textSecondary)
+          .textAlign(TextAlign.Center)
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor('#F7F8FA')
+      .alignItems(HorizontalAlign.Center)
+
+      Button('创建契约')
+        .width('100%')
+        .height(58)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .onClick(() => {
+          pushRoute(PageRoutes.PlanAdd);
+        })
+
+      Row({ space: 6 }) {
+        Text('临时使用？')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+
+        SymbolGlyph($r('sys.symbol.bolt'))
+          .fontSize(14)
+          .fontColor([AppTheme.colors.primary])
+        Text('快速专注')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.primary)
+      }
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        pushRoute(PageRoutes.QuickStart);
+      })
     }
-    .scrollBar(BarState.Off)
+    .width('100%')
+    .padding({ left: 12, right: 12 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private buildHomeContent(): void {
+    Column() {
+      Blank()
+
+      if (this.currentSession.status === FocusRunStatus.Running) {
+        this.buildRunningState()
+      } else {
+        this.buildEmptyState()
+      }
+
+      Blank()
+
+      Text(this.statusMessage)
+        .fontSize(12)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .margin({ bottom: 8 })
+    }
     .width('100%')
     .height('100%')
+  }
+
+  build() {
+    PageScaffold({
+      headerMode: 'custom',
+      showDecoration: true,
+      topPadding: 18,
+      bottomPadding: 12,
+      header: () => { this.buildHomeHeader() },
+      content: () => { this.buildHomeContent() }
+    })
   }
 }

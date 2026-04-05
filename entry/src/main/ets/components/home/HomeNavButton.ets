@@ -1,3 +1,5 @@
+import { AppTheme } from '../../constants/Theme';
+
 @Component
 export struct HomeNavButton {
   @Prop title: string = '';
@@ -11,11 +13,11 @@ export struct HomeNavButton {
           Text(this.title)
             .fontSize(17)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
+            .fontColor(AppTheme.colors.textPrimary)
 
           Text(this.description)
             .fontSize(13)
-            .fontColor('#6B7280')
+            .fontColor(AppTheme.colors.textSecondary)
         }
         .alignItems(HorizontalAlign.Start)
 
@@ -23,7 +25,7 @@ export struct HomeNavButton {
 
         Text('进入')
           .fontSize(13)
-          .fontColor('#2563EB')
+          .fontColor(AppTheme.colors.primary)
       }
       .width('100%')
       .justifyContent(FlexAlign.Start)
@@ -31,8 +33,9 @@ export struct HomeNavButton {
     .width('100%')
     .height(72)
     .type(ButtonType.Capsule)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(24)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
     .padding({ left: 18, right: 18 })
     .onClick(() => {
       this.onPress?.();

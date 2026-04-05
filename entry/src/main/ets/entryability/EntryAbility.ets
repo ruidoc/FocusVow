@@ -22,12 +22,31 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
 
-    windowStage.loadContent('pages/tabs/FocusHomePage', (err) => {
+    windowStage.loadContent('pages/tabs/MainTabPage', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+
+      windowStage.getMainWindow((winErr, win) => {
+        if (winErr.code) {
+          hilog.error(DOMAIN, 'testTag', 'getMainWindow failed: %{public}s', JSON.stringify(winErr));
+          return;
+        }
+        try {
+          win.setWindowLayoutFullScreen(true);
+          const barProps: window.SystemBarProperties = {
+            statusBarColor: '#00000000',
+            navigationBarColor: '#00000000',
+            statusBarContentColor: '#FFFFFFFF',
+            navigationBarContentColor: '#FFFFFFFF'
+          };
+          win.setWindowSystemBarProperties(barProps);
+        } catch (e) {
+          hilog.error(DOMAIN, 'testTag', 'Immersive window failed: %{public}s', String(e));
+        }
+      });
     });
   }
 

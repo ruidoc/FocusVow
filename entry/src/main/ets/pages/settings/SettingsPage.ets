@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { PageHeader } from '../../components/common/PageHeader';
 import { SettingsActionRow } from '../../components/settings/SettingsActionRow';
+import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
 import { FocusStore } from '../../stores/FocusStore';
@@ -61,20 +62,21 @@ struct SettingsPage {
           .width('100%')
           .height(52)
           .type(ButtonType.Capsule)
-          .backgroundColor('#FEE2E2')
-          .fontColor('#B91C1C')
+          .backgroundColor(AppTheme.colors.dangerSoft)
+          .fontColor(AppTheme.colors.danger)
+          .border({ width: 1, color: AppTheme.colors.danger })
           .onClick(() => {
             this.clearLocalData();
           })
 
         Text(this.statusMessage)
           .fontSize(13)
-          .fontColor('#6B7280')
+          .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor('#F7F8FA')
+      .backgroundColor(AppTheme.colors.background)
     }
     .scrollBar(BarState.Off)
     .width('100%')

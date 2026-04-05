@@ -2,7 +2,7 @@ import { router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 
 export class PageRoutes {
-  static readonly FocusHome: string = 'pages/tabs/FocusHomePage';
+  static readonly FocusHome: string = 'pages/tabs/MainTabPage';
   static readonly QuickStart: string = 'pages/quickStart/QuickStartPage';
   static readonly PlanList: string = 'pages/plans/PlanListPage';
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';

@@ -1,0 +1,31 @@
+---
+description: FocusVow 沉浸式窗口与 PageScaffold 壳层约定
+globs: entry/src/main/ets/**/*.ets
+alwaysApply: false
+---
+
+# 沉浸式 + 公共壳（压缩版）
+
+## 全局沉浸式（`EntryAbility`）
+
+- `loadContent` 成功后在 `getMainWindow` 里：`setWindowLayoutFullScreen(true)`。
+- `setWindowSystemBarProperties`：状态栏 / 导航栏背景透明（如 `#00000000`），前景浅色（如 `#FFFFFFFF`），与应用深色底一致。
+- 布局从此画到屏幕边缘；**避让状态栏 / 手势条**交给页面，不要指望系统白边。
+
+## `PageScaffold`（统一页面壳）
+
+- 根 `Stack`：`expandSafeArea(SYSTEM, TOP | BOTTOM)` + `AppTheme.colors.background`，背景铺满系统区域。
+- 内边距：`topPadding` +（可选）`TYPE_SYSTEM` 换算的 `topSafeInsetVp`；`bottomPadding` +（可选）`TYPE_NAVIGATION_INDICATOR` 的 `bottomSafeInsetVp`。
+- `includeTopSafeInset`：**自定义顶栏（非系统 TitleBar）通常必须 `true`**，否则标题被状态栏压住。
+- `includeBottomSafeInset`：有底部主操作或列表时建议 `true`。
+- `fullBleedCustomHeader` + `headerMode: 'custom'`：标题栏横向通栏，**仅内容区**保留 `horizontalPadding`；普通页保持默认 `false`。
+- `@Entry` 页若根不能直接包自定义组件，外层用 `Stack { PageScaffold(...) }` 包一层。
+
+## 主 Tab（`MainTabPage`）
+
+- 底栏 `Row`：在原有 padding 上叠加 `TYPE_NAVIGATION_INDICATOR` 高度（vp），避免 Home Indicator 压住 Tab。
+- 根容器可同样 `expandSafeArea(SYSTEM, TOP | BOTTOM)`，与沉浸式一致。
+
+## 能力缺口
+
+- 当前工程 **Kit 未导出** `Navigation` / `NavDestination` / `NavPathStack` 时，二级页用 `PageScaffold` + 自定义顶栏 + `router.back()` / `onBackPress()`，勿从 `@kit.ArkUI` 强引 Navigation。

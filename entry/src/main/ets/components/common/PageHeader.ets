@@ -1,3 +1,5 @@
+import { AppTheme } from '../../constants/Theme';
+
 @Component
 export struct PageHeader {
   @Prop title: string = '';
@@ -13,8 +15,9 @@ export struct PageHeader {
             .type(ButtonType.Capsule)
             .height(32)
             .fontSize(13)
-            .backgroundColor('#E5E7EB')
-            .fontColor('#111827')
+            .backgroundColor(AppTheme.colors.surfaceRaised)
+            .fontColor(AppTheme.colors.textPrimary)
+            .border({ width: 1, color: AppTheme.colors.border })
             .onClick(() => {
               this.onBack?.();
             })
@@ -27,13 +30,13 @@ export struct PageHeader {
       Text(this.title)
         .fontSize(28)
         .fontWeight(FontWeight.Bold)
-        .fontColor('#111827')
+        .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
 
       if (this.subtitle.length > 0) {
         Text(this.subtitle)
           .fontSize(14)
-          .fontColor('#6B7280')
+          .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
       }
     }

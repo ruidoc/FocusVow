@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { PageHeader } from '../../components/common/PageHeader';
 import { PlanCard } from '../../components/plans/PlanCard';
+import { AppTheme } from '../../constants/Theme';
 import { FocusPlan, PlanFilterScope } from '../../models/PlanModel';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
 import { PlanStore } from '../../stores/PlanStore';
@@ -51,9 +52,9 @@ struct PlanListPage {
           ForEach(this.filterOptions, (item: PlanFilterScope) => {
             Button(this.getFilterLabel(item))
               .type(ButtonType.Capsule)
-              .backgroundColor(this.filterScope === item ? '#111827' : '#FFFFFF')
-              .fontColor(this.filterScope === item ? '#FFFFFF' : '#111827')
-              .border({ width: 1, color: '#D1D5DB' })
+              .backgroundColor(this.filterScope === item ? AppTheme.colors.primary : AppTheme.colors.surface)
+              .fontColor(this.filterScope === item ? '#FFFFFF' : AppTheme.colors.textPrimary)
+              .border({ width: 1, color: this.filterScope === item ? AppTheme.colors.primary : AppTheme.colors.border })
               .onClick(() => {
                 const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
                 PlanStore.setFilterScope(hostContext, item);
@@ -68,15 +69,16 @@ struct PlanListPage {
             Text('还没有契约计划')
               .fontSize(18)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#111827')
+              .fontColor(AppTheme.colors.textPrimary)
             Text('先去新增一条计划，后续就能在详情页继续编辑、启停和启动专注。')
               .fontSize(13)
-              .fontColor('#6B7280')
+              .fontColor(AppTheme.colors.textSecondary)
               .width('100%')
           }
           .width('100%')
           .padding(24)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(AppTheme.colors.surface)
+          .border({ width: 1, color: AppTheme.colors.border })
           .borderRadius(24)
           .alignItems(HorizontalAlign.Start)
         } else {
@@ -98,7 +100,7 @@ struct PlanListPage {
           .width('100%')
           .height(52)
           .type(ButtonType.Capsule)
-          .backgroundColor('#111827')
+          .backgroundColor(AppTheme.colors.primary)
           .fontColor('#FFFFFF')
           .onClick(() => {
             PlanStore.setCurrentPlanId('');
@@ -107,7 +109,7 @@ struct PlanListPage {
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor('#F7F8FA')
+      .backgroundColor(AppTheme.colors.background)
     }
     .scrollBar(BarState.Off)
     .width('100%')

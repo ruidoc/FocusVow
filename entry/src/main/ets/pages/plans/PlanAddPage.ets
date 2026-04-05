@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { PageHeader } from '../../components/common/PageHeader';
+import { PageScaffold } from '../../components/common/PageScaffold';
+import { AppTheme } from '../../constants/Theme';
 import { PlanDraft } from '../../models/PlanModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import { chooseRestrictedApps } from '../../services/ScreenTimeService';
@@ -9,18 +10,69 @@ import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
 
+/** 与 UIContext.showTimePickerDialog 的 onAccept 入参结构对齐（@kit.ArkUI 未导出对应类型名） */
+interface PlanTimePickerAcceptValue {
+  hour?: number;
+  minute?: number;
+}
+
 @Entry
 @Component
 struct PlanAddPage {
   @State planName: string = '';
-  @State startTime: string = '09:00';
-  @State endTime: string = '18:00';
+  @State startTime: string = '20:01';
+  @State endTime: string = '20:21';
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'shield';
-  @State statusMessage: string = '建议先选择和快速专注一致的一组应用，再保存为契约模板';
+  @State statusMessage: string = '';
 
   private readonly dayOptions: number[] = [1, 2, 3, 4, 5, 6, 0];
+
+  private padTimePart(value: number): string {
+    return value.toString().padStart(2, '0');
+  }
+
+  private timeStringToDate(time: string): Date {
+    const normalized = time.trim();
+    const result = new Date();
+    if (!normalized.includes(':')) {
+      return result;
+    }
+    const parts = normalized.split(':');
+    const hour = Math.min(23, Math.max(0, Math.floor(Number(parts[0]) || 0)));
+    const minute = Math.min(59, Math.max(0, Math.floor(Number(parts[1]) || 0)));
+    result.setHours(hour, minute, 0, 0);
+    return result;
+  }
+
+  private showStartTimePicker(): void {
+    this.getUIContext().showTimePickerDialog({
+      selected: this.timeStringToDate(this.startTime),
+      useMilitaryTime: true,
+      onAccept: (value: PlanTimePickerAcceptValue) => {
+        if (value.hour !== undefined && value.minute !== undefined) {
+          this.startTime = `${this.padTimePart(value.hour)}:${this.padTimePart(value.minute)}`;
+        }
+      }
+    });
+  }
+
+  private showEndTimePicker(): void {
+    this.getUIContext().showTimePickerDialog({
+      selected: this.timeStringToDate(this.endTime),
+      useMilitaryTime: true,
+      onAccept: (value: PlanTimePickerAcceptValue) => {
+        if (value.hour !== undefined && value.minute !== undefined) {
+          this.endTime = `${this.padTimePart(value.hour)}:${this.padTimePart(value.minute)}`;
+        }
+      }
+    });
+  }
+
+  private appCardTitle(): string {
+    return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
+  }
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -91,154 +143,292 @@ struct PlanAddPage {
     replaceRoute(PageRoutes.PlanList);
   }
 
-  build() {
-    Scroll() {
-      Column({ space: 18 }) {
-        PageHeader({
-          title: '新增计划',
-          subtitle: '先做本地基础字段，后面再继续贴近 iOS 的完整表单',
-          showBack: true,
-          onBack: () => backRoute()
-        })
-
-        Column({ space: 12 }) {
-          Text('计划名称')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
-          TextInput({ text: this.planName, placeholder: '例如：工作日上午专注' })
-            .height(48)
-            .backgroundColor('#FFFFFF')
-            .borderRadius(16)
-            .padding({ left: 16, right: 16 })
-            .onChange((value: string) => {
-              this.planName = value;
-            })
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-
-        Column({ space: 12 }) {
-          Text('时间区间')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
-
-          Row({ space: 12 }) {
-            TextInput({ text: this.startTime, placeholder: '09:00' })
-              .width('48%')
-              .height(48)
-              .backgroundColor('#FFFFFF')
-              .borderRadius(16)
-              .padding({ left: 16, right: 16 })
-              .onChange((value: string) => {
-                this.startTime = value;
-              })
-            TextInput({ text: this.endTime, placeholder: '18:00' })
-              .width('48%')
-              .height(48)
-              .backgroundColor('#FFFFFF')
-              .borderRadius(16)
-              .padding({ left: 16, right: 16 })
-              .onChange((value: string) => {
-                this.endTime = value;
-              })
-          }
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-
-        Column({ space: 12 }) {
-          Text('重复日期')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
-          Row({ space: 8 }) {
-            ForEach(this.dayOptions, (item: number) => {
-              Button(this.getWeekdayLabel(item))
-                .width(40)
-                .height(40)
-                .type(ButtonType.Capsule)
-                .backgroundColor(this.repeatDays.includes(item) ? '#111827' : '#FFFFFF')
-                .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : '#111827')
-                .border({ width: 1, color: '#D1D5DB' })
-                .onClick(() => {
-                  this.toggleRepeatDay(item);
-                })
-            }, (item: number) => item.toString())
-          }
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-
-        Column({ space: 12 }) {
-          Text('限制模式')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#111827')
-          Row({ space: 10 }) {
-            Button('锁定黑名单')
-              .type(ButtonType.Capsule)
-              .backgroundColor(this.mode === 'shield' ? '#111827' : '#FFFFFF')
-              .fontColor(this.mode === 'shield' ? '#FFFFFF' : '#111827')
-              .border({ width: 1, color: '#D1D5DB' })
-              .onClick(() => {
-                this.mode = 'shield';
-              })
-            Button('仅放行白名单')
-              .type(ButtonType.Capsule)
-              .backgroundColor(this.mode === 'allow' ? '#111827' : '#FFFFFF')
-              .fontColor(this.mode === 'allow' ? '#FFFFFF' : '#111827')
-              .border({ width: 1, color: '#D1D5DB' })
-              .onClick(() => {
-                this.mode = 'allow';
-              })
-          }
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-
-        Column({ space: 8 }) {
-          Text(`当前已选应用：${this.selectedTokens.length} 个`)
-            .fontSize(14)
-            .fontColor('#111827')
-          Text(this.statusMessage)
-            .fontSize(12)
-            .fontColor('#6B7280')
-            .width('100%')
-        }
-        .width('100%')
-        .padding(20)
-        .backgroundColor('#FFFFFF')
-        .borderRadius(24)
-        .alignItems(HorizontalAlign.Start)
-
-        Button('选择计划应用')
-          .width('100%')
-          .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor('#FFFFFF')
-          .fontColor('#111827')
-          .border({ width: 1, color: '#D1D5DB' })
-          .onClick(() => {
-            this.chooseApps();
-          })
-
-        Button('保存计划')
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Capsule)
-          .backgroundColor('#111827')
-          .fontColor('#FFFFFF')
-          .onClick(() => {
-            this.savePlan();
-          })
-      }
-      .width('100%')
-      .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor('#F7F8FA')
+  private appsSubtitle(): string {
+    if (this.selectedTokens.length === 0) {
+      return '未选择应用';
     }
-    .scrollBar(BarState.Off)
+    return `已选 ${this.selectedTokens.length} 个应用`;
+  }
+
+  @Builder
+  buildContractHeader(): void {
+    Row() {
+      Button() {
+        Text('‹')
+          .fontSize(22)
+          .fontColor(AppTheme.colors.textPrimary)
+      }
+      .width(36)
+      .height(36)
+      .type(ButtonType.Normal)
+      .backgroundColor(AppTheme.colors.surfaceRaised)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(18)
+      .onClick(() => {
+        backRoute();
+      })
+
+      Text('创建契约')
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.textPrimary)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+
+      Row()
+        .width(36)
+        .height(36)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  buildContractBody(): void {
+    Column() {
+      Scroll() {
+        Column({ space: 14 }) {
+          Column() {
+            Row() {
+              Text('契约名称')
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.colors.textPrimary)
+              TextInput({ text: this.planName, placeholder: '请输入' })
+                .layoutWeight(1)
+                .height(40)
+                .textAlign(TextAlign.End)
+                .fontSize(15)
+                .fontColor(AppTheme.colors.textPrimary)
+                .placeholderColor(AppTheme.colors.textMuted)
+                .backgroundColor(Color.Transparent)
+                .border({ width: 0 })
+                .onChange((value: string) => {
+                  this.planName = value;
+                })
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .borderRadius(AppTheme.radius.sm)
+
+          Column({ space: 14 }) {
+            Row() {
+              Text('起始时间')
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.colors.textPrimary)
+              Row({ space: 6 }) {
+                Row() {
+                  Text(this.startTime)
+                    .fontSize(15)
+                    .fontColor(AppTheme.colors.textPrimary)
+                }
+                .layoutWeight(1)
+                .height(36)
+                .justifyContent(FlexAlign.Center)
+                .backgroundColor(AppTheme.colors.surface)
+                .border({ width: 1, color: AppTheme.colors.border })
+                .borderRadius(10)
+                .onClick(() => {
+                  this.showStartTimePicker();
+                })
+
+                Text('至')
+                  .fontSize(14)
+                  .fontColor(AppTheme.colors.textMuted)
+
+                Row() {
+                  Text(this.endTime)
+                    .fontSize(15)
+                    .fontColor(AppTheme.colors.textPrimary)
+                }
+                .layoutWeight(1)
+                .height(36)
+                .justifyContent(FlexAlign.Center)
+                .backgroundColor(AppTheme.colors.surface)
+                .border({ width: 1, color: AppTheme.colors.border })
+                .borderRadius(10)
+                .onClick(() => {
+                  this.showEndTimePicker();
+                })
+              }
+              .layoutWeight(1)
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .borderRadius(AppTheme.radius.sm)
+
+          Row() {
+            Text('锁定模式')
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+            Blank()
+            Toggle({ type: ToggleType.Switch, isOn: this.mode === 'allow' })
+              .onChange((isOn: boolean) => {
+                this.mode = isOn ? 'allow' : 'shield';
+              })
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .borderRadius(AppTheme.radius.sm)
+          .alignItems(VerticalAlign.Center)
+
+          Column({ space: 10 }) {
+            Row() {
+              Text(this.appCardTitle())
+                .layoutWeight(1)
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.colors.textPrimary)
+              Button('+ 选择')
+                .type(ButtonType.Capsule)
+                .height(32)
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .backgroundColor(AppTheme.colors.primarySoft)
+                .fontColor(AppTheme.colors.primary)
+                .border({ width: 1, color: AppTheme.colors.primary })
+                .onClick(() => {
+                  this.chooseApps();
+                })
+            }
+            .width('100%')
+
+            Text(this.appsSubtitle())
+              .fontSize(13)
+              .fontColor(AppTheme.colors.textMuted)
+              .width('100%')
+
+            if (this.statusMessage.length > 0) {
+              Text(this.statusMessage)
+                .fontSize(12)
+                .fontColor(AppTheme.colors.textSecondary)
+                .width('100%')
+            }
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .borderRadius(AppTheme.radius.sm)
+          .alignItems(HorizontalAlign.Start)
+
+          Column({ space: 14 }) {
+            Row() {
+              Text('每周几重复')
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.colors.textPrimary)
+              Blank()
+              Text(`已选${this.repeatDays.length}天`)
+                .fontSize(13)
+                .fontColor(AppTheme.colors.textMuted)
+            }
+            .width('100%')
+
+            Row({ space: 4 }) {
+              ForEach(this.dayOptions, (item: number) => {
+                Button(this.getWeekdayLabel(item))
+                  .layoutWeight(1)
+                  .height(36)
+                  .type(ButtonType.Capsule)
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Medium)
+                  .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.surface)
+                  .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
+                  .border({
+                    width: 1,
+                    color: this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.border
+                  })
+                  .onClick(() => {
+                    this.toggleRepeatDay(item);
+                  })
+              }, (item: number) => item.toString())
+            }
+            .width('100%')
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .borderRadius(AppTheme.radius.sm)
+          .alignItems(HorizontalAlign.Start)
+
+          Row() {
+            Text('有效时长')
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+            Blank()
+            Row({ space: 4 }) {
+              Text('长期有效')
+                .fontSize(15)
+                .fontColor(AppTheme.colors.textSecondary)
+              Text('›')
+                .fontSize(18)
+                .fontColor(AppTheme.colors.textMuted)
+            }
+          }
+          .width('100%')
+          .padding(16)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .borderRadius(AppTheme.radius.sm)
+          .alignItems(VerticalAlign.Center)
+        }
+        .width('100%')
+        .padding({ bottom: 8 })
+      }
+      .scrollBar(BarState.Off)
+      .layoutWeight(1)
+      .align(Alignment.Top)
+
+      Button('签定契约')
+        .width('100%')
+        .height(54)
+        .type(ButtonType.Capsule)
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .margin({ top: 12 })
+        .onClick(() => {
+          this.savePlan();
+        })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  build() {
+    Stack() {
+      PageScaffold({
+        headerMode: 'custom',
+        showDecoration: true,
+        topPadding: 12,
+        bottomPadding: 12,
+        horizontalPadding: 20,
+        header: (): void => {
+          this.buildContractHeader();
+        },
+        content: (): void => {
+          this.buildContractBody();
+        }
+      })
+    }
     .width('100%')
     .height('100%')
   }
