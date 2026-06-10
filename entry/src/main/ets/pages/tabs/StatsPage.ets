@@ -1,3 +1,4 @@
+import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
 import { FocusRunStatus, FocusSession, createIdleFocusSession, getRemainingSeconds } from '../../models/FocusSession';
 import { FocusPlan } from '../../models/PlanModel';
@@ -99,23 +100,10 @@ export struct StatsPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  build() {
+  @Builder
+  private buildStatsContent(): void {
     Scroll() {
       Column({ space: 16 }) {
-        Column({ space: 6 }) {
-          Text('专注统计')
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(AppTheme.colors.textPrimary)
-            .width('100%')
-
-          Text(this.getPeriodHint())
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width('100%')
-        }
-        .width('100%')
-
         Row({ space: 10 }) {
           this.buildPeriodButton('today', this.currentPeriod === 'today')
           this.buildPeriodButton('week', this.currentPeriod === 'week')
@@ -136,11 +124,27 @@ export struct StatsPage {
         )
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 22, bottom: 28 })
-      .backgroundColor(AppTheme.colors.background)
+      .constraintSize({ minHeight: '100%' })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
     }
     .scrollBar(BarState.Off)
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
+    .align(Alignment.Top)
+  }
+
+  build() {
+    PageScaffold({
+      subtitle: this.getPeriodHint(),
+      headerMode: 'default',
+      showDecoration: false,
+      topPadding: 12,
+      bottomPadding: 12,
+      horizontalPadding: 20,
+      content: (): void => {
+        this.buildStatsContent();
+      }
+    })
   }
 }

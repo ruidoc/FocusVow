@@ -8,4 +8,11 @@ export class StoreKeys {
   static readonly SettingsSelectedTokens: string = 'settings.selectedTokens';
   static readonly SettingsSelectedAppCount: string = 'settings.selectedAppCount';
   static readonly SettingsStatusMessage: string = 'settings.statusMessage';
+  static readonly CycleGuardEnabled: string = 'cycleGuard.enabled';
+  static readonly CycleGuardQuotaMinutes: string = 'cycleGuard.quotaMinutes';
+  static readonly CycleGuardLockMinutes: string = 'cycleGuard.lockMinutes';
+  static readonly CycleGuardSelectedTokens: string = 'cycleGuard.selectedTokens';
+  static readonly CycleGuardSelectedAppCount: string = 'cycleGuard.selectedAppCount';
+  static readonly CycleGuardPhase: string = 'cycleGuard.phase';
+  static readonly CycleGuardStatusMessage: string = 'cycleGuard.statusMessage';
 }

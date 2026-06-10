@@ -9,6 +9,8 @@ export class PageRoutes {
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
   static readonly Settings: string = 'pages/settings/SettingsPage';
   static readonly Permission: string = 'pages/settings/PermissionPage';
+  static readonly CycleGuard: string = 'pages/settings/CycleGuardPage';
+  static readonly CycleGuardEdit: string = 'pages/settings/CycleGuardPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {

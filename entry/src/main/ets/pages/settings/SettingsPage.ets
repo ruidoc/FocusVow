@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { PageHeader } from '../../components/common/PageHeader';
+import { PageScaffold } from '../../components/common/PageScaffold';
 import { SettingsActionRow } from '../../components/settings/SettingsActionRow';
 import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
@@ -36,16 +36,10 @@ struct SettingsPage {
     this.statusMessage = '本地数据已清空';
   }
 
-  build() {
+  @Builder
+  private buildSettingsContent(): void {
     Scroll() {
       Column({ space: 18 }) {
-        PageHeader({
-          title: '设置',
-          subtitle: '本地版先放权限入口和清空状态能力',
-          showBack: true,
-          onBack: () => backRoute()
-        })
-
         SettingsActionRow({
           title: '系统权限与应用选择',
           value: this.hasAuthorized ? `已授权 · ${this.selectedAppCount} 个应用` : '未授权',
@@ -75,10 +69,33 @@ struct SettingsPage {
           .width('100%')
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor(AppTheme.colors.background)
+      .constraintSize({ minHeight: '100%' })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
     }
     .scrollBar(BarState.Off)
+    .width('100%')
+    .layoutWeight(1)
+    .align(Alignment.Top)
+  }
+
+  build() {
+    Stack() {
+      PageScaffold({
+        title: '设置',
+        subtitle: '本地版先放权限入口和清空状态能力',
+        showBack: true,
+        headerMode: 'default',
+        showDecoration: false,
+        topPadding: 12,
+        bottomPadding: 12,
+        horizontalPadding: 20,
+        onBack: () => backRoute(),
+        content: (): void => {
+          this.buildSettingsContent();
+        }
+      })
+    }
     .width('100%')
     .height('100%')
   }

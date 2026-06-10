@@ -1,6 +1,20 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/yangrui/.ohos/config/default_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B9A848BFD65A4EFB88CBC86FAA46A1D0F2773A8A5A672F46517C1C527BC2706C085DB47D927ECEF",
+          "profile": "/Users/yangrui/.ohos/config/default_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/yangrui/.ohos/config/default_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p12",
+          "storePassword": "0000001B8F96E805C52301A5BD257C586F2E66BF12DB31D3B76CB08739AA1D037F24C2B3267BDB8872D9FC"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",

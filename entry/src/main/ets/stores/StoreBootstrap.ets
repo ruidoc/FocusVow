@@ -1,4 +1,5 @@
 import { createIdleFocusSession } from '../models/FocusSession';
+import { createDefaultCycleGuardState } from '../models/CycleGuardModel';
 import { createDefaultSettingsState } from '../models/PermissionModel';
 import { StoreKeys } from './StoreKeys';
 
@@ -10,6 +11,7 @@ export function bootstrapStores(): void {
   }
 
   const settingsState = createDefaultSettingsState();
+  const cycleGuardState = createDefaultCycleGuardState();
   AppStorage.setOrCreate(StoreKeys.FocusDurationMinutes, 25);
   AppStorage.setOrCreate(StoreKeys.FocusCurrentSession, createIdleFocusSession());
   AppStorage.setOrCreate(StoreKeys.PlanCollection, []);
@@ -19,5 +21,12 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.SettingsSelectedTokens, settingsState.selectedTokens);
   AppStorage.setOrCreate(StoreKeys.SettingsSelectedAppCount, settingsState.selectedAppCount);
   AppStorage.setOrCreate(StoreKeys.SettingsStatusMessage, settingsState.statusMessage);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardEnabled, cycleGuardState.enabled);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardQuotaMinutes, cycleGuardState.quotaMinutes);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardLockMinutes, cycleGuardState.lockMinutes);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedTokens, cycleGuardState.selectedTokens);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedAppCount, cycleGuardState.selectedAppCount);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardPhase, cycleGuardState.phase);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardStatusMessage, cycleGuardState.statusMessage);
   bootstrapped = true;
 }

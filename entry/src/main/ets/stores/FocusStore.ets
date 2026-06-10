@@ -92,6 +92,35 @@ export class FocusStore {
     return nextSession;
   }
 
+  static startSystemGuardSession(
+    context: common.UIAbilityContext,
+    selectedTokens: string[],
+    planId: string,
+    planName: string,
+    mode: RestrictionMode,
+    startAt: number,
+    endAt: number
+  ): FocusSession {
+    bootstrapStores();
+    const durationMinutes = Math.max(1, Math.ceil((endAt - startAt) / (60 * 1000)));
+    const nextSession: FocusSession = {
+      selectedTokens: [...selectedTokens],
+      selectedCount: selectedTokens.length,
+      durationMinutes,
+      startAt,
+      endAt,
+      status: FocusRunStatus.Running,
+      source: FocusSource.GuardStrategy,
+      planId,
+      planName,
+      mode
+    };
+
+    AppStorage.setOrCreate(StoreKeys.FocusCurrentSession, nextSession);
+    savePersistedFocusSession(context, nextSession);
+    return nextSession;
+  }
+
   static finishSession(context: common.UIAbilityContext): void {
     bootstrapStores();
     const currentDuration = FocusStore.getCurrentSession().durationMinutes || FocusStore.getDurationMinutes();

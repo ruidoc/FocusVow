@@ -29,11 +29,6 @@ struct QuickStartPage {
   private readonly durationMax: number = 180;
   private readonly durationStep: number = 5;
 
-  onBackPress(): boolean {
-    backRoute();
-    return true;
-  }
-
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
@@ -152,37 +147,6 @@ struct QuickStartPage {
     this.durationMinutes = next;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     FocusStore.setDurationMinutes(hostContext, next);
-  }
-
-  @Builder
-  buildQuickHeader(): void {
-    Row() {
-      Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(30)
-          .fontColor([AppTheme.colors.textPrimary])
-      }
-      .width(40)
-      .height(40)
-      .margin({ left: 20, right: 20 })
-      .backgroundColor(AppTheme.colors.surfaceRaised)
-      .onClick(() => {
-        backRoute();
-      })
-
-      Text('快速专注')
-        .layoutWeight(1)
-        .fontSize(17)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .textAlign(TextAlign.Center)
-
-      Row()
-        .width(40)
-        .height(40)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -354,16 +318,14 @@ struct QuickStartPage {
   build() {
     Stack() {
       PageScaffold({
-        headerMode: 'custom',
-        fullBleedCustomHeader: true,
+        title: '快速专注',
+        showBack: true,
+        headerMode: 'default',
         showDecoration: false,
-        topPadding: 8,
-        includeTopSafeInset: true,
+        topPadding: 12,
         bottomPadding: 16,
         horizontalPadding: 20,
-        header: (): void => {
-          this.buildQuickHeader();
-        },
+        onBack: () => backRoute(),
         content: (): void => {
           this.buildQuickBody();
         }

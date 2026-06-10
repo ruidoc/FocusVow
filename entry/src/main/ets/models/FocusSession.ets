@@ -2,7 +2,8 @@ export type RestrictionMode = 'shield' | 'allow';
 
 export enum FocusSource {
   QuickStart = 'quick_start',
-  Plan = 'plan'
+  Plan = 'plan',
+  GuardStrategy = 'guard_strategy'
 }
 
 export enum FocusRunStatus {

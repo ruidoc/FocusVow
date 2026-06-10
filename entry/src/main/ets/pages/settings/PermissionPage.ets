@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { PageHeader } from '../../components/common/PageHeader';
+import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute } from '../../router/PageRoutes';
 import {
@@ -41,16 +41,10 @@ struct PermissionPage {
     }
   }
 
-  build() {
+  @Builder
+  private buildPermissionContent(): void {
     Scroll() {
       Column({ space: 18 }) {
-        PageHeader({
-          title: '权限管理',
-          subtitle: '这里单独承接系统授权和应用选择，和首页/快速专注共用一份状态',
-          showBack: true,
-          onBack: () => backRoute()
-        })
-
         Column({ space: 10 }) {
           Text(`系统授权：${this.hasAuthorized ? '已完成' : '未完成'}`)
             .fontSize(15)
@@ -93,10 +87,33 @@ struct PermissionPage {
           })
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .backgroundColor(AppTheme.colors.background)
+      .constraintSize({ minHeight: '100%' })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
     }
     .scrollBar(BarState.Off)
+    .width('100%')
+    .layoutWeight(1)
+    .align(Alignment.Top)
+  }
+
+  build() {
+    Stack() {
+      PageScaffold({
+        title: '权限管理',
+        subtitle: '这里单独承接系统授权和应用选择，和首页/快速专注共用一份状态',
+        showBack: true,
+        headerMode: 'default',
+        showDecoration: false,
+        topPadding: 12,
+        bottomPadding: 12,
+        horizontalPadding: 20,
+        onBack: () => backRoute(),
+        content: (): void => {
+          this.buildPermissionContent();
+        }
+      })
+    }
     .width('100%')
     .height('100%')
   }

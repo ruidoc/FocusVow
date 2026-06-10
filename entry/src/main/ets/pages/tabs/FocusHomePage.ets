@@ -2,9 +2,10 @@ import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
-import { FocusRunStatus, FocusSession, createIdleFocusSession } from '../../models/FocusSession';
+import { FocusRunStatus, FocusSession, FocusSource, createIdleFocusSession } from '../../models/FocusSession';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
+import { syncGuardRuntimeToAppState } from '../../services/GuardRuntimeService';
 import { FocusStore } from '../../stores/FocusStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
@@ -30,6 +31,7 @@ export struct FocusHomePage {
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     FocusStore.hydrate(hostContext);
+    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
     this.syncRemainingLabel();
     this.startTimer();
   }
@@ -53,6 +55,8 @@ export struct FocusHomePage {
   }
 
   private syncRemainingLabel(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
     this.remainingLabel = FocusStore.getRemainingLabel();
   }
 
@@ -88,7 +92,7 @@ export struct FocusHomePage {
   }
 
   private getTodayPlanBadge(): string {
-    return this.planCollection.length > 0 ? `今日 ${this.planCollection.length} 个契约` : '今日无契约';
+    return this.planCollection.length > 0 ? `今日 ${this.planCollection.length} 个专注` : '今日无专注';
   }
 
   private getHeaderStatusText(): string {
@@ -129,6 +133,9 @@ export struct FocusHomePage {
       .backgroundColor(AppTheme.colors.surfaceRaised)
       .borderRadius(AppTheme.radius.pill)
       .border({ width: 1, color: AppTheme.colors.border })
+      .onClick(() => {
+        pushRoute(PageRoutes.PlanList);
+      })
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)
@@ -148,21 +155,41 @@ export struct FocusHomePage {
         .fontColor(AppTheme.colors.textPrimary)
         .textAlign(TextAlign.Center)
 
-      Text(`已限制 ${this.currentSession.selectedCount} 个应用，结束后会自动解除限制`)
+      Text(
+        this.currentSession.source === FocusSource.GuardStrategy
+          ? `已限制 ${this.currentSession.selectedCount} 个应用，当前由系统契约自动锁定`
+          : `已限制 ${this.currentSession.selectedCount} 个应用，结束后会自动解除限制`
+      )
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .textAlign(TextAlign.Center)
 
-      Button('结束当前专注')
-        .width('100%')
-        .height(56)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.dangerSoft)
-        .fontColor(AppTheme.colors.danger)
-        .border({ width: 1, color: AppTheme.colors.danger })
-        .onClick(() => {
-          this.finishCurrentFocus(false);
-        })
+      if (this.currentSession.source === FocusSource.GuardStrategy) {
+        Button('查看当前契约')
+          .width('100%')
+          .height(56)
+          .type(ButtonType.Capsule)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .fontColor(AppTheme.colors.textPrimary)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .onClick(() => {
+            if (this.currentSession.planId.length > 0) {
+              PlanStore.setCurrentPlanId(this.currentSession.planId);
+              pushRoute(PageRoutes.PlanDetail);
+            }
+          })
+      } else {
+        Button('结束当前专注')
+          .width('100%')
+          .height(56)
+          .type(ButtonType.Capsule)
+          .backgroundColor(AppTheme.colors.dangerSoft)
+          .fontColor(AppTheme.colors.danger)
+          .border({ width: 1, color: AppTheme.colors.danger })
+          .onClick(() => {
+            this.finishCurrentFocus(false);
+          })
+      }
     }
     .width('100%')
     .padding({ left: 12, right: 12 })
@@ -185,7 +212,7 @@ export struct FocusHomePage {
           .width(72)
           .height(72)
           .borderRadius(36)
-          .backgroundColor('#2B213D')
+          .backgroundColor(AppTheme.colors.surface)
           .opacity(0.75)
 
         SymbolGlyph($r('sys.symbol.timer'))
@@ -247,26 +274,22 @@ export struct FocusHomePage {
 
   @Builder
   private buildHomeContent(): void {
-    Column() {
-      Blank()
-
+    Column({ space: 24 }) {
       if (this.currentSession.status === FocusRunStatus.Running) {
         this.buildRunningState()
       } else {
         this.buildEmptyState()
       }
 
-      Blank()
-
       Text(this.statusMessage)
         .fontSize(12)
         .fontColor(AppTheme.colors.textMuted)
         .width('100%')
         .textAlign(TextAlign.Center)
-        .margin({ bottom: 8 })
+        .margin({ top: 4 })
     }
     .width('100%')
-    .height('100%')
+    .alignItems(HorizontalAlign.Start)
   }
 
   build() {

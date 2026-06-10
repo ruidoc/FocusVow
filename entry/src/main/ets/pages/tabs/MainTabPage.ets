@@ -1,20 +1,22 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
-import { FocusRunStatus, FocusSession, createIdleFocusSession } from '../../models/FocusSession';
+import { FocusRunStatus, FocusSession, FocusSource, createIdleFocusSession } from '../../models/FocusSession';
 import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
+import { syncGuardRuntimeToAppState } from '../../services/GuardRuntimeService';
+import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
 import { FocusStore } from '../../stores/FocusStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { CycleGuardDetailPage } from './CycleGuardDetailPage';
 import { FocusHomePage } from './FocusHomePage';
 import { ProfilePage } from './ProfilePage';
-import { StatsPage } from './StatsPage';
 
 bootstrapStores();
 
-type MainTabKey = 'focus' | 'stats' | 'profile';
+type MainTabKey = 'focus' | 'guard' | 'profile';
 
 @Entry
 @Component
@@ -32,6 +34,8 @@ struct MainTabPage {
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     FocusStore.hydrate(hostContext);
+    void syncAllPlanGuardStrategies(PlanStore.getPlans());
+    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
     this.startTimer();
 
     window.getLastWindow(hostContext, (err, win) => {
@@ -62,7 +66,14 @@ struct MainTabPage {
   }
 
   private syncFocusLifecycle(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
+
     if (FocusStore.shouldAutoFinish()) {
+      if (this.currentSession.source === FocusSource.GuardStrategy) {
+        FocusStore.resetToIdle(hostContext);
+        return;
+      }
       this.finishCurrentFocus();
     }
   }
@@ -97,7 +108,7 @@ struct MainTabPage {
       return selected ? $r('sys.symbol.timer_circle_fill') : $r('sys.symbol.timer');
     }
 
-    if (tab === 'stats') {
+    if (tab === 'guard') {
       return selected ? $r('sys.symbol.doc_plaintext_fill') : $r('sys.symbol.doc_plaintext');
     }
 
@@ -127,8 +138,8 @@ struct MainTabPage {
       if (this.currentTab === 'focus') {
         FocusHomePage()
           .layoutWeight(1)
-      } else if (this.currentTab === 'stats') {
-        StatsPage()
+      } else if (this.currentTab === 'guard') {
+        CycleGuardDetailPage()
           .layoutWeight(1)
       } else {
         ProfilePage()
@@ -137,7 +148,7 @@ struct MainTabPage {
 
       Row() {
         this.buildTabItem('focus', '专注')
-        this.buildTabItem('stats', '统计')
+        this.buildTabItem('guard', '守护')
         this.buildTabItem('profile', '我的')
       }
       .width('100%')

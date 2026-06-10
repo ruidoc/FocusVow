@@ -1,3 +1,4 @@
+import { PageScaffold } from '../../components/common/PageScaffold';
 import { SettingsActionRow } from '../../components/settings/SettingsActionRow';
 import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
@@ -13,7 +14,8 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
 
-  build() {
+  @Builder
+  private buildProfileContent(): void {
     Scroll() {
       Column({ space: 18 }) {
         Row({ space: 14 }) {
@@ -118,15 +120,36 @@ export struct ProfilePage {
             value: '立即开始',
             onPress: () => pushRoute(PageRoutes.QuickStart)
           })
+
+          SettingsActionRow({
+            title: '循环额度守护',
+            value: '进入编辑页',
+            onPress: () => pushRoute(PageRoutes.CycleGuardEdit)
+          })
         }
         .width('100%')
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 22, bottom: 28 })
-      .backgroundColor(AppTheme.colors.background)
+      .constraintSize({ minHeight: '100%' })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
     }
     .scrollBar(BarState.Off)
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
+    .align(Alignment.Top)
+  }
+
+  build() {
+    PageScaffold({
+      headerMode: 'default',
+      showDecoration: false,
+      topPadding: 12,
+      bottomPadding: 12,
+      horizontalPadding: 20,
+      content: (): void => {
+        this.buildProfileContent();
+      }
+    })
   }
 }

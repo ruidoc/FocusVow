@@ -1,20 +1,20 @@
 class ThemeColors {
-  background: string = '#14141C';
-  backgroundSoft: string = '#171722';
-  surface: string = '#181821';
-  surfaceRaised: string = '#1E1E29';
-  border: string = '#262633';
-  borderStrong: string = '#313142';
+  background: string = '#F8FAFC';
+  backgroundSoft: string = '#FFFFFF';
+  surface: string = '#FFFFFF';
+  surfaceRaised: string = '#F1F5F9';
+  border: string = '#E2E8F0';
+  borderStrong: string = '#CBD5E1';
   primary: string = '#7A5AF8';
-  primarySoft: string = '#2F2558';
-  textPrimary: string = '#E5E7EB';
-  textSecondary: string = '#9CA3AF';
-  textMuted: string = '#6B7280';
-  success: string = '#22C55E';
-  successSoft: string = '#163523';
-  warning: string = '#F59E0B';
-  danger: string = '#F87171';
-  dangerSoft: string = '#3B2027';
+  primarySoft: string = '#EEE8FF';
+  textPrimary: string = '#0F172A';
+  textSecondary: string = '#475569';
+  textMuted: string = '#94A3B8';
+  success: string = '#16A34A';
+  successSoft: string = '#DCFCE7';
+  warning: string = '#D97706';
+  danger: string = '#DC2626';
+  dangerSoft: string = '#FEE2E2';
 }
 
 class ThemeRadius {

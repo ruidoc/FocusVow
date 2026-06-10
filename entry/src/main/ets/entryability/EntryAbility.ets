@@ -7,7 +7,7 @@ const DOMAIN = 0x0000;
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
     } catch {
       hilog.error(DOMAIN, 'testTag', '%{public}s', 'Failed to set colorMode.');
     }
@@ -39,8 +39,8 @@ export default class EntryAbility extends UIAbility {
           const barProps: window.SystemBarProperties = {
             statusBarColor: '#00000000',
             navigationBarColor: '#00000000',
-            statusBarContentColor: '#FFFFFFFF',
-            navigationBarContentColor: '#FFFFFFFF'
+            statusBarContentColor: '#FF0F172A',
+            navigationBarContentColor: '#FF0F172A'
           };
           win.setWindowSystemBarProperties(barProps);
         } catch (e) {

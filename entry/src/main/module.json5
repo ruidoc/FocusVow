@@ -39,6 +39,12 @@
     ],
     "extensionAbilities": [
       {
+        "name": "FocusTimeGuardExtensionAbility",
+        "srcEntry": "./ets/timeguardextension/FocusTimeGuardExtensionAbility.ets",
+        "type": "screenTimeGuard",
+        "exported": false
+      },
+      {
         "name": "EntryBackupAbility",
         "srcEntry": "./ets/entrybackupability/EntryBackupAbility.ets",
         "type": "backup",

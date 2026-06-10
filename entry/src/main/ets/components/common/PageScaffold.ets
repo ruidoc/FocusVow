@@ -14,6 +14,8 @@ export struct PageScaffold {
   @Prop title: string = '';
   @Prop subtitle: string = '';
   @Prop showBack: boolean = false;
+  @Prop showAction: boolean = false;
+  @Prop actionSymbol: Resource = $r('sys.symbol.plus');
   @Prop headerMode: PageHeaderMode = 'default';
   @Prop topPadding: number = 22;
   @Prop horizontalPadding: number = 20;
@@ -26,6 +28,7 @@ export struct PageScaffold {
   /** custom 标题栏是否横向通栏（如 ComposeTitleBar）；为 true 时仅内容区保留 horizontalPadding */
   @Prop fullBleedCustomHeader: boolean = false;
   onBack?: () => void;
+  onAction?: () => void;
 
   @BuilderParam header: () => void = EmptyBuilder;
   @BuilderParam content: () => void = EmptyBuilder;
@@ -80,7 +83,7 @@ export struct PageScaffold {
   }
 
   private getStarOpacity(index: number): number {
-    return index % 3 === 0 ? 0.28 : (index % 3 === 1 ? 0.18 : 0.12);
+    return index % 3 === 0 ? 0.22 : (index % 3 === 1 ? 0.14 : 0.1);
   }
 
   @Builder
@@ -96,7 +99,7 @@ export struct PageScaffold {
           .width(item % 5 === 0 ? 3 : 2)
           .height(item % 5 === 0 ? 3 : 2)
           .borderRadius(2)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(item % 4 === 0 ? AppTheme.colors.primary : AppTheme.colors.borderStrong)
           .opacity(this.getStarOpacity(item))
           .position({
             x: this.getStarLeft(item),
@@ -122,7 +125,10 @@ export struct PageScaffold {
             title: this.title,
             subtitle: this.subtitle,
             showBack: this.showBack,
-            onBack: this.onBack
+            showAction: this.showAction,
+            actionSymbol: this.actionSymbol,
+            onBack: this.onBack,
+            onAction: this.onAction
           })
         }
 

@@ -6,6 +6,7 @@
     "pages/plans/PlanAddPage",
     "pages/plans/PlanDetailPage",
     "pages/settings/SettingsPage",
-    "pages/settings/PermissionPage"
+    "pages/settings/PermissionPage",
+    "pages/settings/CycleGuardPage"
   ]
 }

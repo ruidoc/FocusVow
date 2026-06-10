@@ -3,7 +3,11 @@ import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
 import { PlanDraft } from '../../models/PlanModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
-import { chooseRestrictedApps } from '../../services/ScreenTimeService';
+import {
+  chooseRestrictedApps,
+  ensureScreenTimeAuthorization,
+  syncPlanGuardStrategy
+} from '../../services/ScreenTimeService';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -20,17 +24,30 @@ interface PlanTimePickerAcceptValue {
 @Component
 struct PlanAddPage {
   @State planName: string = '';
-  @State startTime: string = '20:01';
-  @State endTime: string = '20:21';
+  @State startTime: string = '09:00';
+  @State endTime: string = '09:30';
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'shield';
   @State statusMessage: string = '';
+  @State hasInitializedDefaultTime: boolean = false;
 
   private readonly dayOptions: number[] = [1, 2, 3, 4, 5, 6, 0];
 
   private padTimePart(value: number): string {
     return value.toString().padStart(2, '0');
+  }
+
+  private formatTime(date: Date): string {
+    return `${this.padTimePart(date.getHours())}:${this.padTimePart(date.getMinutes())}`;
+  }
+
+  private initDefaultTimeRange(): void {
+    const now = new Date();
+    const end = new Date(now.getTime() + 30 * 60 * 1000);
+    this.startTime = this.formatTime(now);
+    this.endTime = this.formatTime(end);
+    this.hasInitializedDefaultTime = true;
   }
 
   private timeStringToDate(time: string): Date {
@@ -74,12 +91,19 @@ struct PlanAddPage {
     return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
   }
 
+  private modeTitle(): string {
+    return this.mode === 'shield' ? '锁定模式' : '放行模式';
+  }
+
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     const settingsState = SettingsStore.getState();
     this.selectedTokens = [...settingsState.selectedTokens];
     this.statusMessage = settingsState.statusMessage;
+    if (!this.hasInitializedDefaultTime) {
+      this.initDefaultTimeRange();
+    }
   }
 
   private getWeekdayLabel(day: number): string {
@@ -123,7 +147,7 @@ struct PlanAddPage {
     this.statusMessage = result.message;
   }
 
-  private savePlan(): void {
+  private async savePlan(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (this.selectedTokens.length === 0) {
       this.statusMessage = '请先至少选择 1 个应用，再保存契约';
@@ -139,7 +163,20 @@ struct PlanAddPage {
       mode: this.mode
     };
 
-    PlanStore.savePlan(hostContext, draft);
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    const savedPlan = PlanStore.savePlan(hostContext, draft);
+    if (!authResult.ok) {
+      const message = '契约已保存，但未完成系统授权，系统不会自动按时生效';
+      this.statusMessage = message;
+      SettingsStore.updateStatusMessage(hostContext, message);
+      replaceRoute(PageRoutes.PlanList);
+      return;
+    }
+
+    const syncResult = await syncPlanGuardStrategy(savedPlan);
+    this.statusMessage = syncResult.message;
+    SettingsStore.updateStatusMessage(hostContext, syncResult.message);
     replaceRoute(PageRoutes.PlanList);
   }
 
@@ -148,39 +185,6 @@ struct PlanAddPage {
       return '未选择应用';
     }
     return `已选 ${this.selectedTokens.length} 个应用`;
-  }
-
-  @Builder
-  buildContractHeader(): void {
-    Row() {
-      Button() {
-        Text('‹')
-          .fontSize(22)
-          .fontColor(AppTheme.colors.textPrimary)
-      }
-      .width(36)
-      .height(36)
-      .type(ButtonType.Normal)
-      .backgroundColor(AppTheme.colors.surfaceRaised)
-      .border({ width: 1, color: AppTheme.colors.border })
-      .borderRadius(18)
-      .onClick(() => {
-        backRoute();
-      })
-
-      Text('创建契约')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-
-      Row()
-        .width(36)
-        .height(36)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -269,7 +273,7 @@ struct PlanAddPage {
           .borderRadius(AppTheme.radius.sm)
 
           Row() {
-            Text('锁定模式')
+            Text(this.modeTitle())
               .fontSize(15)
               .fontWeight(FontWeight.Medium)
               .fontColor(AppTheme.colors.textPrimary)
@@ -339,23 +343,26 @@ struct PlanAddPage {
             }
             .width('100%')
 
-            Row({ space: 4 }) {
+            Row({ space: 8 }) {
               ForEach(this.dayOptions, (item: number) => {
-                Button(this.getWeekdayLabel(item))
-                  .layoutWeight(1)
-                  .height(36)
-                  .type(ButtonType.Capsule)
-                  .fontSize(13)
-                  .fontWeight(FontWeight.Medium)
-                  .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.surface)
-                  .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
-                  .border({
-                    width: 1,
-                    color: this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.border
-                  })
-                  .onClick(() => {
-                    this.toggleRepeatDay(item);
-                  })
+                Button({ type: ButtonType.Capsule }) {
+                  Stack() {
+                    Text(this.getWeekdayLabel(item))
+                      .fontSize(13)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
+                  }
+                  .width('100%')
+                  .height('100%')
+                  .alignContent(Alignment.Center)
+                }
+                .width(36)
+                .height(36)
+                .padding(0)
+                .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.surface)
+                .onClick(() => {
+                  this.toggleRepeatDay(item);
+                })
               }, (item: number) => item.toString())
             }
             .width('100%')
@@ -406,7 +413,7 @@ struct PlanAddPage {
         .fontColor('#FFFFFF')
         .margin({ top: 12 })
         .onClick(() => {
-          this.savePlan();
+          void this.savePlan();
         })
     }
     .width('100%')
@@ -416,14 +423,14 @@ struct PlanAddPage {
   build() {
     Stack() {
       PageScaffold({
-        headerMode: 'custom',
-        showDecoration: true,
+        title: '创建契约',
+        showBack: true,
+        headerMode: 'default',
+        showDecoration: false,
         topPadding: 12,
         bottomPadding: 12,
         horizontalPadding: 20,
-        header: (): void => {
-          this.buildContractHeader();
-        },
+        onBack: () => backRoute(),
         content: (): void => {
           this.buildContractBody();
         }
