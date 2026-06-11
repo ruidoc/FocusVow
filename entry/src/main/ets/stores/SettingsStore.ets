@@ -8,16 +8,22 @@ function persistCurrentSettings(context: common.UIAbilityContext): void {
   savePersistedSettings(context, SettingsStore.getState());
 }
 
+function syncAppStorageValue<T>(key: string, value: T): void {
+  if (!AppStorage.set<T>(key, value)) {
+    AppStorage.setOrCreate<T>(key, value);
+  }
+}
+
 export class SettingsStore {
   static hydrate(context: common.UIAbilityContext): void {
     bootstrapStores();
     const persistedState = loadPersistedSettings(context);
     const nextState = persistedState ?? createDefaultSettingsState();
 
-    AppStorage.setOrCreate(StoreKeys.SettingsHasAuthorized, nextState.hasAuthorized);
-    AppStorage.setOrCreate(StoreKeys.SettingsSelectedTokens, nextState.selectedTokens);
-    AppStorage.setOrCreate(StoreKeys.SettingsSelectedAppCount, nextState.selectedAppCount);
-    AppStorage.setOrCreate(StoreKeys.SettingsStatusMessage, nextState.statusMessage);
+    syncAppStorageValue(StoreKeys.SettingsHasAuthorized, nextState.hasAuthorized);
+    syncAppStorageValue(StoreKeys.SettingsSelectedTokens, nextState.selectedTokens);
+    syncAppStorageValue(StoreKeys.SettingsSelectedAppCount, nextState.selectedAppCount);
+    syncAppStorageValue(StoreKeys.SettingsStatusMessage, nextState.statusMessage);
   }
 
   static getState(): SettingsState {

@@ -20,15 +20,19 @@ import {
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
+function syncAppStorageValue<T>(key: string, value: T): void {
+  if (!AppStorage.set<T>(key, value)) {
+    AppStorage.setOrCreate<T>(key, value);
+  }
+}
+
 export class FocusStore {
   static hydrate(context: common.UIAbilityContext): void {
     bootstrapStores();
     const persistedSession = loadPersistedFocusSession(context);
     const persistedDuration = loadPersistedDurationMinutes(context);
-    AppStorage.setOrCreate(StoreKeys.FocusDurationMinutes, persistedDuration);
-    if (persistedSession) {
-      AppStorage.setOrCreate(StoreKeys.FocusCurrentSession, persistedSession);
-    }
+    syncAppStorageValue(StoreKeys.FocusDurationMinutes, persistedDuration);
+    syncAppStorageValue(StoreKeys.FocusCurrentSession, persistedSession ?? createIdleFocusSession(persistedDuration));
   }
 
   static getDurationMinutes(): number {

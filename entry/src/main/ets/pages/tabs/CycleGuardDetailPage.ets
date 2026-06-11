@@ -16,10 +16,9 @@ export struct CycleGuardDetailPage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.CycleGuardQuotaMinutes) quotaMinutes: number = 60;
-  @StorageLink(StoreKeys.CycleGuardLockMinutes) lockMinutes: number = 20;
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardPhase) phase: string = 'idle';
-  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置共享时长和锁定时长后，即可启动循环守护';
+  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置共享时长和目标应用后，即可启动循环守护';
   @State private isSubmitting: boolean = false;
 
   aboutToAppear(): void {
@@ -34,16 +33,10 @@ export struct CycleGuardDetailPage {
 
   private getPhaseLabel(): string {
     if (this.phase === 'quota_running') {
-      return '共享额度阶段';
+      return '额度计时中';
     }
-    if (this.phase === 'lock_running') {
-      return '锁定阶段';
-    }
-    if (this.phase === 'switching_to_lock') {
-      return '切换到锁定中';
-    }
-    if (this.phase === 'switching_to_quota') {
-      return '重建额度中';
+    if (this.phase === 'locked') {
+      return '当前已锁定';
     }
     return this.cycleEnabled ? '准备中' : '未启动';
   }
@@ -112,7 +105,7 @@ export struct CycleGuardDetailPage {
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
 
-      Text('先选择目标应用，再设置共享可用时长和自动锁定时长。配置完成后，这里会展示完整详情。')
+      Text('先选择目标应用，再设置共享可用时长。配置完成后，这里会展示完整详情。')
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
@@ -147,12 +140,7 @@ export struct CycleGuardDetailPage {
       this.buildMetricCard(
         '共享可用时长',
         `${this.quotaMinutes} 分钟`,
-        '达到阈值后自动切入锁定阶段'
-      )
-      this.buildMetricCard(
-        '自动锁定时长',
-        `${this.lockMinutes} 分钟`,
-        '锁定结束后会重新开始统计共享额度'
+        '额度用完后会自动锁定目标应用'
       )
       this.buildMetricCard(
         '目标应用',

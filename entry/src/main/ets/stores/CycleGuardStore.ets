@@ -1,5 +1,9 @@
 import { common } from '@kit.AbilityKit';
-import { CycleGuardPhase, CycleGuardState, createDefaultCycleGuardState } from '../models/CycleGuardModel';
+import {
+  CycleGuardPhase,
+  CycleGuardState,
+  createDefaultCycleGuardState
+} from '../models/CycleGuardModel';
 import { loadPersistedCycleGuardState, savePersistedCycleGuardState } from '../services/CycleGuardPersistenceService';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
@@ -8,19 +12,23 @@ function persistCurrentState(context: common.Context): void {
   savePersistedCycleGuardState(context, CycleGuardStore.getState());
 }
 
+function syncAppStorageValue<T>(key: string, value: T): void {
+  if (!AppStorage.set<T>(key, value)) {
+    AppStorage.setOrCreate<T>(key, value);
+  }
+}
+
 export class CycleGuardStore {
   static hydrate(context: common.Context): void {
     bootstrapStores();
-    const persistedState = loadPersistedCycleGuardState(context);
-    const nextState = persistedState ?? createDefaultCycleGuardState();
+    const nextState = loadPersistedCycleGuardState(context) ?? createDefaultCycleGuardState();
 
-    AppStorage.setOrCreate(StoreKeys.CycleGuardEnabled, nextState.enabled);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardQuotaMinutes, nextState.quotaMinutes);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardLockMinutes, nextState.lockMinutes);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedTokens, nextState.selectedTokens);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedAppCount, nextState.selectedAppCount);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardPhase, nextState.phase);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardStatusMessage, nextState.statusMessage);
+    syncAppStorageValue(StoreKeys.CycleGuardEnabled, nextState.enabled);
+    syncAppStorageValue(StoreKeys.CycleGuardQuotaMinutes, nextState.quotaMinutes);
+    syncAppStorageValue(StoreKeys.CycleGuardSelectedTokens, nextState.selectedTokens);
+    syncAppStorageValue(StoreKeys.CycleGuardSelectedAppCount, nextState.selectedAppCount);
+    syncAppStorageValue(StoreKeys.CycleGuardPhase, nextState.phase);
+    syncAppStorageValue(StoreKeys.CycleGuardStatusMessage, nextState.statusMessage);
   }
 
   static getState(): CycleGuardState {
@@ -28,7 +36,6 @@ export class CycleGuardStore {
     return {
       enabled: AppStorage.get<boolean>(StoreKeys.CycleGuardEnabled) ?? false,
       quotaMinutes: AppStorage.get<number>(StoreKeys.CycleGuardQuotaMinutes) ?? 60,
-      lockMinutes: AppStorage.get<number>(StoreKeys.CycleGuardLockMinutes) ?? 20,
       selectedTokens: AppStorage.get<string[]>(StoreKeys.CycleGuardSelectedTokens) ?? [],
       selectedAppCount: AppStorage.get<number>(StoreKeys.CycleGuardSelectedAppCount) ?? 0,
       phase: (AppStorage.get<string>(StoreKeys.CycleGuardPhase) ?? 'idle') as CycleGuardPhase,
@@ -38,21 +45,15 @@ export class CycleGuardStore {
 
   static updateQuotaMinutes(context: common.Context, quotaMinutes: number): void {
     bootstrapStores();
-    AppStorage.setOrCreate(StoreKeys.CycleGuardQuotaMinutes, quotaMinutes);
-    persistCurrentState(context);
-  }
-
-  static updateLockMinutes(context: common.Context, lockMinutes: number): void {
-    bootstrapStores();
-    AppStorage.setOrCreate(StoreKeys.CycleGuardLockMinutes, lockMinutes);
+    syncAppStorageValue(StoreKeys.CycleGuardQuotaMinutes, quotaMinutes);
     persistCurrentState(context);
   }
 
   static updateSelectedTokens(context: common.Context, selectedTokens: string[], statusMessage: string): void {
     bootstrapStores();
-    AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedTokens, [...selectedTokens]);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedAppCount, selectedTokens.length);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardStatusMessage, statusMessage);
+    syncAppStorageValue(StoreKeys.CycleGuardSelectedTokens, [...selectedTokens]);
+    syncAppStorageValue(StoreKeys.CycleGuardSelectedAppCount, selectedTokens.length);
+    syncAppStorageValue(StoreKeys.CycleGuardStatusMessage, statusMessage);
     persistCurrentState(context);
   }
 
@@ -63,9 +64,9 @@ export class CycleGuardStore {
     statusMessage: string
   ): void {
     bootstrapStores();
-    AppStorage.setOrCreate(StoreKeys.CycleGuardEnabled, enabled);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardPhase, phase);
-    AppStorage.setOrCreate(StoreKeys.CycleGuardStatusMessage, statusMessage);
+    syncAppStorageValue(StoreKeys.CycleGuardEnabled, enabled);
+    syncAppStorageValue(StoreKeys.CycleGuardPhase, phase);
+    syncAppStorageValue(StoreKeys.CycleGuardStatusMessage, statusMessage);
     persistCurrentState(context);
   }
 }

@@ -17,13 +17,11 @@ struct CycleGuardPage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.CycleGuardSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) selectedAppCount: number = 0;
-  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置共享时长和锁定时长后，即可启动循环守护';
+  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置共享时长和目标应用后，即可启动循环守护';
   @StorageLink(StoreKeys.CycleGuardQuotaMinutes) storedQuotaMinutes: number = 60;
-  @StorageLink(StoreKeys.CycleGuardLockMinutes) storedLockMinutes: number = 20;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.CycleGuardPhase) phase: string = 'idle';
   @State private draftQuotaMinutes: number = 60;
-  @State private draftLockMinutes: number = 20;
   @State private isSaving: boolean = false;
 
   aboutToAppear(): void {
@@ -35,7 +33,6 @@ struct CycleGuardPage {
 
   private syncDraftValues(): void {
     this.draftQuotaMinutes = this.storedQuotaMinutes;
-    this.draftLockMinutes = this.storedLockMinutes;
   }
 
   private normalizeMinutes(raw: number): number {
@@ -58,16 +55,10 @@ struct CycleGuardPage {
 
   private getPhaseLabel(): string {
     if (this.phase === 'quota_running') {
-      return '共享额度阶段运行中';
+      return '额度计时中';
     }
-    if (this.phase === 'lock_running') {
-      return '锁定阶段运行中';
-    }
-    if (this.phase === 'switching_to_lock') {
-      return '正在切换到锁定阶段';
-    }
-    if (this.phase === 'switching_to_quota') {
-      return '正在重建共享额度';
+    if (this.phase === 'locked') {
+      return '当前已锁定';
     }
     return this.cycleEnabled ? '已启动' : '未启动';
   }
@@ -100,7 +91,6 @@ struct CycleGuardPage {
     this.isSaving = true;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     CycleGuardStore.updateQuotaMinutes(hostContext, this.draftQuotaMinutes);
-    CycleGuardStore.updateLockMinutes(hostContext, this.draftLockMinutes);
     CycleGuardStore.updateRuntimeState(
       hostContext,
       this.cycleEnabled,
@@ -226,58 +216,6 @@ struct CycleGuardPage {
   }
 
   @Builder
-  private buildLockSliderCard(): void {
-    Column({ space: 14 }) {
-      Text('自动锁定时长')
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-
-      Text(this.formatMinutesLabel(this.draftLockMinutes))
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.primary)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      Slider({
-        value: this.draftLockMinutes,
-        min: 5,
-        max: 180,
-        step: 5,
-        style: SliderStyle.OutSet
-      })
-        .width('100%')
-        .blockColor(AppTheme.colors.primary)
-        .trackColor(AppTheme.colors.border)
-        .selectedColor(AppTheme.colors.primary)
-        .showSteps(false)
-        .showTips(false)
-        .onChange((nextValue: number) => {
-          this.draftLockMinutes = this.normalizeMinutes(nextValue);
-        })
-
-      Row() {
-        Text('5 分钟')
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
-        Blank()
-        Text('3 小时')
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding(20)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
   private buildBody(): void {
     Scroll() {
       Column({ space: 18 }) {
@@ -306,7 +244,6 @@ struct CycleGuardPage {
           })
 
         this.buildQuotaSliderCard()
-        this.buildLockSliderCard()
 
         Button('保存配置')
           .width('100%')

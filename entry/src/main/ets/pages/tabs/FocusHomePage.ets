@@ -1,11 +1,13 @@
 import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
+import { CycleGuardPhase } from '../../models/CycleGuardModel';
 import { FocusPlan } from '../../models/PlanModel';
 import { FocusRunStatus, FocusSession, FocusSource, createIdleFocusSession } from '../../models/FocusSession';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { endCurrentCycleGuardLockAndRestart } from '../../services/CycleGuardService';
 import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
-import { syncGuardRuntimeToAppState } from '../../services/GuardRuntimeService';
+import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { FocusStore } from '../../stores/FocusStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
@@ -21,17 +23,22 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.SettingsStatusMessage) statusMessage: string = '先申请系统授权，再选择需要限制的应用';
+  @StorageLink(StoreKeys.CycleGuardEnabled) cycleGuardEnabled: boolean = false;
+  @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleGuardSelectedAppCount: number = 0;
+  @StorageLink(StoreKeys.CycleGuardPhase) cycleGuardPhase: CycleGuardPhase = 'idle';
+  @StorageLink(StoreKeys.CycleGuardStatusMessage) cycleGuardStatusMessage: string = '';
   @State remainingLabel: string = FocusStore.getRemainingLabel();
 
   private timerId: number = -1;
   private isStopping: boolean = false;
+  private isEndingCycleLock: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     FocusStore.hydrate(hostContext);
-    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
+    CycleGuardStore.hydrate(hostContext);
     this.syncRemainingLabel();
     this.startTimer();
   }
@@ -56,7 +63,9 @@ export struct FocusHomePage {
 
   private syncRemainingLabel(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
+    SettingsStore.hydrate(hostContext);
+    FocusStore.hydrate(hostContext);
+    CycleGuardStore.hydrate(hostContext);
     this.remainingLabel = FocusStore.getRemainingLabel();
   }
 
@@ -80,6 +89,23 @@ export struct FocusHomePage {
     this.startTimer();
   }
 
+  private isCycleGuardLocked(): boolean {
+    return this.currentSession.status !== FocusRunStatus.Running &&
+      this.cycleGuardEnabled &&
+      this.cycleGuardPhase === 'locked';
+  }
+
+  private async endCurrentCycleLock(): Promise<void> {
+    if (this.isEndingCycleLock || !this.isCycleGuardLocked()) {
+      return;
+    }
+
+    this.isEndingCycleLock = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    await endCurrentCycleGuardLockAndRestart(hostContext);
+    this.isEndingCycleLock = false;
+  }
+
   private getGreeting(): string {
     const currentHour = new Date().getHours();
     if (currentHour < 12) {
@@ -98,6 +124,9 @@ export struct FocusHomePage {
   private getHeaderStatusText(): string {
     if (this.currentSession.status === FocusRunStatus.Running) {
       return '这段专注正在进行，继续保持。';
+    }
+    if (this.isCycleGuardLocked()) {
+      return '共享额度已用完，当前处于锁定中。';
     }
     return '今天还没开始，加油！';
   }
@@ -264,6 +293,7 @@ export struct FocusHomePage {
       }
       .justifyContent(FlexAlign.Center)
       .onClick(() => {
+        console.log('快速专注');
         pushRoute(PageRoutes.QuickStart);
       })
     }
@@ -273,15 +303,61 @@ export struct FocusHomePage {
   }
 
   @Builder
+  private buildCycleGuardLockedState(): void {
+    Column({ space: 18 }) {
+      Text('循环守护锁定中')
+        .fontSize(32)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.textPrimary)
+        .textAlign(TextAlign.Center)
+
+      Text(`共享额度已用完，当前已限制 ${this.cycleGuardSelectedAppCount} 个应用`)
+        .fontSize(15)
+        .fontColor(AppTheme.colors.textSecondary)
+        .textAlign(TextAlign.Center)
+
+      Button('结束当前锁定')
+        .width('100%')
+        .height(56)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.dangerSoft)
+        .fontColor(AppTheme.colors.danger)
+        .border({ width: 1, color: AppTheme.colors.danger })
+        .enabled(!this.isEndingCycleLock)
+        .opacity(this.isEndingCycleLock ? 0.7 : 1)
+        .onClick(() => {
+          this.endCurrentCycleLock();
+        })
+
+      Text('结束后会重新开始一轮共享额度计时')
+        .fontSize(13)
+        .fontColor(AppTheme.colors.textMuted)
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  private getFooterStatusMessage(): string {
+    if (this.isCycleGuardLocked()) {
+      return this.cycleGuardStatusMessage;
+    }
+    return this.statusMessage;
+  }
+
+  @Builder
   private buildHomeContent(): void {
     Column({ space: 24 }) {
       if (this.currentSession.status === FocusRunStatus.Running) {
         this.buildRunningState()
+      } else if (this.isCycleGuardLocked()) {
+        this.buildCycleGuardLockedState()
       } else {
         this.buildEmptyState()
       }
 
-      Text(this.statusMessage)
+      Text(this.getFooterStatusMessage())
         .fontSize(12)
         .fontColor(AppTheme.colors.textMuted)
         .width('100%')

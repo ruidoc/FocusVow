@@ -39,10 +39,15 @@
     ],
     "extensionAbilities": [
       {
-        "name": "FocusTimeGuardExtensionAbility",
-        "srcEntry": "./ets/timeguardextension/FocusTimeGuardExtensionAbility.ets",
+        "name": "TimeGuardExtAbility",
+        "srcEntry": "./ets/extension/TimeGuardExtAbility.ets",
         "type": "screenTimeGuard",
-        "exported": false
+        "exported": false,
+        "skills": [
+          {
+            "actions": ["action.ohos.timeGuard.listener"] // 必须包含此 action
+          }
+        ]
       },
       {
         "name": "EntryBackupAbility",

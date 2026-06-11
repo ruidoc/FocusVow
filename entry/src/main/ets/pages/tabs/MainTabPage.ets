@@ -3,7 +3,7 @@ import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
 import { FocusRunStatus, FocusSession, FocusSource, createIdleFocusSession } from '../../models/FocusSession';
 import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
-import { syncGuardRuntimeToAppState } from '../../services/GuardRuntimeService';
+import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
 import { FocusStore } from '../../stores/FocusStore';
 import { PlanStore } from '../../stores/PlanStore';
@@ -34,8 +34,8 @@ struct MainTabPage {
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     FocusStore.hydrate(hostContext);
+    CycleGuardStore.hydrate(hostContext);
     void syncAllPlanGuardStrategies(PlanStore.getPlans());
-    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
     this.startTimer();
 
     window.getLastWindow(hostContext, (err, win) => {
@@ -67,13 +67,11 @@ struct MainTabPage {
 
   private syncFocusLifecycle(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    syncGuardRuntimeToAppState(hostContext, PlanStore.getPlans());
+    SettingsStore.hydrate(hostContext);
+    FocusStore.hydrate(hostContext);
+    CycleGuardStore.hydrate(hostContext);
 
-    if (FocusStore.shouldAutoFinish()) {
-      if (this.currentSession.source === FocusSource.GuardStrategy) {
-        FocusStore.resetToIdle(hostContext);
-        return;
-      }
+    if (this.currentSession.source !== FocusSource.GuardStrategy && FocusStore.shouldAutoFinish()) {
       this.finishCurrentFocus();
     }
   }

@@ -10,7 +10,6 @@ export class StoreKeys {
   static readonly SettingsStatusMessage: string = 'settings.statusMessage';
   static readonly CycleGuardEnabled: string = 'cycleGuard.enabled';
   static readonly CycleGuardQuotaMinutes: string = 'cycleGuard.quotaMinutes';
-  static readonly CycleGuardLockMinutes: string = 'cycleGuard.lockMinutes';
   static readonly CycleGuardSelectedTokens: string = 'cycleGuard.selectedTokens';
   static readonly CycleGuardSelectedAppCount: string = 'cycleGuard.selectedAppCount';
   static readonly CycleGuardPhase: string = 'cycleGuard.phase';

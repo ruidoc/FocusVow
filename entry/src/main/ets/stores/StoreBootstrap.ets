@@ -23,7 +23,6 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.SettingsStatusMessage, settingsState.statusMessage);
   AppStorage.setOrCreate(StoreKeys.CycleGuardEnabled, cycleGuardState.enabled);
   AppStorage.setOrCreate(StoreKeys.CycleGuardQuotaMinutes, cycleGuardState.quotaMinutes);
-  AppStorage.setOrCreate(StoreKeys.CycleGuardLockMinutes, cycleGuardState.lockMinutes);
   AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedTokens, cycleGuardState.selectedTokens);
   AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedAppCount, cycleGuardState.selectedAppCount);
   AppStorage.setOrCreate(StoreKeys.CycleGuardPhase, cycleGuardState.phase);

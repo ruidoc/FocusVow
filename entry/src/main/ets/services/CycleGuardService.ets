@@ -1,6 +1,10 @@
 import { common } from '@kit.AbilityKit';
 import { guardService } from '@kit.ScreenTimeGuardKit';
-import { CycleGuardPhase, CycleGuardState, createDefaultCycleGuardState } from '../models/CycleGuardModel';
+import {
+  CycleGuardPhase,
+  CycleGuardState,
+  createDefaultCycleGuardState
+} from '../models/CycleGuardModel';
 import { loadPersistedCycleGuardState, savePersistedCycleGuardState } from './CycleGuardPersistenceService';
 import { GuardResult } from './ScreenTimeService';
 
@@ -8,13 +12,11 @@ interface GuardErrorLike {
   code?: number;
 }
 
-interface LockTimeWindow {
-  startTime: string;
-  endTime: string;
-}
-
 const QUOTA_STRATEGY_NAME: string = 'cycle_quota_strategy';
-const LOCK_STRATEGY_NAME: string = 'cycle_lock_strategy';
+
+export function isCycleGuardStrategyName(strategyName: string): boolean {
+  return strategyName === QUOTA_STRATEGY_NAME;
+}
 
 function toError(message: string): Error {
   return new Error(message);
@@ -32,7 +34,6 @@ function saveState(
   const nextState: CycleGuardState = {
     enabled: patch.enabled ?? currentState.enabled,
     quotaMinutes: patch.quotaMinutes ?? currentState.quotaMinutes,
-    lockMinutes: patch.lockMinutes ?? currentState.lockMinutes,
     selectedTokens: patch.selectedTokens ?? currentState.selectedTokens,
     selectedAppCount: patch.selectedAppCount ?? currentState.selectedAppCount,
     phase: patch.phase ?? currentState.phase,
@@ -54,40 +55,6 @@ function createQuotaStrategy(state: CycleGuardState): guardService.GuardStrategy
     },
     appRestrictionType: guardService.RestrictionType.TRUSTLIST_TYPE
   };
-}
-
-function createLockStrategy(state: CycleGuardState): guardService.GuardStrategy {
-  const lockTimeWindow: LockTimeWindow = createLockTimeWindow(state.lockMinutes);
-  return {
-    name: LOCK_STRATEGY_NAME,
-    timeStrategy: {
-      type: guardService.TimeStrategyType.START_END_TIME_TYPE,
-      startTime: lockTimeWindow.startTime,
-      endTime: lockTimeWindow.endTime
-    },
-    appInfo: {
-      appTokens: [...state.selectedTokens]
-    },
-    appRestrictionType: guardService.RestrictionType.BLOCKLIST_TYPE
-  };
-}
-
-function padTime(value: number): string {
-  return value < 10 ? `0${value}` : `${value}`;
-}
-
-function toTimeString(date: Date): string {
-  return `${padTime(date.getHours())}:${padTime(date.getMinutes())}`;
-}
-
-function createLockTimeWindow(lockMinutes: number): LockTimeWindow {
-  const now = new Date();
-  const endAt = new Date(now.getTime() + lockMinutes * 60 * 1000);
-  const lockTimeWindow: LockTimeWindow = {
-    startTime: toTimeString(now),
-    endTime: toTimeString(endAt)
-  };
-  return lockTimeWindow;
 }
 
 function isGuardErrorCode(error: GuardErrorLike, code: guardService.GuardServiceErrorCode): boolean {
@@ -157,13 +124,14 @@ function validateState(state: CycleGuardState): GuardResult<boolean> | null {
   if (state.quotaMinutes <= 0) {
     return { ok: false, data: false, message: '共享时长需要大于 0 分钟' };
   }
-  if (state.lockMinutes <= 0) {
-    return { ok: false, data: false, message: '锁定时长需要大于 0 分钟' };
-  }
   return null;
 }
 
-async function startQuotaPhaseInternal(context: common.Context): Promise<GuardResult<boolean>> {
+async function restartQuotaStrategy(
+  context: common.Context,
+  preparingMessage: string,
+  successMessage: string
+): Promise<GuardResult<boolean>> {
   const state = getCurrentState(context);
   const validation = validateState(state);
   if (validation) {
@@ -174,60 +142,26 @@ async function startQuotaPhaseInternal(context: common.Context): Promise<GuardRe
   try {
     saveState(context, {
       enabled: true,
-      phase: 'switching_to_quota',
-      statusMessage: '正在重建共享额度阶段'
+      phase: 'quota_running',
+      statusMessage: preparingMessage
     });
+    await stopGuardStrategyIfStarted(QUOTA_STRATEGY_NAME);
+    await removeGuardStrategyIfExists(QUOTA_STRATEGY_NAME);
     await addOrUpdateGuardStrategy(createQuotaStrategy(state));
     await startGuardStrategySafely(QUOTA_STRATEGY_NAME);
-    await stopGuardStrategyIfStarted(LOCK_STRATEGY_NAME);
-    await removeGuardStrategyIfExists(LOCK_STRATEGY_NAME);
     saveState(context, {
       enabled: true,
       phase: 'quota_running',
-      statusMessage: `共享额度计时已启动：${state.quotaMinutes} 分钟`
+      statusMessage: successMessage
     });
-    return { ok: true, data: true, message: '共享额度计时已启动' };
+    return { ok: true, data: true, message: successMessage };
   } catch {
     saveState(context, {
-      enabled: true,
+      enabled: false,
       phase: 'idle',
       statusMessage: '启动共享额度阶段失败'
     });
     return { ok: false, data: false, message: '启动共享额度阶段失败' };
-  }
-}
-
-async function startLockPhaseInternal(context: common.Context): Promise<GuardResult<boolean>> {
-  const state = getCurrentState(context);
-  const validation = validateState(state);
-  if (validation) {
-    saveState(context, { enabled: false, phase: 'idle', statusMessage: validation.message });
-    return validation;
-  }
-
-  try {
-    saveState(context, {
-      enabled: true,
-      phase: 'switching_to_lock',
-      statusMessage: '共享额度已耗尽，正在切换到锁定阶段'
-    });
-    await addOrUpdateGuardStrategy(createLockStrategy(state));
-    await startGuardStrategySafely(LOCK_STRATEGY_NAME);
-    await stopGuardStrategyIfStarted(QUOTA_STRATEGY_NAME);
-    await removeGuardStrategyIfExists(QUOTA_STRATEGY_NAME);
-    saveState(context, {
-      enabled: true,
-      phase: 'lock_running',
-      statusMessage: `锁定窗口已建立：${state.lockMinutes} 分钟`
-    });
-    return { ok: true, data: true, message: '锁定窗口已建立' };
-  } catch {
-    saveState(context, {
-      enabled: true,
-      phase: 'idle',
-      statusMessage: '启动锁定阶段失败'
-    });
-    return { ok: false, data: false, message: '启动锁定阶段失败' };
   }
 }
 
@@ -241,7 +175,12 @@ export async function activateCycleGuard(context: common.Context): Promise<Guard
     return { ok: false, data: false, message: '请先完成系统授权' };
   }
 
-  return startQuotaPhaseInternal(context);
+  const state = getCurrentState(context);
+  return restartQuotaStrategy(
+    context,
+    '正在开始共享额度计时',
+    `共享额度计时已开始：${state.quotaMinutes} 分钟`
+  );
 }
 
 export async function deactivateCycleGuard(context: common.Context): Promise<GuardResult<boolean>> {
@@ -253,9 +192,7 @@ export async function deactivateCycleGuard(context: common.Context): Promise<Gua
 
   try {
     await stopGuardStrategyIfStarted(QUOTA_STRATEGY_NAME);
-    await stopGuardStrategyIfStarted(LOCK_STRATEGY_NAME);
     await removeGuardStrategyIfExists(QUOTA_STRATEGY_NAME);
-    await removeGuardStrategyIfExists(LOCK_STRATEGY_NAME);
     return { ok: true, data: true, message: '循环守护已停止' };
   } catch {
     return { ok: false, data: false, message: '停止循环守护失败' };
@@ -271,28 +208,15 @@ export async function handleCycleStrategyStart(
   strategyName: string
 ): Promise<void> {
   const state = getCurrentState(context);
-  if (!state.enabled) {
+  if (!state.enabled || !isCycleGuardStrategyName(strategyName) || !isPhase(state, 'quota_running')) {
     return;
   }
 
-  if (strategyName === QUOTA_STRATEGY_NAME) {
-    if (!isPhase(state, 'quota_running')) {
-      return;
-    }
-    await startLockPhaseInternal(context);
-    return;
-  }
-
-  if (strategyName === LOCK_STRATEGY_NAME) {
-    if (isPhase(state, 'switching_to_quota')) {
-      return;
-    }
-    saveState(context, {
-      enabled: true,
-      phase: 'lock_running',
-      statusMessage: `锁定阶段运行中：${state.lockMinutes} 分钟`
-    });
-  }
+  saveState(context, {
+    enabled: true,
+    phase: 'locked',
+    statusMessage: `共享额度已用完，已自动锁定 ${state.selectedAppCount} 个应用`
+  });
 }
 
 export async function handleCycleStrategyStop(
@@ -300,18 +224,38 @@ export async function handleCycleStrategyStop(
   strategyName: string
 ): Promise<void> {
   const state = getCurrentState(context);
+  if (!state.enabled || !isCycleGuardStrategyName(strategyName) || !isPhase(state, 'locked')) {
+    return;
+  }
+
+  saveState(context, {
+    enabled: true,
+    phase: 'quota_running',
+    statusMessage: `共享额度计时已恢复：${state.quotaMinutes} 分钟`
+  });
+}
+
+export async function endCurrentCycleGuardLockAndRestart(
+  context: common.Context
+): Promise<GuardResult<boolean>> {
+  const state = getCurrentState(context);
   if (!state.enabled) {
-    return;
+    return { ok: false, data: false, message: '循环守护未启动' };
+  }
+  if (!isPhase(state, 'locked')) {
+    return { ok: false, data: false, message: '当前不在锁定状态' };
   }
 
-  if (strategyName === QUOTA_STRATEGY_NAME) {
-    return;
-  }
+  saveState(context, {
+    enabled: true,
+    phase: 'locked',
+    statusMessage: '正在结束当前锁定并重新开始共享额度计时'
+  });
 
-  if (strategyName === LOCK_STRATEGY_NAME) {
-    if (!isPhase(state, 'lock_running')) {
-      return;
-    }
-    await startQuotaPhaseInternal(context);
-  }
+  const nextState = getCurrentState(context);
+  return restartQuotaStrategy(
+    context,
+    '正在重新开始共享额度计时',
+    `共享额度计时已重新开始：${nextState.quotaMinutes} 分钟`
+  );
 }

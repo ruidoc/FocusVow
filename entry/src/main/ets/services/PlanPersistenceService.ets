@@ -5,7 +5,7 @@ import { readStoredString, writeStoredString } from './PreferencesService';
 const PLAN_COLLECTION_KEY: string = 'plan.collection';
 const PLAN_FILTER_SCOPE_KEY: string = 'plan.filterScope';
 
-export function loadPersistedPlans(context: common.UIAbilityContext): FocusPlan[] {
+export function loadPersistedPlans(context: common.Context): FocusPlan[] {
   const rawValue = readStoredString(context, PLAN_COLLECTION_KEY, '[]');
   try {
     return JSON.parse(rawValue) as FocusPlan[];
@@ -15,17 +15,17 @@ export function loadPersistedPlans(context: common.UIAbilityContext): FocusPlan[
   }
 }
 
-export function savePersistedPlans(context: common.UIAbilityContext, plans: FocusPlan[]): boolean {
+export function savePersistedPlans(context: common.Context, plans: FocusPlan[]): boolean {
   return writeStoredString(context, PLAN_COLLECTION_KEY, JSON.stringify(plans));
 }
 
-export function loadPersistedPlanFilterScope(context: common.UIAbilityContext): PlanFilterScope {
+export function loadPersistedPlanFilterScope(context: common.Context): PlanFilterScope {
   const rawValue = readStoredString(context, PLAN_FILTER_SCOPE_KEY, 'today');
   return rawValue === 'all' ? 'all' : 'today';
 }
 
 export function savePersistedPlanFilterScope(
-  context: common.UIAbilityContext,
+  context: common.Context,
   scope: PlanFilterScope
 ): boolean {
   return writeStoredString(context, PLAN_FILTER_SCOPE_KEY, scope);

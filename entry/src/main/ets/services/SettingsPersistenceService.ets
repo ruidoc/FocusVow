@@ -4,7 +4,7 @@ import { readStoredString, writeStoredString } from './PreferencesService';
 
 const SETTINGS_STATE_KEY: string = 'settings.state';
 
-export function loadPersistedSettings(context: common.UIAbilityContext): SettingsState | null {
+export function loadPersistedSettings(context: common.Context): SettingsState | null {
   const rawValue = readStoredString(context, SETTINGS_STATE_KEY, '');
   if (rawValue.length === 0) {
     return null;
@@ -18,6 +18,6 @@ export function loadPersistedSettings(context: common.UIAbilityContext): Setting
   }
 }
 
-export function savePersistedSettings(context: common.UIAbilityContext, settingsState: SettingsState): boolean {
+export function savePersistedSettings(context: common.Context, settingsState: SettingsState): boolean {
   return writeStoredString(context, SETTINGS_STATE_KEY, JSON.stringify(settingsState));
 }
