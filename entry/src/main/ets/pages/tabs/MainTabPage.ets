@@ -99,7 +99,7 @@ struct MainTabPage {
   @Builder
   private buildTabSymbol(tab: MainTabKey): void {
     SymbolGlyph(this.getTabSymbol(tab))
-      .fontSize(22)
+      .fontSize(21)
       .fontColor([this.currentTab === tab ? AppTheme.colors.primary : AppTheme.colors.textSecondary])
       .fontWeight(this.currentTab === tab ? 500 : 400)
   }
@@ -132,7 +132,7 @@ struct MainTabPage {
         .fontColor(this.currentTab === tab ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
     }
     .layoutWeight(1)
-    .padding({ top: 10, bottom: 0 })
+    .padding({ top: 10, bottom: 2 })
     .alignItems(HorizontalAlign.Center)
     .onClick(() => {
       this.currentTab = tab;
@@ -158,11 +158,11 @@ struct MainTabPage {
       Row() {
         this.buildTabItem('focus', '专注')
         this.buildTabItem('contract', '契约')
-        this.buildTabItem('guard', '守护')
+        this.buildTabItem('guard', '限额')
         this.buildTabItem('profile', '我的')
       }
       .width('100%')
-      .padding({ left: 10, right: 10, top: 6, bottom: 6 + this.bottomGestureInsetVp })
+      .padding({ left: 12, right: 12, top: 8, bottom: 8 + this.bottomGestureInsetVp })
       .backgroundColor(AppTheme.colors.backgroundSoft)
       .border({ width: 1, color: AppTheme.colors.border })
     }

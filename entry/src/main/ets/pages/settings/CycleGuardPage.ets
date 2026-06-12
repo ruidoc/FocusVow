@@ -17,7 +17,7 @@ struct CycleGuardPage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.CycleGuardSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) selectedAppCount: number = 0;
-  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置共享时长和目标应用后，即可启动循环守护';
+  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置总可用时长和目标应用后，即可启动娱乐限额';
   @StorageLink(StoreKeys.CycleGuardQuotaMinutes) storedQuotaMinutes: number = 60;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.CycleGuardPhase) phase: string = 'idle';
@@ -95,7 +95,7 @@ struct CycleGuardPage {
       hostContext,
       this.cycleEnabled,
       this.phase as CycleGuardPhase,
-      '循环守护配置已保存'
+      '娱乐限额配置已保存'
     );
     this.isSaving = false;
   }
@@ -103,13 +103,13 @@ struct CycleGuardPage {
   @Builder
   private buildStatusCard(): void {
     Column({ space: 12 }) {
-      Text('编辑循环守护')
+      Text('编辑娱乐限额')
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
 
-      Text('这个页面只负责改配置；运行状态和启停动作统一回到详情页。')
+      Text('这里单独调整目标应用和总可用时长；启动与停止动作统一放在限额主页。')
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
@@ -166,7 +166,7 @@ struct CycleGuardPage {
   @Builder
   private buildQuotaSliderCard(): void {
     Column({ space: 14 }) {
-      Text('共享可用时长')
+      Text('总可用时长')
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
@@ -271,7 +271,7 @@ struct CycleGuardPage {
   build() {
     Stack() {
       PageScaffold({
-        title: '编辑循环守护',
+        title: '娱乐限额设置',
         subtitle: '拖动滑块时页面数值会立即变化，点击保存后写入正式配置',
         showBack: true,
         headerMode: 'default',

@@ -11,64 +11,63 @@ export struct PageHeader {
   onAction?: () => void;
 
   build() {
-    Column({ space: 10 }) {
-      Row() {
-        if (this.showBack) {
-          Button({ type: ButtonType.Circle }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(20)
-              .fontColor([AppTheme.colors.textPrimary])
-          }
-            .width(40)
-            .height(40)
-            .backgroundColor(AppTheme.colors.surfaceRaised)
-            .border({ width: 1, color: AppTheme.colors.border })
-            .onClick(() => {
-              this.onBack?.();
-            })
-        } else {
-          Row()
-            .width(40)
-            .height(40)
+    Row({ space: 12 }) {
+      if (this.showBack) {
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([AppTheme.colors.textPrimary])
         }
+          .width(32)
+          .height(32)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 0 })
+          .onClick(() => {
+            this.onBack?.();
+          })
+      }
 
+      Column({ space: 6 }) {
         Text(this.title)
-          .layoutWeight(1)
-          .fontSize(20)
+          .fontSize(22)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
-          .textAlign(TextAlign.Center)
+          .width('100%')
 
-        if (this.showAction) {
-          Button({ type: ButtonType.Circle }) {
-            SymbolGlyph(this.actionSymbol)
-              .fontSize(20)
-              .fontColor([AppTheme.colors.primary])
-          }
-            .width(40)
-            .height(40)
-            .backgroundColor(AppTheme.colors.primarySoft)
-            .border({ width: 1, color: AppTheme.colors.border })
-            .onClick(() => {
-              this.onAction?.();
-            })
-        } else {
-          Row()
-            .width(40)
-            .height(40)
+        if (this.subtitle.length > 0) {
+          Text(this.subtitle)
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+            .maxLines(2)
         }
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .justifyContent(FlexAlign.Center)
 
-      if (this.subtitle.length > 0) {
-        Text(this.subtitle)
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+      if (this.showAction) {
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph(this.actionSymbol)
+            .fontSize(18)
+            .fontColor([AppTheme.colors.primary])
+        }
+          .width(40)
+          .height(40)
+          .backgroundColor(AppTheme.colors.primarySoft)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .onClick(() => {
+            this.onAction?.();
+          })
+      } else {
+        Row()
+          .width(40)
+          .height(40)
       }
     }
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .constraintSize({ minHeight: 40 })
   }
 }

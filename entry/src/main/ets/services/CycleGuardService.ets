@@ -127,10 +127,10 @@ async function hasAuthorization(): Promise<boolean> {
 
 function validateState(state: CycleGuardState): GuardResult<boolean> | null {
   if (state.selectedTokens.length === 0) {
-    return { ok: false, data: false, message: '请先选择需要循环守护的应用' };
+    return { ok: false, data: false, message: '请先选择需要纳入娱乐限额的应用' };
   }
   if (state.quotaMinutes <= 0) {
-    return { ok: false, data: false, message: '共享时长需要大于 0 分钟' };
+    return { ok: false, data: false, message: '总可用时长需要大于 0 分钟' };
   }
   return null;
 }
@@ -184,10 +184,10 @@ async function restartQuotaStrategy(
     saveState(context, {
       enabled: false,
       phase: 'idle',
-      statusMessage: '启动共享额度阶段失败'
+      statusMessage: '启动娱乐限额失败'
     });
     clearActiveLockIfCycleGuard(context);
-    return { ok: false, data: false, message: '启动共享额度阶段失败' };
+    return { ok: false, data: false, message: '启动娱乐限额失败' };
   }
 }
 
@@ -199,8 +199,8 @@ export async function restartCycleGuardIfEnabled(context: common.Context): Promi
 
   await restartQuotaStrategy(
     context,
-    '正在重新开始共享额度计时',
-    `共享额度计时已重新开始：${state.quotaMinutes} 分钟`
+    '正在重新开始娱乐限额计时',
+    `娱乐限额已重新开始：${state.quotaMinutes} 分钟`
   );
 }
 
@@ -217,8 +217,8 @@ export async function activateCycleGuard(context: common.Context): Promise<Guard
   const state = getCurrentState(context);
   return restartQuotaStrategy(
     context,
-    '正在开始共享额度计时',
-    `共享额度计时已开始：${state.quotaMinutes} 分钟`
+    '正在开始娱乐限额计时',
+    `娱乐限额已开始：${state.quotaMinutes} 分钟`
   );
 }
 
@@ -226,16 +226,16 @@ export async function deactivateCycleGuard(context: common.Context): Promise<Gua
   saveState(context, {
     enabled: false,
     phase: 'idle',
-    statusMessage: '循环守护已停止'
+    statusMessage: '娱乐限额已停止'
   });
   clearActiveLockIfCycleGuard(context);
 
   try {
     await stopGuardStrategyIfStarted(QUOTA_STRATEGY_NAME);
     await removeGuardStrategyIfExists(QUOTA_STRATEGY_NAME);
-    return { ok: true, data: true, message: '循环守护已停止' };
+    return { ok: true, data: true, message: '娱乐限额已停止' };
   } catch {
-    return { ok: false, data: false, message: '停止循环守护失败' };
+    return { ok: false, data: false, message: '停止娱乐限额失败' };
   }
 }
 
@@ -255,7 +255,7 @@ export async function handleCycleStrategyStart(
   saveState(context, {
     enabled: true,
     phase: 'locked',
-    statusMessage: `共享额度已用完，已自动锁定 ${state.selectedAppCount} 个应用`
+    statusMessage: `总可用时长已用完，已自动锁定 ${state.selectedAppCount} 个应用`
   });
   savePersistedActiveLockState(
     context,
@@ -275,7 +275,7 @@ export async function handleCycleStrategyStop(
   saveState(context, {
     enabled: true,
     phase: 'quota_running',
-    statusMessage: `共享额度计时已恢复：${state.quotaMinutes} 分钟`
+    statusMessage: `娱乐限额已恢复：${state.quotaMinutes} 分钟`
   });
   clearActiveLockIfCycleGuard(context);
 }
@@ -285,7 +285,7 @@ export async function endCurrentCycleGuardLockAndRestart(
 ): Promise<GuardResult<boolean>> {
   const state = getCurrentState(context);
   if (!state.enabled) {
-    return { ok: false, data: false, message: '循环守护未启动' };
+    return { ok: false, data: false, message: '娱乐限额未启动' };
   }
   if (!isPhase(state, 'locked')) {
     return { ok: false, data: false, message: '当前不在锁定状态' };
@@ -294,13 +294,13 @@ export async function endCurrentCycleGuardLockAndRestart(
   saveState(context, {
     enabled: true,
     phase: 'locked',
-    statusMessage: '正在结束当前锁定并重新开始共享额度计时'
+    statusMessage: '正在结束当前锁定并重新开始娱乐限额计时'
   });
 
   const nextState = getCurrentState(context);
   return restartQuotaStrategy(
     context,
-    '正在重新开始共享额度计时',
-    `共享额度计时已重新开始：${nextState.quotaMinutes} 分钟`
+    '正在重新开始娱乐限额计时',
+    `娱乐限额已重新开始：${nextState.quotaMinutes} 分钟`
   );
 }

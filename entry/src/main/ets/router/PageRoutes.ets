@@ -11,6 +11,9 @@ export class PageRoutes {
   static readonly Permission: string = 'pages/settings/PermissionPage';
   static readonly CycleGuard: string = 'pages/settings/CycleGuardPage';
   static readonly CycleGuardEdit: string = 'pages/settings/CycleGuardPage';
+  static readonly PrivacyPolicy: string = 'pages/settings/PrivacyPolicyPage';
+  static readonly UserAgreement: string = 'pages/settings/UserAgreementPage';
+  static readonly About: string = 'pages/settings/AboutPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {

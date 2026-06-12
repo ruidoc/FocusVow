@@ -21,6 +21,7 @@ export struct PageScaffold {
   @Prop horizontalPadding: number = 20;
   @Prop bottomPadding: number = 20;
   @Prop showDecoration: boolean = true;
+  @Prop scrollPage: boolean = false;
   /** 是否在 topPadding 上额外叠加状态栏高度（与系统 TitleBar 同用时建议关） */
   @Prop includeTopSafeInset: boolean = true;
   /** 是否在 bottomPadding 上额外叠加上滑指示条/导航条区域 */
@@ -35,12 +36,6 @@ export struct PageScaffold {
 
   @State private topSafeInsetVp: number = 0;
   @State private bottomSafeInsetVp: number = 0;
-
-  private readonly starIndexes: number[] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-    10, 11, 12, 13, 14, 15, 16, 17,
-    18, 19, 20, 21, 22, 23
-  ];
 
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext();
@@ -74,18 +69,6 @@ export struct PageScaffold {
     return this.fullBleedCustomHeader && this.headerMode === 'custom';
   }
 
-  private getStarLeft(index: number): string {
-    return `${(index * 37 + 11) % 100}%`;
-  }
-
-  private getStarTop(index: number): string {
-    return `${(index * 19 + 7) % 100}%`;
-  }
-
-  private getStarOpacity(index: number): number {
-    return index % 3 === 0 ? 0.22 : (index % 3 === 1 ? 0.14 : 0.1);
-  }
-
   @Builder
   private buildDecoration(): void {
     Stack() {
@@ -94,44 +77,48 @@ export struct PageScaffold {
         .height('100%')
         .backgroundColor(AppTheme.colors.background)
 
-      ForEach(this.starIndexes, (item: number) => {
-        Column()
-          .width(item % 5 === 0 ? 3 : 2)
-          .height(item % 5 === 0 ? 3 : 2)
-          .borderRadius(2)
-          .backgroundColor(item % 4 === 0 ? AppTheme.colors.primary : AppTheme.colors.borderStrong)
-          .opacity(this.getStarOpacity(item))
-          .position({
-            x: this.getStarLeft(item),
-            y: this.getStarTop(item)
-          })
-      }, (item: number) => item.toString())
+      Column()
+        .width(220)
+        .height(220)
+        .borderRadius(110)
+        .backgroundColor(AppTheme.colors.primarySoft)
+        .opacity(0.9)
+        .blur(36)
+        .position({ x: '-12%', y: '-6%' })
+
+      Column()
+        .width(180)
+        .height(180)
+        .borderRadius(90)
+        .backgroundColor(AppTheme.colors.primarySoft)
+        .opacity(0.65)
+        .blur(28)
+        .position({ x: '66%', y: '-2%' })
     }
     .width('100%')
     .height('100%')
   }
 
-  build() {
-    Stack() {
-      if (this.showDecoration) {
-        this.buildDecoration()
+  @Builder
+  private buildPageBody(): void {
+    Column({ space: 16 }) {
+      if (this.headerMode === 'custom') {
+        this.header()
+      } else if (this.headerMode === 'default' && (this.title.length > 0 || this.showBack)) {
+        PageHeader({
+          title: this.title,
+          subtitle: this.subtitle,
+          showBack: this.showBack,
+          showAction: this.showAction,
+          actionSymbol: this.actionSymbol,
+          onBack: this.onBack,
+          onAction: this.onAction
+        })
       }
 
-      Column({ space: 16 }) {
-        if (this.headerMode === 'custom') {
-          this.header()
-        } else if (this.headerMode === 'default' && (this.title.length > 0 || this.showBack)) {
-          PageHeader({
-            title: this.title,
-            subtitle: this.subtitle,
-            showBack: this.showBack,
-            showAction: this.showAction,
-            actionSymbol: this.actionSymbol,
-            onBack: this.onBack,
-            onAction: this.onAction
-          })
-        }
-
+      if (this.scrollPage) {
+        this.content()
+      } else {
         Column() {
           this.content()
         }
@@ -142,14 +129,47 @@ export struct PageScaffold {
           right: this.isFullBleedCustomHeader() ? this.horizontalPadding : 0
         })
       }
-      .width('100%')
-      .height('100%')
-      .padding({
-        left: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
-        right: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
-        top: this.getPaddingTop(),
-        bottom: this.getPaddingBottom()
-      })
+    }
+    .width('100%')
+    .height(this.scrollPage ? undefined : '100%')
+  }
+
+  build() {
+    Stack() {
+      if (this.showDecoration) {
+        this.buildDecoration()
+      }
+
+      if (this.scrollPage) {
+        Scroll() {
+          Column() {
+            this.buildPageBody()
+          }
+          .width('100%')
+          .constraintSize({ minHeight: '100%' })
+          .padding({
+            left: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
+            right: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
+            top: this.getPaddingTop(),
+            bottom: this.getPaddingBottom()
+          })
+        }
+        .scrollBar(BarState.Off)
+        .width('100%')
+        .height('100%')
+      } else {
+        Column() {
+          this.buildPageBody()
+        }
+        .width('100%')
+        .height('100%')
+        .padding({
+          left: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
+          right: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
+          top: this.getPaddingTop(),
+          bottom: this.getPaddingBottom()
+        })
+      }
     }
     .width('100%')
     .height('100%')

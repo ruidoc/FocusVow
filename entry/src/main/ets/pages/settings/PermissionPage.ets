@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
+import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { backRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
@@ -43,70 +43,79 @@ struct PermissionPage {
 
   @Builder
   private buildPermissionContent(): void {
-    Scroll() {
-      Column({ space: 18 }) {
-        Column({ space: 10 }) {
-          Text(`系统授权：${this.hasAuthorized ? '已完成' : '未完成'}`)
-            .fontSize(15)
-            .fontColor(AppTheme.colors.textPrimary)
-          Text(`已选择应用：${this.selectedAppCount} 个`)
-            .fontSize(15)
-            .fontColor(AppTheme.colors.textPrimary)
-          Text(this.statusMessage)
-            .fontSize(13)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width('100%')
-        }
-        .width('100%')
-        .padding(20)
-        .backgroundColor(AppTheme.colors.surface)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .borderRadius(24)
-        .alignItems(HorizontalAlign.Start)
-
-        Button(this.hasAuthorized ? '重新申请系统授权' : '申请系统授权')
-          .width('100%')
-          .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.surfaceRaised)
+    Column({ space: 16 }) {
+      Column({ space: 8 }) {
+        Text('权限用途说明')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
-          .border({ width: 1, color: AppTheme.colors.border })
-          .onClick(() => {
-            this.authorize();
-          })
-
-        Button('选择需要限制的应用')
           .width('100%')
-          .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.surface)
-          .fontColor(AppTheme.colors.textPrimary)
-          .border({ width: 1, color: AppTheme.colors.border })
-          .onClick(() => {
-            this.chooseApps();
-          })
+
+        Text('系统授权仅用于你主动开启的专注、契约和娱乐限额能力。只有你选择的应用会被纳入限制范围，你也可以随时重新选择或关闭。')
+          .fontSize(13)
+          .lineHeight(22)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
       }
       .width('100%')
-      .constraintSize({ minHeight: '100%' })
-      .justifyContent(FlexAlign.Start)
+      .padding(18)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(AppTheme.radius.lg)
       .alignItems(HorizontalAlign.Start)
+
+      Column({ space: 10 }) {
+        Text(`系统授权：${this.hasAuthorized ? '已完成' : '未完成'}`)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+        Text(`已选择应用：${this.selectedAppCount} 个`)
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textPrimary)
+        Text(this.statusMessage)
+          .fontSize(13)
+          .lineHeight(20)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+      }
+      .width('100%')
+      .padding(18)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(AppTheme.radius.lg)
+      .alignItems(HorizontalAlign.Start)
+
+      Button(this.hasAuthorized ? '重新申请系统授权' : '申请系统授权')
+        .width('100%')
+        .height(50)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.primarySoft)
+        .fontColor(AppTheme.colors.primary)
+        .border({ width: 1, color: AppTheme.colors.primarySoft })
+        .onClick(() => {
+          this.authorize();
+        })
+
+      Button('选择需要限制的应用')
+        .width('100%')
+        .height(50)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.surface)
+        .fontColor(AppTheme.colors.textPrimary)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .onClick(() => {
+          this.chooseApps();
+        })
     }
-    .scrollBar(BarState.Off)
     .width('100%')
-    .layoutWeight(1)
-    .align(Alignment.Top)
+    .alignItems(HorizontalAlign.Start)
   }
 
   build() {
     Stack() {
-      PageScaffold({
-        title: '权限管理',
-        subtitle: '这里单独承接系统授权和应用选择，和首页/快速专注共用一份状态',
+      SystemNavPage({
+        title: '权限与应用管理',
         showBack: true,
-        headerMode: 'default',
-        showDecoration: false,
-        topPadding: 12,
-        bottomPadding: 12,
         horizontalPadding: 20,
         onBack: () => backRoute(),
         content: (): void => {

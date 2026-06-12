@@ -25,6 +25,8 @@ export interface FocusPlan {
   updatedAt: number;
 }
 
+export type PlanPresentationState = 'running' | 'upcoming' | 'enabled' | 'paused';
+
 /** HarmonyOS repeat 标准：1=周一 … 7=周日 */
 export const PLAN_REPEAT_DAY_OPTIONS: number[] = [1, 2, 3, 4, 5, 6, 7];
 
@@ -132,6 +134,159 @@ export function getPlanDurationMinutes(plan: FocusPlan): number {
   }
 
   return 24 * 60 + directDuration;
+}
+
+function getTimeMinutes(timeText: string): number {
+  const parts = timeText.split(':');
+  return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+function getPreviousWeekday(day: number): number {
+  return day === 1 ? 7 : day - 1;
+}
+
+function getRelativeWeekday(todayWeekday: number, dayOffset: number): number {
+  return ((todayWeekday - 1 + dayOffset) % 7) + 1;
+}
+
+interface PlanNextOccurrence {
+  dayOffset: number;
+  weekday: number;
+  sortValue: number;
+}
+
+function getNextPlanOccurrence(plan: FocusPlan, nowAt: number): PlanNextOccurrence | undefined {
+  if (!plan.enabled || plan.repeatDays.length === 0) {
+    return undefined;
+  }
+
+  const nowDate = new Date(nowAt);
+  const todayWeekday = getTodayRepeatDay();
+  const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
+  const startMinutes = getTimeMinutes(plan.startTime);
+
+  for (let offset = 0; offset < 7; offset += 1) {
+    const weekday = getRelativeWeekday(todayWeekday, offset);
+    if (!plan.repeatDays.includes(weekday)) {
+      continue;
+    }
+
+    if (offset === 0 && startMinutes <= nowMinutes) {
+      continue;
+    }
+
+    return {
+      dayOffset: offset,
+      weekday,
+      sortValue: offset * 24 * 60 + startMinutes
+    };
+  }
+
+  return undefined;
+}
+
+export function isPlanRunning(plan: FocusPlan, nowAt: number = Date.now()): boolean {
+  if (!plan.enabled || plan.repeatDays.length === 0) {
+    return false;
+  }
+
+  const nowDate = new Date(nowAt);
+  const currentWeekday = getTodayRepeatDay();
+  const currentMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
+  const startMinutes = getTimeMinutes(plan.startTime);
+  const endMinutes = getTimeMinutes(plan.endTime);
+
+  if (endMinutes > startMinutes) {
+    return plan.repeatDays.includes(currentWeekday) &&
+      currentMinutes >= startMinutes &&
+      currentMinutes < endMinutes;
+  }
+
+  if (currentMinutes >= startMinutes) {
+    return plan.repeatDays.includes(currentWeekday);
+  }
+
+  return plan.repeatDays.includes(getPreviousWeekday(currentWeekday)) && currentMinutes < endMinutes;
+}
+
+export function getPlanPresentationState(plan: FocusPlan, nowAt: number = Date.now()): PlanPresentationState {
+  if (!plan.enabled) {
+    return 'paused';
+  }
+  if (isPlanRunning(plan, nowAt)) {
+    return 'running';
+  }
+  if (getNextPlanOccurrence(plan, nowAt) !== undefined) {
+    return 'upcoming';
+  }
+  return 'enabled';
+}
+
+export function getPlanPresentationLabel(plan: FocusPlan, nowAt: number = Date.now()): string {
+  const state = getPlanPresentationState(plan, nowAt);
+  if (state === 'running') {
+    return '进行中';
+  }
+  if (state === 'upcoming') {
+    return '即将开始';
+  }
+  if (state === 'paused') {
+    return '已停用';
+  }
+  return '已启用';
+}
+
+export function getPlanNextStartText(plan: FocusPlan, nowAt: number = Date.now()): string {
+  if (!plan.enabled) {
+    return '当前不会自动生效';
+  }
+  if (isPlanRunning(plan, nowAt)) {
+    return '当前契约正在生效';
+  }
+
+  const nextOccurrence = getNextPlanOccurrence(plan, nowAt);
+  if (!nextOccurrence) {
+    return '等待下一轮排期';
+  }
+
+  if (nextOccurrence.dayOffset === 0) {
+    return `今天 ${plan.startTime} 开始`;
+  }
+  if (nextOccurrence.dayOffset === 1) {
+    return `明天 ${plan.startTime} 开始`;
+  }
+
+  return `${REPEAT_DAY_FULL_LABELS[nextOccurrence.weekday]} ${plan.startTime} 开始`;
+}
+
+export function comparePlansForDisplay(left: FocusPlan, right: FocusPlan, nowAt: number = Date.now()): number {
+  const statePriority = (plan: FocusPlan): number => {
+    const state = getPlanPresentationState(plan, nowAt);
+    if (state === 'running') {
+      return 0;
+    }
+    if (state === 'upcoming') {
+      return 1;
+    }
+    if (state === 'enabled') {
+      return 2;
+    }
+    return 3;
+  };
+
+  const leftPriority = statePriority(left);
+  const rightPriority = statePriority(right);
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+
+  const leftOccurrence = getNextPlanOccurrence(left, nowAt);
+  const rightOccurrence = getNextPlanOccurrence(right, nowAt);
+  if (leftOccurrence && rightOccurrence && leftOccurrence.sortValue !== rightOccurrence.sortValue) {
+    return leftOccurrence.sortValue - rightOccurrence.sortValue;
+  }
+
+  return right.updatedAt - left.updatedAt;
 }
 
 export function updatePlanFromDraft(plan: FocusPlan, draft: PlanDraft, nowAt: number): FocusPlan {

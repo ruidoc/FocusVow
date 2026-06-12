@@ -1,26 +1,26 @@
 class ThemeColors {
-  background: string = '#F8FAFC';
+  background: string = '#F5F6FA';
   backgroundSoft: string = '#FFFFFF';
   surface: string = '#FFFFFF';
-  surfaceRaised: string = '#F1F5F9';
-  border: string = '#E2E8F0';
-  borderStrong: string = '#CBD5E1';
+  surfaceRaised: string = '#F7F8FC';
+  border: string = '#E6E8F0';
+  borderStrong: string = '#D7DDEA';
   primary: string = '#7A5AF8';
-  primarySoft: string = '#EEE8FF';
-  textPrimary: string = '#0F172A';
-  textSecondary: string = '#475569';
-  textMuted: string = '#94A3B8';
-  success: string = '#16A34A';
-  successSoft: string = '#DCFCE7';
-  warning: string = '#D97706';
-  danger: string = '#DC2626';
-  dangerSoft: string = '#FEE2E2';
+  primarySoft: string = '#F1EDFF';
+  textPrimary: string = '#111827';
+  textSecondary: string = '#5B6475';
+  textMuted: string = '#98A2B3';
+  success: string = '#1F9D55';
+  successSoft: string = '#E8F7EE';
+  warning: string = '#C98512';
+  danger: string = '#D64545';
+  dangerSoft: string = '#FDECEC';
 }
 
 class ThemeRadius {
-  sm: number = 16;
-  md: number = 20;
-  lg: number = 24;
+  sm: number = 14;
+  md: number = 18;
+  lg: number = 22;
   pill: number = 999;
 }
 

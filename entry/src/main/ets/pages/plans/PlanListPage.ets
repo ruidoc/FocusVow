@@ -20,7 +20,9 @@ struct PlanListPage {
   }
 
   private getPageSubtitle(): string {
-    return this.planCollection.length > 0 ? `共 ${this.planCollection.length} 个契约` : '还没有创建契约';
+    return this.planCollection.length > 0
+      ? `共 ${this.planCollection.length} 条契约，按时间自动开始专注限制`
+      : '创建契约后，可在固定时段自动开始专注'
   }
 
   @Builder
@@ -33,11 +35,11 @@ struct PlanListPage {
       PageScaffold({
         title: '契约列表',
         subtitle: this.getPageSubtitle(),
+        showDecoration: false,
         showBack: true,
         showAction: true,
         actionSymbol: $r('sys.symbol.plus'),
         headerMode: 'default',
-        showDecoration: false,
         topPadding: 12,
         bottomPadding: 12,
         horizontalPadding: 20,

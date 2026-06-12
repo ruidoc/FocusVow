@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
+import { SystemNavPage } from '../../components/common/SystemNavPage';
 import {
   ActiveLockState,
   createIdleLockState,
@@ -29,6 +29,8 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.SettingsStatusMessage) statusMessage: string = '先申请系统授权，再选择需要限制的应用';
+  @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
+  @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleSelectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardStatusMessage) cycleGuardStatusMessage: string = '';
   @State remainingLabel: string = LockStore.getRemainingLabel();
 
@@ -114,14 +116,23 @@ export struct FocusHomePage {
 
   private getHeaderStatusText(): string {
     if (!this.isActiveLocked()) {
-      return '今天还没开始，加油！';
+      if (!this.hasAuthorized) {
+        return '先完成授权，再开始你的专注管理。';
+      }
+      if (this.planCollection.length > 0) {
+        return `已准备 ${this.planCollection.length} 条契约，随时可以开始。`;
+      }
+      if (this.cycleSelectedAppCount > 0) {
+        return `已选 ${this.cycleSelectedAppCount} 个娱乐应用，可直接启用限额。`;
+      }
+      return '当前没有进行中的专注。';
     }
 
     if (this.activeLock.kind === 'covenant') {
       return '契约锁定中，继续保持专注。';
     }
     if (this.activeLock.kind === 'cycle_guard') {
-      return '共享额度已用完，当前处于锁定中。';
+      return '娱乐限额已用完，当前处于锁定中。';
     }
     return '这段专注正在进行，继续保持。';
   }
@@ -132,7 +143,7 @@ export struct FocusHomePage {
       return `已限制 ${count} 个应用，当前由契约自动锁定`;
     }
     if (this.activeLock.kind === 'cycle_guard') {
-      return `共享额度已用完，当前已限制 ${count} 个应用`;
+      return `娱乐限额已用完，当前已限制 ${count} 个应用`;
     }
     return `已限制 ${count} 个应用，结束后会自动解除限制`;
   }
@@ -149,7 +160,7 @@ export struct FocusHomePage {
 
   private getLockHint(): string {
     if (this.activeLock.kind === 'cycle_guard') {
-      return '结束后会重新开始一轮共享额度计时';
+      return '结束后会重新开始一轮娱乐限额计时';
     }
     if (this.activeLock.kind === 'covenant') {
       return '仅跳过本次窗口，下一周期仍会正常执行';
@@ -158,39 +169,53 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildHomeHeader(): void {
-    Row() {
-      Column({ space: 6 }) {
-        Text(`${this.getGreeting()}，专注者！`)
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+  private buildStatusCard(): void {
+    Column({ space: 14 }) {
+      Row() {
+        Column({ space: 6 }) {
+          Text(`${this.getGreeting()}，专注者！`)
+            .fontSize(14)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
 
-        Text(this.getHeaderStatusText())
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+          Text(this.getHeaderStatusText())
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
 
-      Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.doc_plaintext'))
-          .fontSize(16)
-          .fontColor([AppTheme.colors.textPrimary])
-        Text(this.getTodayPlanBadge())
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.doc_plaintext'))
+            .fontSize(16)
+            .fontColor([AppTheme.colors.textPrimary])
+          Text(this.getTodayPlanBadge())
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+        }
+        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+        .backgroundColor(AppTheme.colors.surfaceRaised)
+        .borderRadius(AppTheme.radius.pill)
+        .border({ width: 1, color: AppTheme.colors.border })
       }
-      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-      .backgroundColor(AppTheme.colors.surfaceRaised)
-      .borderRadius(AppTheme.radius.pill)
-      .border({ width: 1, color: AppTheme.colors.border })
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+
+      Text('快速专注适合立刻进入状态，契约和娱乐限额适合长期管理分心应用。')
+        .fontSize(13)
+        .lineHeight(22)
+        .fontColor(AppTheme.colors.textSecondary)
+        .width('100%')
     }
     .width('100%')
-    .alignItems(VerticalAlign.Top)
+    .padding(18)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -288,13 +313,13 @@ export struct FocusHomePage {
       .alignContent(Alignment.Center)
 
       Column({ space: 10 }) {
-        Text('改变，从一个契约开始')
-          .fontSize(30)
+        Text('当前还没有进行中的专注')
+          .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
 
-        Text('设定时间段，每日自动锁定分心应用')
+        Text('快速专注适合立即进入状态，契约和娱乐限额适合长期管理分心应用。')
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)
@@ -302,37 +327,135 @@ export struct FocusHomePage {
       .width('100%')
       .alignItems(HorizontalAlign.Center)
 
-      Button('创建契约')
+      Button('开始快速专注')
         .width('100%')
         .height(58)
         .type(ButtonType.Capsule)
         .backgroundColor(AppTheme.colors.primary)
         .fontColor('#FFFFFF')
         .onClick(() => {
-          pushRoute(PageRoutes.PlanAdd);
+          pushRoute(PageRoutes.QuickStart);
         })
 
       Row({ space: 6 }) {
-        Text('临时使用？')
+        Text('想按固定时间自动开始？')
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
 
-        SymbolGlyph($r('sys.symbol.bolt'))
+        SymbolGlyph($r('sys.symbol.doc_plaintext'))
           .fontSize(14)
           .fontColor([AppTheme.colors.primary])
-        Text('快速专注')
+        Text('创建契约')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.primary)
       }
       .justifyContent(FlexAlign.Center)
       .onClick(() => {
-        pushRoute(PageRoutes.QuickStart);
+        pushRoute(PageRoutes.PlanAdd);
       })
     }
     .width('100%')
     .padding({ left: 12, right: 12 })
     .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private buildModeEntry(
+    title: string,
+    value: string,
+    detail: string,
+    symbol: Resource,
+    onPress: () => void
+  ): void {
+    Button() {
+      Row({ space: 14 }) {
+        Row() {
+          SymbolGlyph(symbol)
+            .fontSize(20)
+            .fontColor([AppTheme.colors.primary])
+        }
+        .width(40)
+        .height(40)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(AppTheme.colors.primarySoft)
+        .borderRadius(20)
+
+        Column({ space: 4 }) {
+          Text(title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .width('100%')
+
+          Text(detail)
+            .fontSize(12)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+            .maxLines(2)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Text(value)
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .type(ButtonType.Normal)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
+    .padding(16)
+    .onClick(() => {
+      onPress();
+    })
+  }
+
+  @Builder
+  private buildModePanel(): void {
+    Column({ space: 12 }) {
+      Text('开始方式')
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+
+      this.buildModeEntry(
+        '快速专注',
+        '立即开始',
+        '临时锁定分心应用，适合当前就想进入状态的场景',
+        $r('sys.symbol.timer'),
+        () => {
+          pushRoute(PageRoutes.QuickStart);
+        }
+      )
+
+      this.buildModeEntry(
+        '契约模式',
+        this.planCollection.length > 0 ? `${this.planCollection.length} 条` : '去创建',
+        '按固定时间自动生效，适合日常学习、工作和休息节奏',
+        $r('sys.symbol.doc_plaintext'),
+        () => {
+          pushRoute(this.planCollection.length > 0 ? PageRoutes.PlanList : PageRoutes.PlanAdd);
+        }
+      )
+
+      this.buildModeEntry(
+        '娱乐限额',
+        this.cycleEnabled ? '运行中' : '去设置',
+        this.cycleSelectedAppCount > 0
+          ? `已为 ${this.cycleSelectedAppCount} 个娱乐应用设置总时长`
+          : '给娱乐类应用设置总可用时长，用完后统一锁定',
+        $r('sys.symbol.bolt_shield'),
+        () => {
+          pushRoute(PageRoutes.CycleGuardEdit);
+        }
+      )
+    }
+    .width('100%')
   }
 
   private getFooterStatusMessage(): string {
@@ -345,11 +468,15 @@ export struct FocusHomePage {
   @Builder
   private buildHomeContent(): void {
     Column({ space: 24 }) {
+      this.buildStatusCard()
+
       if (this.isActiveLocked()) {
         this.buildLockedState()
       } else {
         this.buildEmptyState()
       }
+
+      this.buildModePanel()
 
       Text(this.getFooterStatusMessage())
         .fontSize(12)
@@ -363,13 +490,12 @@ export struct FocusHomePage {
   }
 
   build() {
-    PageScaffold({
-      headerMode: 'custom',
-      showDecoration: true,
-      topPadding: 18,
-      bottomPadding: 12,
-      header: () => { this.buildHomeHeader() },
-      content: () => { this.buildHomeContent() }
+    SystemNavPage({
+      title: '专注',
+      horizontalPadding: 20,
+      content: (): void => {
+        this.buildHomeContent();
+      }
     })
   }
 }

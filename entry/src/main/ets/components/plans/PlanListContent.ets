@@ -1,9 +1,14 @@
 import { common } from '@kit.AbilityKit';
 import { PlanCard } from './PlanCard';
 import { AppTheme } from '../../constants/Theme';
-import { FocusPlan, PlanFilterScope } from '../../models/PlanModel';
+import {
+  comparePlansForDisplay,
+  FocusPlan,
+  getPlanNextStartText,
+  isPlanRunning
+} from '../../models/PlanModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
-import { removePlanGuardStrategy } from '../../services/ScreenTimeService';
+import { removePlanGuardStrategy, syncPlanGuardStrategy } from '../../services/ScreenTimeService';
 import { PlanStore } from '../../stores/PlanStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -13,12 +18,9 @@ bootstrapStores();
 @Component
 export struct PlanListContent {
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
-  @StorageLink(StoreKeys.PlanFilterScope) filterScope: string = 'today';
 
   @State isRefreshing: boolean = false;
   @State statusMessage: string = '';
-
-  private readonly filterOptions: PlanFilterScope[] = ['today', 'all'];
 
   aboutToAppear(): void {
     this.refreshPlans();
@@ -27,25 +29,44 @@ export struct PlanListContent {
   private refreshPlans(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     PlanStore.hydrate(hostContext);
-    this.filterScope = PlanStore.getFilterScope();
     this.isRefreshing = false;
   }
 
-  private getFilterLabel(scope: PlanFilterScope): string {
-    switch (scope) {
-      case 'today':
-        return '今天';
-      default:
-        return '全部';
-    }
-  }
-
   private getVisiblePlans(): FocusPlan[] {
-    return PlanStore.getFilteredPlans();
+    return [...this.planCollection].sort((left: FocusPlan, right: FocusPlan) => comparePlansForDisplay(left, right));
   }
 
-  private getSectionTitle(): string {
-    return this.filterScope === 'today' ? '今日契约' : '全部契约';
+  private getRunningPlanCount(): number {
+    return this.planCollection.filter((plan: FocusPlan) => isPlanRunning(plan)).length;
+  }
+
+  private getEnabledPlanCount(): number {
+    return this.planCollection.filter((plan: FocusPlan) => plan.enabled).length;
+  }
+
+  private getProtectedAppCount(): number {
+    return this.planCollection.reduce((total: number, plan: FocusPlan) => total + plan.selectedCount, 0);
+  }
+
+  private getNextPlanSummary(): string {
+    if (this.getRunningPlanCount() > 0) {
+      return `当前有 ${this.getRunningPlanCount()} 条契约正在生效`;
+    }
+
+    const enabledPlans = this.getVisiblePlans().filter((plan: FocusPlan) => plan.enabled);
+    if (enabledPlans.length === 0) {
+      return '新建后可在指定时间自动开始专注限制';
+    }
+
+    return getPlanNextStartText(enabledPlans[0]);
+  }
+
+  private getNextPlanValue(): string {
+    const enabledPlans = this.getVisiblePlans().filter((plan: FocusPlan) => plan.enabled);
+    if (enabledPlans.length === 0) {
+      return '--:--';
+    }
+    return enabledPlans[0].startTime;
   }
 
   private confirmDeletePlan(plan: FocusPlan): void {
@@ -80,39 +101,88 @@ export struct PlanListContent {
     this.statusMessage = `已删除契约「${plan.name}」`;
   }
 
-  @Builder
-  private buildFilterRow(): void {
-    Row({ space: 8 }) {
-      ForEach(this.filterOptions, (item: PlanFilterScope) => {
-        Button(this.getFilterLabel(item))
-          .type(ButtonType.Capsule)
-          .height(40)
-          .backgroundColor(this.filterScope === item ? AppTheme.colors.primary : Color.Transparent)
-          .fontColor(this.filterScope === item ? '#FFFFFF' : AppTheme.colors.textPrimary)
-          .border({ width: 0 })
-          .onClick(() => {
-            const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-            PlanStore.setFilterScope(hostContext, item);
-            this.filterScope = item;
-          })
-      }, (item: PlanFilterScope) => item)
+  private async togglePlan(plan: FocusPlan): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    PlanStore.togglePlanEnabled(hostContext, plan.id, !plan.enabled);
+    const nextPlan = PlanStore.getPlans().find((item: FocusPlan) => item.id === plan.id);
+    if (!nextPlan) {
+      return;
     }
-    .padding(4)
-    .backgroundColor(AppTheme.colors.surfaceRaised)
-    .borderRadius(AppTheme.radius.pill)
+
+    const result = await syncPlanGuardStrategy(nextPlan);
+    this.statusMessage = result.message;
+    this.refreshPlans();
+  }
+
+  @Builder
+  private buildSummaryCard(title: string, value: string, detail: string): void {
+    Column({ space: 6 }) {
+      Text(title)
+        .fontSize(12)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+
+      Text(value)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+
+      Text(detail)
+        .fontSize(12)
+        .fontColor(AppTheme.colors.textSecondary)
+        .width('100%')
+        .maxLines(2)
+    }
+    .padding(16)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private buildSummaryPanel(): void {
+    Column({ space: 12 }) {
+      Text('契约概览')
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+
+      Row({ space: 10 }) {
+        Column() {
+          this.buildSummaryCard('已启用', `${this.getEnabledPlanCount()}`, '当前仍会自动生效的契约')
+        }
+        .layoutWeight(1)
+
+        Column() {
+          this.buildSummaryCard('进行中', `${this.getRunningPlanCount()}`, '此刻正在限制应用的契约')
+        }
+        .layoutWeight(1)
+      }
+      .width('100%')
+
+      this.buildSummaryCard(
+        '下一次开始',
+        this.getNextPlanValue(),
+        this.getNextPlanSummary()
+      )
+    }
+    .width('100%')
   }
 
   @Builder
   private buildSectionHeader(): void {
     Row() {
-      Text(this.getSectionTitle())
-        .fontSize(16)
+      Text('全部契约')
+        .fontSize(17)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
 
       Blank()
 
-      Text(`${this.getVisiblePlans().length} 个`)
+      Text(`${this.getVisiblePlans().length} 条 · ${this.getProtectedAppCount()} 个应用`)
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
     }
@@ -123,25 +193,38 @@ export struct PlanListContent {
   private buildEmptyState(): void {
     Column({ space: 10 }) {
       Text('还没有契约计划')
-        .fontSize(18)
+        .fontSize(20)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
-      Text('点击右上角新建第一条契约，后续就能继续编辑和自动锁定。')
+      Text('创建后可以在指定时间自动限制应用，适合固定学习、工作和休息节奏。')
         .fontSize(13)
+        .lineHeight(20)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
+
+      Button('新建第一条契约')
+        .width('100%')
+        .height(46)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .fontWeight(FontWeight.Medium)
+        .margin({ top: 4 })
+        .onClick(() => {
+          pushRoute(PageRoutes.PlanAdd);
+        })
     }
     .width('100%')
     .padding(24)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(24)
+    .borderRadius(AppTheme.radius.lg)
     .alignItems(HorizontalAlign.Start)
   }
 
   build() {
-    Column({ space: 14 }) {
-      this.buildFilterRow()
+    Column({ space: 16 }) {
+      this.buildSummaryPanel()
       this.buildSectionHeader()
 
       if (this.statusMessage.length > 0) {
@@ -158,21 +241,19 @@ export struct PlanListContent {
           List({ space: 12 }) {
             ForEach(this.getVisiblePlans(), (plan: FocusPlan) => {
               ListItem() {
-                Column() {
-                  PlanCard({
-                    plan,
-                    onPress: () => {
-                      PlanStore.setCurrentPlanId(plan.id);
-                      pushRoute(PageRoutes.PlanDetail);
-                    }
-                  })
-                }
-                .gesture(
-                  LongPressGesture({ duration: 500 })
-                    .onAction(() => {
-                      this.confirmDeletePlan(plan);
-                    })
-                )
+                PlanCard({
+                  plan,
+                  onPress: () => {
+                    PlanStore.setCurrentPlanId(plan.id);
+                    pushRoute(PageRoutes.PlanDetail);
+                  },
+                  onToggle: () => {
+                    void this.togglePlan(plan);
+                  },
+                  onDelete: () => {
+                    this.confirmDeletePlan(plan);
+                  }
+                })
               }
             }, (plan: FocusPlan) => plan.id)
           }

@@ -138,7 +138,7 @@ export function createCycleGuardLockState(
   return {
     kind: 'cycle_guard',
     strategyName: CYCLE_GUARD_STRATEGY_NAME,
-    title: '循环守护',
+    title: '娱乐限额',
     planId: '',
     selectedTokens: [...selectedTokens],
     selectedCount,

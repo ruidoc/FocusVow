@@ -31,6 +31,6 @@ export function createDefaultCycleGuardState(): CycleGuardState {
     selectedTokens: [],
     selectedAppCount: 0,
     phase: 'idle',
-    statusMessage: '配置共享时长和目标应用后，即可启动循环守护'
+    statusMessage: '配置总可用时长和目标应用后，即可启动娱乐限额'
   };
 }
