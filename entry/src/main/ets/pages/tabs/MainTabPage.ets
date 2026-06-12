@@ -11,13 +11,14 @@ import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { ContractTabPage } from './ContractTabPage';
 import { CycleGuardDetailPage } from './CycleGuardDetailPage';
 import { FocusHomePage } from './FocusHomePage';
 import { ProfilePage } from './ProfilePage';
 
 bootstrapStores();
 
-type MainTabKey = 'focus' | 'guard' | 'profile';
+type MainTabKey = 'focus' | 'contract' | 'guard' | 'profile';
 
 @Entry
 @Component
@@ -109,8 +110,12 @@ struct MainTabPage {
       return selected ? $r('sys.symbol.timer_circle_fill') : $r('sys.symbol.timer');
     }
 
-    if (tab === 'guard') {
+    if (tab === 'contract') {
       return selected ? $r('sys.symbol.doc_plaintext_fill') : $r('sys.symbol.doc_plaintext');
+    }
+
+    if (tab === 'guard') {
+      return selected ? $r('sys.symbol.bolt_shield_fill') : $r('sys.symbol.bolt_shield');
     }
 
     return selected ? $r('sys.symbol.person_fill') : $r('sys.symbol.person');
@@ -139,6 +144,9 @@ struct MainTabPage {
       if (this.currentTab === 'focus') {
         FocusHomePage()
           .layoutWeight(1)
+      } else if (this.currentTab === 'contract') {
+        ContractTabPage()
+          .layoutWeight(1)
       } else if (this.currentTab === 'guard') {
         CycleGuardDetailPage()
           .layoutWeight(1)
@@ -149,6 +157,7 @@ struct MainTabPage {
 
       Row() {
         this.buildTabItem('focus', '专注')
+        this.buildTabItem('contract', '契约')
         this.buildTabItem('guard', '守护')
         this.buildTabItem('profile', '我的')
       }

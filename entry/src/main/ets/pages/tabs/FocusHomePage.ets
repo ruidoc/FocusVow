@@ -109,7 +109,7 @@ export struct FocusHomePage {
   }
 
   private getTodayPlanBadge(): string {
-    return this.planCollection.length > 0 ? `今日 ${this.planCollection.length} 个专注` : '今日无专注';
+    return this.planCollection.length > 0 ? `已有 ${this.planCollection.length} 个契约` : '还没有契约';
   }
 
   private getHeaderStatusText(): string {
@@ -176,7 +176,7 @@ export struct FocusHomePage {
       .alignItems(HorizontalAlign.Start)
 
       Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.calendar'))
+        SymbolGlyph($r('sys.symbol.doc_plaintext'))
           .fontSize(16)
           .fontColor([AppTheme.colors.textPrimary])
         Text(this.getTodayPlanBadge())
@@ -188,9 +188,6 @@ export struct FocusHomePage {
       .backgroundColor(AppTheme.colors.surfaceRaised)
       .borderRadius(AppTheme.radius.pill)
       .border({ width: 1, color: AppTheme.colors.border })
-      .onClick(() => {
-        pushRoute(PageRoutes.PlanList);
-      })
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)

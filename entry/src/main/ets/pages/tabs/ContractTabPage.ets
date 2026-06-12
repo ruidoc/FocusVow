@@ -2,16 +2,15 @@ import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { PlanListContent } from '../../components/plans/PlanListContent';
 import { FocusPlan } from '../../models/PlanModel';
-import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { PlanStore } from '../../stores/PlanStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 
 bootstrapStores();
 
-@Entry
 @Component
-struct PlanListPage {
+export struct ContractTabPage {
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
 
   aboutToAppear(): void {
@@ -29,29 +28,23 @@ struct PlanListPage {
   }
 
   build() {
-    Stack() {
-      PageScaffold({
-        title: '契约列表',
-        subtitle: this.getPageSubtitle(),
-        showBack: true,
-        showAction: true,
-        actionSymbol: $r('sys.symbol.plus'),
-        headerMode: 'default',
-        showDecoration: false,
-        topPadding: 12,
-        bottomPadding: 12,
-        horizontalPadding: 20,
-        onBack: () => backRoute(),
-        onAction: () => {
-          PlanStore.setCurrentPlanId('');
-          pushRoute(PageRoutes.PlanAdd);
-        },
-        content: (): void => {
-          this.buildContent();
-        }
-      })
-    }
-    .width('100%')
-    .height('100%')
+    PageScaffold({
+      title: '契约',
+      subtitle: this.getPageSubtitle(),
+      showAction: true,
+      actionSymbol: $r('sys.symbol.plus'),
+      headerMode: 'default',
+      showDecoration: false,
+      topPadding: 12,
+      bottomPadding: 12,
+      horizontalPadding: 20,
+      onAction: () => {
+        PlanStore.setCurrentPlanId('');
+        pushRoute(PageRoutes.PlanAdd);
+      },
+      content: (): void => {
+        this.buildContent();
+      }
+    })
   }
 }
