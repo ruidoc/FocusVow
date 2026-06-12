@@ -1,14 +1,13 @@
 import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
-import { FocusSource } from '../../models/FocusSession';
 import { backRoute, replaceRoute, PageRoutes } from '../../router/PageRoutes';
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
-import { FocusStore } from '../../stores/FocusStore';
+import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -32,12 +31,12 @@ struct QuickStartPage {
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
-    FocusStore.hydrate(hostContext);
-    const rawDuration = FocusStore.getDurationMinutes();
+    LockStore.hydrate(hostContext);
+    const rawDuration = LockStore.getQuickFocusDurationMinutes();
     const normalized = this.normalizeDurationMinutes(rawDuration);
     this.durationMinutes = normalized;
     if (normalized !== rawDuration) {
-      FocusStore.setDurationMinutes(hostContext, normalized);
+      LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
     }
   }
 
@@ -67,7 +66,6 @@ struct QuickStartPage {
     return this.mode === 'shield' ? '锁定时长' : '放行时长';
   }
 
-  /** 不与设计稿中的默认引导长文案抢视觉；异常时仍展示具体提示。 */
   private shouldShowStatusLine(): boolean {
     if (this.statusMessage.length === 0) {
       return false;
@@ -75,7 +73,6 @@ struct QuickStartPage {
     if (this.statusMessage === '先申请系统授权，再选择需要限制的应用') {
       return false;
     }
-    // 与上方「已选 N 个应用」重复时不重复展示
     const m = /^已选择 (\d+) 个应用$/.exec(this.statusMessage);
     if (m !== null && Number(m[1]) === this.selectedAppCount) {
       return false;
@@ -107,8 +104,8 @@ struct QuickStartPage {
 
   private async startFocus(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (FocusStore.isRunning()) {
-      SettingsStore.updateStatusMessage(hostContext, '当前已有进行中的专注，请先回首页结束后再开始新的专注');
+    if (LockStore.isLocked()) {
+      SettingsStore.updateStatusMessage(hostContext, '当前已有进行中的锁定，请先回首页结束后再开始新的专注');
       return;
     }
 
@@ -130,15 +127,7 @@ struct QuickStartPage {
       return;
     }
 
-    FocusStore.startSession(
-      hostContext,
-      this.selectedTokens,
-      this.durationMinutes,
-      FocusSource.QuickStart,
-      '',
-      '快速专注',
-      this.mode
-    );
+    LockStore.startQuickFocus(hostContext, this.selectedTokens, this.durationMinutes, this.mode);
     replaceRoute(PageRoutes.FocusHome);
   }
 
@@ -146,7 +135,7 @@ struct QuickStartPage {
     const next = this.normalizeDurationMinutes(value);
     this.durationMinutes = next;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    FocusStore.setDurationMinutes(hostContext, next);
+    LockStore.setQuickFocusDurationMinutes(hostContext, next);
   }
 
   @Builder

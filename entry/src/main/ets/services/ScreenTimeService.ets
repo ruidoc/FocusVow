@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FocusPlan } from '../models/PlanModel';
 
 export interface GuardResult<T> {
@@ -10,10 +11,34 @@ export interface GuardResult<T> {
 
 interface GuardErrorLike {
   code?: number;
+  message?: string;
 }
+
+const DOMAIN: number = 0x0000;
+const TAG: string = 'ScreenTimeGuard';
 
 function toBusinessMessage(fallback: string): string {
   return fallback;
+}
+
+function formatGuardError(action: string, error: Object): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+
+  const guardError = error as GuardErrorLike;
+  const codeText = guardError.code !== undefined ? `code=${guardError.code}` : 'code=unknown';
+  const messageText =
+    guardError.message !== undefined && guardError.message.length > 0 ? guardError.message : String(error);
+  return `${action}: ${codeText}, ${messageText}`;
+}
+
+function logGuardError(action: string, error: Object): void {
+  hilog.error(DOMAIN, TAG, '%{public}s', formatGuardError(action, error));
+}
+
+function guardOperationError(action: string, error: Object): Error {
+  return new Error(formatGuardError(action, error));
 }
 
 function getRestrictionType(mode: 'shield' | 'allow'): guardService.RestrictionType {
@@ -64,7 +89,11 @@ async function addOrUpdatePlanGuardStrategy(
   const hasExistingStrategy = existingNames?.has(plan.id) ?? false;
 
   if (hasExistingStrategy) {
-    await guardService.updateGuardStrategy(plan.id, strategy);
+    try {
+      await guardService.updateGuardStrategy(plan.id, strategy);
+    } catch (error) {
+      throw guardOperationError(`updateGuardStrategy(${plan.id})`, error as Object);
+    }
     return;
   }
 
@@ -73,10 +102,14 @@ async function addOrUpdatePlanGuardStrategy(
   } catch (error) {
     const guardError = error as GuardErrorLike;
     if (isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.STRATEGY_NAME_ALREADY_EXIST)) {
-      await guardService.updateGuardStrategy(plan.id, strategy);
+      try {
+        await guardService.updateGuardStrategy(plan.id, strategy);
+      } catch (updateError) {
+        throw guardOperationError(`updateGuardStrategy(${plan.id})`, updateError as Object);
+      }
       return;
     }
-    throw new Error('Failed to add guard strategy.');
+    throw guardOperationError(`addGuardStrategy(${plan.id})`, error as Object);
   }
 }
 
@@ -86,7 +119,7 @@ async function startPlanGuardStrategy(planId: string): Promise<void> {
   } catch (error) {
     const guardError = error as GuardErrorLike;
     if (!shouldIgnoreStartError(guardError)) {
-      throw new Error('Failed to start guard strategy.');
+      throw guardOperationError(`startGuardStrategy(${planId})`, error as Object);
     }
   }
 }
@@ -97,7 +130,7 @@ async function stopPlanGuardStrategy(planId: string): Promise<void> {
   } catch (error) {
     const guardError = error as GuardErrorLike;
     if (!shouldIgnoreStopError(guardError)) {
-      throw new Error('Failed to stop guard strategy.');
+      throw guardOperationError(`stopGuardStrategy(${planId})`, error as Object);
     }
   }
 }
@@ -108,7 +141,7 @@ async function removePlanGuardStrategyInternal(planId: string): Promise<void> {
   } catch (error) {
     const guardError = error as GuardErrorLike;
     if (!shouldIgnoreRemoveError(guardError)) {
-      throw new Error('Failed to remove guard strategy.');
+      throw guardOperationError(`removeGuardStrategy(${planId})`, error as Object);
     }
   }
 }
@@ -219,11 +252,26 @@ export async function syncPlanGuardStrategy(plan: FocusPlan): Promise<GuardResul
 
     await stopPlanGuardStrategy(plan.id);
     return { ok: true, data: true, message: '系统契约策略已更新并暂停' };
-  } catch {
+  } catch (error) {
+    logGuardError(`syncPlanGuardStrategy(${plan.id})`, error as Object);
     return {
       ok: false,
       data: false,
       message: toBusinessMessage('同步系统契约策略失败')
+    };
+  }
+}
+
+export async function stopPlanGuardStrategyForWindow(planId: string): Promise<GuardResult<boolean>> {
+  try {
+    await stopPlanGuardStrategy(planId);
+    return { ok: true, data: true, message: '已停止当前契约窗口' };
+  } catch (error) {
+    logGuardError(`stopPlanGuardStrategyForWindow(${planId})`, error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('停止契约策略失败')
     };
   }
 }
@@ -233,7 +281,8 @@ export async function removePlanGuardStrategy(planId: string): Promise<GuardResu
     await stopPlanGuardStrategy(planId);
     await removePlanGuardStrategyInternal(planId);
     return { ok: true, data: true, message: '系统契约策略已移除' };
-  } catch {
+  } catch (error) {
+    logGuardError(`removePlanGuardStrategy(${planId})`, error as Object);
     return {
       ok: false,
       data: false,
@@ -278,7 +327,8 @@ export async function syncAllPlanGuardStrategies(plans: FocusPlan[]): Promise<Gu
     }
 
     return { ok: true, data: true, message: '系统契约策略已同步' };
-  } catch {
+  } catch (error) {
+    logGuardError('syncAllPlanGuardStrategies', error as Object);
     return {
       ok: false,
       data: false,

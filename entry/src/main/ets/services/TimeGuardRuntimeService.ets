@@ -1,80 +1,27 @@
 import { common } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
-  FocusRunStatus,
-  FocusSession,
-  FocusSource,
+  ActiveLockState,
+  createCovenantLockState,
+  createIdleLockState,
   RestrictionMode
-} from '../models/FocusSession';
+} from '../models/ActiveLockModel';
 import { FocusPlan } from '../models/PlanModel';
 import { createDefaultSettingsState, SettingsState } from '../models/PermissionModel';
 import {
-  clearPersistedFocusSession,
-  loadPersistedFocusSession,
-  savePersistedFocusSession
-} from './FocusPersistenceService';
+  loadPersistedActiveLockState,
+  savePersistedActiveLockState
+} from './ActiveLockPersistenceService';
+import { restartCycleGuardIfEnabled } from './CycleGuardService';
+import { getPlanWindow } from './PlanWindowService';
 import { loadPersistedPlans } from './PlanPersistenceService';
 import { loadPersistedSettings, savePersistedSettings } from './SettingsPersistenceService';
 
-interface PlanWindow {
-  startAt: number;
-  endAt: number;
-}
+const DOMAIN: number = 0x0000;
+const TAG: string = 'PlanGuardRuntime';
 
 function isPlanStrategyName(strategyName: string): boolean {
   return strategyName.startsWith('plan_');
-}
-
-function getTimeParts(timeText: string): number[] | null {
-  const parts = timeText.split(':');
-  if (parts.length !== 2) {
-    return null;
-  }
-
-  return [Number(parts[0]), Number(parts[1])];
-}
-
-function createDateFromPlanTime(baseDate: Date, timeText: string): Date {
-  const result = new Date(baseDate.getTime());
-  const parts = getTimeParts(timeText);
-  const hour = parts ? parts[0] : 0;
-  const minute = parts ? parts[1] : 0;
-  result.setHours(hour, minute, 0, 0);
-  return result;
-}
-
-function getPlanWindow(plan: FocusPlan, now: Date): PlanWindow {
-  const todayStart = createDateFromPlanTime(now, plan.startTime);
-  const todayEnd = createDateFromPlanTime(now, plan.endTime);
-
-  if (todayStart.getTime() === todayEnd.getTime()) {
-    return {
-      startAt: now.getTime(),
-      endAt: now.getTime() + 24 * 60 * 60 * 1000
-    };
-  }
-
-  if (todayStart.getTime() < todayEnd.getTime()) {
-    return {
-      startAt: todayStart.getTime(),
-      endAt: todayEnd.getTime()
-    };
-  }
-
-  if (now.getTime() >= todayStart.getTime()) {
-    const nextDayEnd = new Date(todayEnd.getTime());
-    nextDayEnd.setDate(nextDayEnd.getDate() + 1);
-    return {
-      startAt: todayStart.getTime(),
-      endAt: nextDayEnd.getTime()
-    };
-  }
-
-  const previousDayStart = new Date(todayStart.getTime());
-  previousDayStart.setDate(previousDayStart.getDate() - 1);
-  return {
-    startAt: previousDayStart.getTime(),
-    endAt: todayEnd.getTime()
-  };
 }
 
 function updateSettingsStatusMessage(context: common.Context, statusMessage: string): void {
@@ -103,48 +50,102 @@ function findPlanByStrategyName(context: common.Context, strategyName: string): 
   return null;
 }
 
-function createPlanFocusSession(plan: FocusPlan, planWindow: PlanWindow): FocusSession {
-  const durationMinutes = Math.max(1, Math.ceil((planWindow.endAt - planWindow.startAt) / (60 * 1000)));
-  return {
-    selectedTokens: [...plan.selectedTokens],
-    selectedCount: plan.selectedTokens.length,
-    durationMinutes,
-    startAt: planWindow.startAt,
-    endAt: planWindow.endAt,
-    status: FocusRunStatus.Running,
-    source: FocusSource.GuardStrategy,
-    planId: plan.id,
-    planName: plan.name,
-    mode: plan.mode as RestrictionMode
-  };
+function buildCovenantLockFromPlan(plan: FocusPlan): ActiveLockState {
+  const planWindow = getPlanWindow(plan, new Date());
+  return createCovenantLockState(
+    plan.id,
+    plan.name,
+    plan.selectedTokens,
+    plan.mode as RestrictionMode,
+    planWindow.startAt,
+    planWindow.endAt
+  );
+}
+
+function buildFallbackCovenantLock(strategyName: string): ActiveLockState {
+  const now = Date.now();
+  return createCovenantLockState(
+    strategyName,
+    '契约',
+    [],
+    'shield',
+    now,
+    now + 60 * 60 * 1000
+  );
+}
+
+function isCovenantLockStillActive(lock: ActiveLockState, strategyName: string, nowMs: number): boolean {
+  return lock.kind === 'covenant' &&
+    lock.planId === strategyName &&
+    lock.endAt > nowMs;
+}
+
+function saveCovenantLockState(
+  context: common.Context,
+  nextState: ActiveLockState,
+  statusMessage: string
+): boolean {
+  const saved = savePersistedActiveLockState(context, nextState);
+  hilog.info(
+    DOMAIN,
+    TAG,
+    'onStart lock saved=%{public}s planId=%{public}s kind=%{public}s',
+    String(saved),
+    nextState.planId,
+    nextState.kind
+  );
+  updateSettingsStatusMessage(context, statusMessage);
+  return saved;
 }
 
 export function handlePlanStrategyStart(context: common.Context, strategyName: string): void {
+  if (!isPlanStrategyName(strategyName)) {
+    return;
+  }
+
+  const plans = loadPersistedPlans(context);
+  hilog.info(DOMAIN, TAG, 'onStart %{public}s persistedPlans=%{public}d', strategyName, plans.length);
+
   const plan = findPlanByStrategyName(context, strategyName);
-  if (!plan || !plan.enabled || plan.selectedTokens.length === 0) {
+  if (plan) {
+    const nextState = buildCovenantLockFromPlan(plan);
+    saveCovenantLockState(
+      context,
+      nextState,
+      `契约「${plan.name}」正在系统锁定中`
+    );
     return;
   }
 
-  const currentSession = loadPersistedFocusSession(context);
-  if (currentSession && currentSession.status === FocusRunStatus.Running && currentSession.source !== FocusSource.GuardStrategy) {
-    updateSettingsStatusMessage(context, `契约「${plan.name}」正在系统锁定中`);
-    return;
-  }
-
-  savePersistedFocusSession(context, createPlanFocusSession(plan, getPlanWindow(plan, new Date())));
-  updateSettingsStatusMessage(context, `契约「${plan.name}」正在系统锁定中`);
+  const fallbackState = buildFallbackCovenantLock(strategyName);
+  saveCovenantLockState(
+    context,
+    fallbackState,
+    '契约正在系统锁定中'
+  );
+  hilog.warn(DOMAIN, TAG, 'onStart plan not found, wrote fallback lock %{public}s', strategyName);
 }
 
-export function handlePlanStrategyStop(context: common.Context, strategyName: string): void {
-  const currentSession = loadPersistedFocusSession(context);
-  if (
-    currentSession &&
-    currentSession.status === FocusRunStatus.Running &&
-    currentSession.source === FocusSource.GuardStrategy &&
-    currentSession.planId === strategyName
-  ) {
-    clearPersistedFocusSession(context);
+export async function handlePlanStrategyStop(context: common.Context, strategyName: string): Promise<void> {
+  const nowMs = Date.now();
+  const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
+
+  if (isCovenantLockStillActive(currentLock, strategyName, nowMs)) {
+    hilog.warn(
+      DOMAIN,
+      TAG,
+      'onStop ignored: covenant lock still active until %{public}d now=%{public}d',
+      currentLock.endAt,
+      nowMs
+    );
+    return;
   }
 
+  if (currentLock.kind === 'covenant' && currentLock.planId === strategyName) {
+    savePersistedActiveLockState(context, createIdleLockState());
+    hilog.info(DOMAIN, TAG, 'onStop cleared covenant lock %{public}s', strategyName);
+  }
+
+  await restartCycleGuardIfEnabled(context);
   updateSettingsStatusMessage(context, '当前没有进行中的系统锁定');
 }

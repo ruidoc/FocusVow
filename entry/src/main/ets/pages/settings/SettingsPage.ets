@@ -4,7 +4,7 @@ import { SettingsActionRow } from '../../components/settings/SettingsActionRow';
 import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
-import { FocusStore } from '../../stores/FocusStore';
+import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -30,8 +30,8 @@ struct SettingsPage {
   private clearLocalData(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     PlanStore.reset(hostContext);
-    FocusStore.setDurationMinutes(hostContext, 25);
-    FocusStore.resetToIdle(hostContext);
+    LockStore.setQuickFocusDurationMinutes(hostContext, 25);
+    LockStore.clear(hostContext);
     SettingsStore.reset(hostContext);
     this.statusMessage = '本地数据已清空';
   }

@@ -6,6 +6,8 @@ import {
   createPlanFromDraft,
   filterPlansByScope,
   getPlanById,
+  getTodayRepeatDay,
+  normalizePlanRepeatDays,
   removePlanById,
   updatePlanFromDraft,
   upsertPlan
@@ -20,14 +22,29 @@ import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
 function getTodayWeekday(): number {
-  const jsWeekday = new Date().getDay();
-  return jsWeekday;
+  return getTodayRepeatDay();
+}
+
+function migratePersistedPlan(plan: FocusPlan): FocusPlan {
+  return {
+    id: plan.id,
+    name: plan.name,
+    startTime: plan.startTime,
+    endTime: plan.endTime,
+    repeatDays: normalizePlanRepeatDays(plan.repeatDays),
+    selectedTokens: [...plan.selectedTokens],
+    selectedCount: plan.selectedCount,
+    mode: plan.mode,
+    enabled: plan.enabled,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt
+  };
 }
 
 export class PlanStore {
   static hydrate(context: common.UIAbilityContext): void {
     bootstrapStores();
-    const persistedPlans = loadPersistedPlans(context);
+    const persistedPlans = loadPersistedPlans(context).map((plan: FocusPlan) => migratePersistedPlan(plan));
     const persistedFilterScope = loadPersistedPlanFilterScope(context);
     AppStorage.setOrCreate(StoreKeys.PlanCollection, persistedPlans);
     AppStorage.setOrCreate(StoreKeys.PlanFilterScope, persistedFilterScope);

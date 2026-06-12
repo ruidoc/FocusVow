@@ -1,7 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
+import { showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
-import { FocusPlan, PlanDraft } from '../../models/PlanModel';
+import { FocusPlan, PlanDraft, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel } from '../../models/PlanModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
@@ -31,7 +32,7 @@ struct PlanDetailPage {
   @State mode: 'shield' | 'allow' = 'shield';
   @State statusMessage: string = '';
 
-  private readonly dayOptions: number[] = [1, 2, 3, 4, 5, 6, 0];
+  private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
 
   private padTimePart(value: number): string {
     return value.toString().padStart(2, '0');
@@ -106,25 +107,6 @@ struct PlanDetailPage {
     this.statusMessage = SettingsStore.getState().statusMessage;
   }
 
-  private getWeekdayLabel(day: number): string {
-    switch (day) {
-      case 1:
-        return '一';
-      case 2:
-        return '二';
-      case 3:
-        return '三';
-      case 4:
-        return '四';
-      case 5:
-        return '五';
-      case 6:
-        return '六';
-      default:
-        return '日';
-    }
-  }
-
   private toggleRepeatDay(day: number): void {
     if (this.repeatDays.includes(day)) {
       this.repeatDays = this.repeatDays.filter((item: number) => item !== day);
@@ -165,6 +147,7 @@ struct PlanDetailPage {
       return;
     }
 
+    // 契约数据 savedPlan
     const savedPlan = PlanStore.savePlan(hostContext, this.buildDraft(), this.planId);
     this.planId = savedPlan.id;
 
@@ -179,9 +162,13 @@ struct PlanDetailPage {
     }
 
     const syncResult = await syncPlanGuardStrategy(savedPlan);
-    this.statusMessage = syncResult.message;
-    SettingsStore.updateStatusMessage(hostContext, syncResult.message);
-    replaceRoute(PageRoutes.PlanList);
+    if (!syncResult.ok) {
+      this.statusMessage = syncResult.message;
+      showToast(syncResult.message, this.getUIContext(), 3000);
+      return;
+    }
+
+    backRoute();
   }
 
   private appsSubtitle(): string {
@@ -351,7 +338,7 @@ struct PlanDetailPage {
               ForEach(this.dayOptions, (item: number) => {
                 Button({ type: ButtonType.Capsule }) {
                   Stack() {
-                    Text(this.getWeekdayLabel(item))
+                    Text(getRepeatDayShortLabel(item))
                       .fontSize(13)
                       .fontWeight(FontWeight.Medium)
                       .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)

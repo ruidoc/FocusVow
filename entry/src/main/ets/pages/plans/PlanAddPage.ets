@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
-import { PlanDraft } from '../../models/PlanModel';
+import { PlanDraft, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel } from '../../models/PlanModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
@@ -32,7 +32,7 @@ struct PlanAddPage {
   @State statusMessage: string = '';
   @State hasInitializedDefaultTime: boolean = false;
 
-  private readonly dayOptions: number[] = [1, 2, 3, 4, 5, 6, 0];
+  private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
 
   private padTimePart(value: number): string {
     return value.toString().padStart(2, '0');
@@ -103,25 +103,6 @@ struct PlanAddPage {
     this.statusMessage = settingsState.statusMessage;
     if (!this.hasInitializedDefaultTime) {
       this.initDefaultTimeRange();
-    }
-  }
-
-  private getWeekdayLabel(day: number): string {
-    switch (day) {
-      case 1:
-        return '一';
-      case 2:
-        return '二';
-      case 3:
-        return '三';
-      case 4:
-        return '四';
-      case 5:
-        return '五';
-      case 6:
-        return '六';
-      default:
-        return '日';
     }
   }
 
@@ -347,7 +328,7 @@ struct PlanAddPage {
               ForEach(this.dayOptions, (item: number) => {
                 Button({ type: ButtonType.Capsule }) {
                   Stack() {
-                    Text(this.getWeekdayLabel(item))
+                    Text(getRepeatDayShortLabel(item))
                       .fontSize(13)
                       .fontWeight(FontWeight.Medium)
                       .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)

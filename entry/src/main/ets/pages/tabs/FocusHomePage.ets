@@ -1,14 +1,20 @@
 import { common } from '@kit.AbilityKit';
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
-import { CycleGuardPhase } from '../../models/CycleGuardModel';
+import {
+  ActiveLockState,
+  createIdleLockState,
+  isLocked
+} from '../../models/ActiveLockModel';
 import { FocusPlan } from '../../models/PlanModel';
-import { FocusRunStatus, FocusSession, FocusSource, createIdleFocusSession } from '../../models/FocusSession';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
-import { endCurrentCycleGuardLockAndRestart } from '../../services/CycleGuardService';
-import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
+import {
+  endCycleGuardLock,
+  endQuickFocus,
+  skipCovenantWindow
+} from '../../services/ActiveLockLifecycleService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
-import { FocusStore } from '../../stores/FocusStore';
+import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -18,26 +24,22 @@ bootstrapStores();
 
 @Component
 export struct FocusHomePage {
-  @StorageLink(StoreKeys.FocusCurrentSession) currentSession: FocusSession = createIdleFocusSession();
+  @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.SettingsStatusMessage) statusMessage: string = '先申请系统授权，再选择需要限制的应用';
-  @StorageLink(StoreKeys.CycleGuardEnabled) cycleGuardEnabled: boolean = false;
-  @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleGuardSelectedAppCount: number = 0;
-  @StorageLink(StoreKeys.CycleGuardPhase) cycleGuardPhase: CycleGuardPhase = 'idle';
   @StorageLink(StoreKeys.CycleGuardStatusMessage) cycleGuardStatusMessage: string = '';
-  @State remainingLabel: string = FocusStore.getRemainingLabel();
+  @State remainingLabel: string = LockStore.getRemainingLabel();
 
   private timerId: number = -1;
-  private isStopping: boolean = false;
-  private isEndingCycleLock: boolean = false;
+  private isEndingLock: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
-    FocusStore.hydrate(hostContext);
+    LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     this.syncRemainingLabel();
     this.startTimer();
@@ -64,46 +66,35 @@ export struct FocusHomePage {
   private syncRemainingLabel(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
-    FocusStore.hydrate(hostContext);
+    LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
-    this.remainingLabel = FocusStore.getRemainingLabel();
+    this.remainingLabel = LockStore.getRemainingLabel();
   }
 
-  private async finishCurrentFocus(isAutoFinished: boolean): Promise<void> {
-    if (this.currentSession.status !== FocusRunStatus.Running || this.isStopping) {
+  private isActiveLocked(): boolean {
+    return isLocked(this.activeLock);
+  }
+
+  private async endCurrentLock(): Promise<void> {
+    if (this.isEndingLock || !this.isActiveLocked()) {
       return;
     }
 
-    this.isStopping = true;
+    this.isEndingLock = true;
     this.clearTimer();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    await finishRunningFocusSession(
-      hostContext,
-      this.currentSession,
-      isAutoFinished ? '专注已完成，限制已自动解除' : '你已手动结束专注',
-      isAutoFinished ? '专注已结束，但解除限制失败' : '结束专注失败'
-    );
 
-    this.remainingLabel = FocusStore.getRemainingLabel();
-    this.isStopping = false;
-    this.startTimer();
-  }
-
-  private isCycleGuardLocked(): boolean {
-    return this.currentSession.status !== FocusRunStatus.Running &&
-      this.cycleGuardEnabled &&
-      this.cycleGuardPhase === 'locked';
-  }
-
-  private async endCurrentCycleLock(): Promise<void> {
-    if (this.isEndingCycleLock || !this.isCycleGuardLocked()) {
-      return;
+    if (this.activeLock.kind === 'quick_focus') {
+      await endQuickFocus(hostContext, this.activeLock, '你已手动结束专注', '结束专注失败');
+    } else if (this.activeLock.kind === 'covenant') {
+      await skipCovenantWindow(hostContext, this.activeLock);
+    } else if (this.activeLock.kind === 'cycle_guard') {
+      await endCycleGuardLock(hostContext);
     }
 
-    this.isEndingCycleLock = true;
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    await endCurrentCycleGuardLockAndRestart(hostContext);
-    this.isEndingCycleLock = false;
+    this.remainingLabel = LockStore.getRemainingLabel();
+    this.isEndingLock = false;
+    this.startTimer();
   }
 
   private getGreeting(): string {
@@ -122,13 +113,48 @@ export struct FocusHomePage {
   }
 
   private getHeaderStatusText(): string {
-    if (this.currentSession.status === FocusRunStatus.Running) {
-      return '这段专注正在进行，继续保持。';
+    if (!this.isActiveLocked()) {
+      return '今天还没开始，加油！';
     }
-    if (this.isCycleGuardLocked()) {
+
+    if (this.activeLock.kind === 'covenant') {
+      return '契约锁定中，继续保持专注。';
+    }
+    if (this.activeLock.kind === 'cycle_guard') {
       return '共享额度已用完，当前处于锁定中。';
     }
-    return '今天还没开始，加油！';
+    return '这段专注正在进行，继续保持。';
+  }
+
+  private getLockSubtitle(): string {
+    const count = this.activeLock.selectedCount;
+    if (this.activeLock.kind === 'covenant') {
+      return `已限制 ${count} 个应用，当前由契约自动锁定`;
+    }
+    if (this.activeLock.kind === 'cycle_guard') {
+      return `共享额度已用完，当前已限制 ${count} 个应用`;
+    }
+    return `已限制 ${count} 个应用，结束后会自动解除限制`;
+  }
+
+  private getEndLockButtonLabel(): string {
+    if (this.activeLock.kind === 'covenant') {
+      return '结束本次契约';
+    }
+    if (this.activeLock.kind === 'cycle_guard') {
+      return '结束当前锁定';
+    }
+    return '结束专注';
+  }
+
+  private getLockHint(): string {
+    if (this.activeLock.kind === 'cycle_guard') {
+      return '结束后会重新开始一轮共享额度计时';
+    }
+    if (this.activeLock.kind === 'covenant') {
+      return '仅跳过本次窗口，下一周期仍会正常执行';
+    }
+    return '';
   }
 
   @Builder
@@ -171,29 +197,33 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildRunningState(): void {
+  private buildLockedState(): void {
     Column({ space: 18 }) {
-      Text(this.remainingLabel)
-        .fontSize(56)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
+      if (this.activeLock.endAt > 0) {
+        Text(this.remainingLabel)
+          .fontSize(56)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
 
-      Text(this.currentSession.planName.length > 0 ? this.currentSession.planName : '快速专注进行中')
-        .fontSize(24)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .textAlign(TextAlign.Center)
+        Text(this.activeLock.title)
+          .fontSize(24)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .textAlign(TextAlign.Center)
+      } else {
+        Text(this.activeLock.title)
+          .fontSize(32)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .textAlign(TextAlign.Center)
+      }
 
-      Text(
-        this.currentSession.source === FocusSource.GuardStrategy
-          ? `已限制 ${this.currentSession.selectedCount} 个应用，当前由系统契约自动锁定`
-          : `已限制 ${this.currentSession.selectedCount} 个应用，结束后会自动解除限制`
-      )
+      Text(this.getLockSubtitle())
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .textAlign(TextAlign.Center)
 
-      if (this.currentSession.source === FocusSource.GuardStrategy) {
+      if (this.activeLock.kind === 'covenant' && this.activeLock.planId.length > 0) {
         Button('查看当前契约')
           .width('100%')
           .height(56)
@@ -202,22 +232,29 @@ export struct FocusHomePage {
           .fontColor(AppTheme.colors.textPrimary)
           .border({ width: 1, color: AppTheme.colors.border })
           .onClick(() => {
-            if (this.currentSession.planId.length > 0) {
-              PlanStore.setCurrentPlanId(this.currentSession.planId);
-              pushRoute(PageRoutes.PlanDetail);
-            }
+            PlanStore.setCurrentPlanId(this.activeLock.planId);
+            pushRoute(PageRoutes.PlanDetail);
           })
-      } else {
-        Button('结束当前专注')
-          .width('100%')
-          .height(56)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.dangerSoft)
-          .fontColor(AppTheme.colors.danger)
-          .border({ width: 1, color: AppTheme.colors.danger })
-          .onClick(() => {
-            this.finishCurrentFocus(false);
-          })
+      }
+
+      Button(this.getEndLockButtonLabel())
+        .width('100%')
+        .height(56)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.dangerSoft)
+        .fontColor(AppTheme.colors.danger)
+        .border({ width: 1, color: AppTheme.colors.danger })
+        .enabled(!this.isEndingLock)
+        .opacity(this.isEndingLock ? 0.7 : 1)
+        .onClick(() => {
+          this.endCurrentLock();
+        })
+
+      if (this.getLockHint().length > 0) {
+        Text(this.getLockHint())
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textMuted)
+          .textAlign(TextAlign.Center)
       }
     }
     .width('100%')
@@ -293,7 +330,6 @@ export struct FocusHomePage {
       }
       .justifyContent(FlexAlign.Center)
       .onClick(() => {
-        console.log('快速专注');
         pushRoute(PageRoutes.QuickStart);
       })
     }
@@ -302,45 +338,8 @@ export struct FocusHomePage {
     .alignItems(HorizontalAlign.Center)
   }
 
-  @Builder
-  private buildCycleGuardLockedState(): void {
-    Column({ space: 18 }) {
-      Text('循环守护锁定中')
-        .fontSize(32)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
-        .textAlign(TextAlign.Center)
-
-      Text(`共享额度已用完，当前已限制 ${this.cycleGuardSelectedAppCount} 个应用`)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textSecondary)
-        .textAlign(TextAlign.Center)
-
-      Button('结束当前锁定')
-        .width('100%')
-        .height(56)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.dangerSoft)
-        .fontColor(AppTheme.colors.danger)
-        .border({ width: 1, color: AppTheme.colors.danger })
-        .enabled(!this.isEndingCycleLock)
-        .opacity(this.isEndingCycleLock ? 0.7 : 1)
-        .onClick(() => {
-          this.endCurrentCycleLock();
-        })
-
-      Text('结束后会重新开始一轮共享额度计时')
-        .fontSize(13)
-        .fontColor(AppTheme.colors.textMuted)
-        .textAlign(TextAlign.Center)
-    }
-    .width('100%')
-    .padding({ left: 12, right: 12 })
-    .alignItems(HorizontalAlign.Center)
-  }
-
   private getFooterStatusMessage(): string {
-    if (this.isCycleGuardLocked()) {
+    if (this.isActiveLocked() && this.activeLock.kind === 'cycle_guard') {
       return this.cycleGuardStatusMessage;
     }
     return this.statusMessage;
@@ -349,10 +348,8 @@ export struct FocusHomePage {
   @Builder
   private buildHomeContent(): void {
     Column({ space: 24 }) {
-      if (this.currentSession.status === FocusRunStatus.Running) {
-        this.buildRunningState()
-      } else if (this.isCycleGuardLocked()) {
-        this.buildCycleGuardLockedState()
+      if (this.isActiveLocked()) {
+        this.buildLockedState()
       } else {
         this.buildEmptyState()
       }

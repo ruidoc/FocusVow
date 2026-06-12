@@ -1,6 +1,6 @@
 export class StoreKeys {
-  static readonly FocusDurationMinutes: string = 'focus.durationMinutes';
-  static readonly FocusCurrentSession: string = 'focus.currentSession';
+  static readonly LockActiveState: string = 'lock.activeState';
+  static readonly QuickFocusDurationMinutes: string = 'quickFocus.durationMinutes';
   static readonly PlanCollection: string = 'plan.collection';
   static readonly PlanCurrentId: string = 'plan.currentId';
   static readonly PlanFilterScope: string = 'plan.filterScope';

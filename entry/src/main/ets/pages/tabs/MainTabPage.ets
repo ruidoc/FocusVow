@@ -1,11 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
-import { FocusRunStatus, FocusSession, FocusSource, createIdleFocusSession } from '../../models/FocusSession';
-import { finishRunningFocusSession } from '../../services/FocusLifecycleService';
+import { ActiveLockState, createIdleLockState } from '../../models/ActiveLockModel';
+import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
+import { warmUpPreferencesStore } from '../../services/PreferencesService';
 import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
-import { FocusStore } from '../../stores/FocusStore';
+import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -23,17 +24,18 @@ type MainTabKey = 'focus' | 'guard' | 'profile';
 struct MainTabPage {
   @State currentTab: MainTabKey = 'focus';
   @State private bottomGestureInsetVp: number = 0;
-  @StorageLink(StoreKeys.FocusCurrentSession) currentSession: FocusSession = createIdleFocusSession();
+  @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
 
   private timerId: number = -1;
-  private isStopping: boolean = false;
+  private isEndingLock: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const ui = this.getUIContext();
+    warmUpPreferencesStore(hostContext);
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
-    FocusStore.hydrate(hostContext);
+    LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     void syncAllPlanGuardStrategies(PlanStore.getPlans());
     this.startTimer();
@@ -61,35 +63,36 @@ struct MainTabPage {
   private startTimer(): void {
     this.clearTimer();
     this.timerId = setInterval(() => {
-      this.syncFocusLifecycle();
+      this.syncLockLifecycle();
     }, 1000);
   }
 
-  private syncFocusLifecycle(): void {
+  private syncLockLifecycle(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    warmUpPreferencesStore(hostContext);
     SettingsStore.hydrate(hostContext);
-    FocusStore.hydrate(hostContext);
+    LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
 
-    if (this.currentSession.source !== FocusSource.GuardStrategy && FocusStore.shouldAutoFinish()) {
-      this.finishCurrentFocus();
+    if (this.activeLock.kind === 'quick_focus' && LockStore.shouldAutoFinish()) {
+      this.finishQuickFocus();
     }
   }
 
-  private async finishCurrentFocus(): Promise<void> {
-    if (this.currentSession.status !== FocusRunStatus.Running || this.isStopping) {
+  private async finishQuickFocus(): Promise<void> {
+    if (this.activeLock.kind !== 'quick_focus' || this.isEndingLock) {
       return;
     }
 
-    this.isStopping = true;
+    this.isEndingLock = true;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    await finishRunningFocusSession(
+    await endQuickFocus(
       hostContext,
-      this.currentSession,
+      this.activeLock,
       '专注已完成，限制已自动解除',
       '专注已结束，但解除限制失败'
     );
-    this.isStopping = false;
+    this.isEndingLock = false;
   }
 
   @Builder

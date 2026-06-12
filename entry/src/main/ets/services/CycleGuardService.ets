@@ -5,6 +5,14 @@ import {
   CycleGuardState,
   createDefaultCycleGuardState
 } from '../models/CycleGuardModel';
+import {
+  createCycleGuardLockState,
+  createIdleLockState
+} from '../models/ActiveLockModel';
+import {
+  loadPersistedActiveLockState,
+  savePersistedActiveLockState
+} from './ActiveLockPersistenceService';
 import { loadPersistedCycleGuardState, savePersistedCycleGuardState } from './CycleGuardPersistenceService';
 import { GuardResult } from './ScreenTimeService';
 
@@ -127,6 +135,21 @@ function validateState(state: CycleGuardState): GuardResult<boolean> | null {
   return null;
 }
 
+function clearActiveLockIfCycleGuard(context: common.Context): void {
+  const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
+  if (currentLock.kind === 'cycle_guard') {
+    savePersistedActiveLockState(context, createIdleLockState());
+  }
+}
+
+/** 重启额度计时时仅清理守护锁，避免误清契约 / 快速专注锁态 */
+function clearActiveLockBeforeCycleGuardRestart(context: common.Context): void {
+  const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
+  if (currentLock.kind === 'cycle_guard' || currentLock.kind === 'none') {
+    savePersistedActiveLockState(context, createIdleLockState());
+  }
+}
+
 async function restartQuotaStrategy(
   context: common.Context,
   preparingMessage: string,
@@ -136,10 +159,12 @@ async function restartQuotaStrategy(
   const validation = validateState(state);
   if (validation) {
     saveState(context, { enabled: false, phase: 'idle', statusMessage: validation.message });
+    clearActiveLockIfCycleGuard(context);
     return validation;
   }
 
   try {
+    clearActiveLockBeforeCycleGuardRestart(context);
     saveState(context, {
       enabled: true,
       phase: 'quota_running',
@@ -161,8 +186,22 @@ async function restartQuotaStrategy(
       phase: 'idle',
       statusMessage: '启动共享额度阶段失败'
     });
+    clearActiveLockIfCycleGuard(context);
     return { ok: false, data: false, message: '启动共享额度阶段失败' };
   }
+}
+
+export async function restartCycleGuardIfEnabled(context: common.Context): Promise<void> {
+  const state = getCurrentState(context);
+  if (!state.enabled) {
+    return;
+  }
+
+  await restartQuotaStrategy(
+    context,
+    '正在重新开始共享额度计时',
+    `共享额度计时已重新开始：${state.quotaMinutes} 分钟`
+  );
 }
 
 export async function activateCycleGuard(context: common.Context): Promise<GuardResult<boolean>> {
@@ -189,6 +228,7 @@ export async function deactivateCycleGuard(context: common.Context): Promise<Gua
     phase: 'idle',
     statusMessage: '循环守护已停止'
   });
+  clearActiveLockIfCycleGuard(context);
 
   try {
     await stopGuardStrategyIfStarted(QUOTA_STRATEGY_NAME);
@@ -217,6 +257,10 @@ export async function handleCycleStrategyStart(
     phase: 'locked',
     statusMessage: `共享额度已用完，已自动锁定 ${state.selectedAppCount} 个应用`
   });
+  savePersistedActiveLockState(
+    context,
+    createCycleGuardLockState(state.selectedTokens, state.selectedAppCount)
+  );
 }
 
 export async function handleCycleStrategyStop(
@@ -233,6 +277,7 @@ export async function handleCycleStrategyStop(
     phase: 'quota_running',
     statusMessage: `共享额度计时已恢复：${state.quotaMinutes} 分钟`
   });
+  clearActiveLockIfCycleGuard(context);
 }
 
 export async function endCurrentCycleGuardLockAndRestart(

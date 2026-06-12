@@ -1,6 +1,11 @@
 import { PageScaffold } from '../../components/common/PageScaffold';
 import { AppTheme } from '../../constants/Theme';
-import { FocusRunStatus, FocusSession, createIdleFocusSession, getRemainingSeconds } from '../../models/FocusSession';
+import {
+  ActiveLockState,
+  createIdleLockState,
+  getRemainingSeconds,
+  isLocked
+} from '../../models/ActiveLockModel';
 import { FocusPlan } from '../../models/PlanModel';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -11,7 +16,7 @@ type StatsPeriod = 'today' | 'week' | 'month';
 
 @Component
 export struct StatsPage {
-  @StorageLink(StoreKeys.FocusCurrentSession) currentSession: FocusSession = createIdleFocusSession();
+  @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State currentPeriod: StatsPeriod = 'today';
@@ -51,13 +56,17 @@ export struct StatsPage {
   }
 
   private getCurrentFocusSummary(): string {
-    if (this.currentSession.status !== FocusRunStatus.Running) {
+    if (!isLocked(this.activeLock)) {
       return '当前没有进行中的专注，可从首页或快速专注重新开始。';
     }
 
-    const remainingSeconds = getRemainingSeconds(this.currentSession, Date.now());
+    if (this.activeLock.endAt <= 0) {
+      return `${this.activeLock.title} 锁定中`;
+    }
+
+    const remainingSeconds = getRemainingSeconds(this.activeLock, Date.now());
     const remainingMinutes = Math.ceil(remainingSeconds / 60);
-    return `${this.currentSession.planName.length > 0 ? this.currentSession.planName : '快速专注'} 还剩 ${remainingMinutes} 分钟`;
+    return `${this.activeLock.title} 还剩 ${remainingMinutes} 分钟`;
   }
 
   @Builder
@@ -119,7 +128,7 @@ export struct StatsPage {
         )
         this.buildStatCard(
           `${this.getPeriodLabel(this.currentPeriod)}当前状态`,
-          this.currentSession.status === FocusRunStatus.Running ? '专注中' : '空闲中',
+          isLocked(this.activeLock) ? '锁定中' : '空闲中',
           this.getCurrentFocusSummary()
         )
       }

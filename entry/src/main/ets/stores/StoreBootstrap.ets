@@ -1,4 +1,4 @@
-import { createIdleFocusSession } from '../models/FocusSession';
+import { createIdleLockState } from '../models/ActiveLockModel';
 import { createDefaultCycleGuardState } from '../models/CycleGuardModel';
 import { createDefaultSettingsState } from '../models/PermissionModel';
 import { StoreKeys } from './StoreKeys';
@@ -12,8 +12,8 @@ export function bootstrapStores(): void {
 
   const settingsState = createDefaultSettingsState();
   const cycleGuardState = createDefaultCycleGuardState();
-  AppStorage.setOrCreate(StoreKeys.FocusDurationMinutes, 25);
-  AppStorage.setOrCreate(StoreKeys.FocusCurrentSession, createIdleFocusSession());
+  AppStorage.setOrCreate(StoreKeys.QuickFocusDurationMinutes, 25);
+  AppStorage.setOrCreate(StoreKeys.LockActiveState, createIdleLockState());
   AppStorage.setOrCreate(StoreKeys.PlanCollection, []);
   AppStorage.setOrCreate(StoreKeys.PlanCurrentId, '');
   AppStorage.setOrCreate(StoreKeys.PlanFilterScope, 'today');

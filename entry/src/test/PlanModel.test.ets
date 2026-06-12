@@ -57,7 +57,7 @@ export default function planModelTest() {
         name: '夜间专注',
         startTime: '21:00',
         endTime: '22:00',
-        repeatDays: [5, 6, 0],
+        repeatDays: [5, 6, 7],
         selectedTokens: ['app-b'],
         mode: 'shield'
       }, 1_700_000_000_500);
@@ -74,6 +74,21 @@ export default function planModelTest() {
       expect(removed[0].id).assertEqual(first.id);
     });
 
+    it('normalizes legacy sunday value 0 to harmony repeat day 7', 0, () => {
+      const plan = createPlanFromDraft({
+        name: '旧数据迁移',
+        startTime: '09:00',
+        endTime: '18:00',
+        repeatDays: [0, 6],
+        selectedTokens: ['app-a'],
+        mode: 'shield'
+      }, 1_700_000_001_000);
+
+      expect(plan.repeatDays.length).assertEqual(2);
+      expect(plan.repeatDays[0]).assertEqual(6);
+      expect(plan.repeatDays[1]).assertEqual(7);
+    });
+
     it('filters plans and summarizes repeat days', 0, () => {
       const weekdayPlan = createPlanFromDraft({
         name: '工作日专注',
@@ -88,7 +103,7 @@ export default function planModelTest() {
         name: '周末专注',
         startTime: '10:00',
         endTime: '12:00',
-        repeatDays: [0, 6],
+        repeatDays: [6, 7],
         selectedTokens: ['app-b'],
         mode: 'shield'
       }, 1_700_000_000_500);
@@ -100,7 +115,7 @@ export default function planModelTest() {
       expect(todayPlans[0].name).assertEqual('工作日专注');
       expect(allPlans.length).assertEqual(2);
       expect(summarizeRepeatDays([1, 2, 3, 4, 5])).assertEqual('工作日');
-      expect(summarizeRepeatDays([0, 6])).assertEqual('周末');
+      expect(summarizeRepeatDays([6, 7])).assertEqual('周末');
     });
   });
 }

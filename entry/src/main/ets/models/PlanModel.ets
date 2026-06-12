@@ -1,4 +1,4 @@
-import { RestrictionMode } from './FocusSession';
+import { RestrictionMode } from './ActiveLockModel';
 
 export type PlanFilterScope = 'today' | 'all';
 
@@ -25,7 +25,36 @@ export interface FocusPlan {
   updatedAt: number;
 }
 
-const WEEKDAY_LABELS: string[] = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+/** HarmonyOS repeat 标准：1=周一 … 7=周日 */
+export const PLAN_REPEAT_DAY_OPTIONS: number[] = [1, 2, 3, 4, 5, 6, 7];
+
+const REPEAT_DAY_FULL_LABELS: string[] = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+export function getTodayRepeatDay(): number {
+  const jsWeekday = new Date().getDay();
+  return jsWeekday === 0 ? 7 : jsWeekday;
+}
+
+export function getRepeatDayShortLabel(day: number): string {
+  switch (day) {
+    case 1:
+      return '一';
+    case 2:
+      return '二';
+    case 3:
+      return '三';
+    case 4:
+      return '四';
+    case 5:
+      return '五';
+    case 6:
+      return '六';
+    case 7:
+      return '日';
+    default:
+      return '?';
+  }
+}
 
 function padTimeValue(value: number): string {
   return value.toString().padStart(2, '0');
@@ -62,12 +91,17 @@ function normalizeRepeatDays(repeatDays: number[]): number[] {
 
   const uniqueDays: number[] = [];
   repeatDays.forEach((day: number) => {
-    if (day >= 0 && day <= 6 && !uniqueDays.includes(day)) {
-      uniqueDays.push(day);
+    const normalizedDay = day === 0 ? 7 : day;
+    if (normalizedDay >= 1 && normalizedDay <= 7 && !uniqueDays.includes(normalizedDay)) {
+      uniqueDays.push(normalizedDay);
     }
   });
 
   return uniqueDays.length > 0 ? uniqueDays.sort((left, right) => left - right) : [1, 2, 3, 4, 5];
+}
+
+export function normalizePlanRepeatDays(repeatDays: number[]): number[] {
+  return normalizeRepeatDays(repeatDays);
 }
 
 export function createPlanFromDraft(draft: PlanDraft, nowAt: number): FocusPlan {
@@ -144,8 +178,8 @@ export function filterPlansByScope(plans: FocusPlan[], scope: PlanFilterScope, t
 export function summarizeRepeatDays(repeatDays: number[]): string {
   const safeDays = normalizeRepeatDays(repeatDays);
   const weekdaySignature = '1,2,3,4,5';
-  const weekendSignature = '0,6';
-  const allSignature = '0,1,2,3,4,5,6';
+  const weekendSignature = '6,7';
+  const allSignature = '1,2,3,4,5,6,7';
   const currentSignature = safeDays.join(',');
 
   if (currentSignature === allSignature) {
@@ -158,5 +192,5 @@ export function summarizeRepeatDays(repeatDays: number[]): string {
     return '周末';
   }
 
-  return safeDays.map((day: number) => WEEKDAY_LABELS[day]).join('、');
+  return safeDays.map((day: number) => REPEAT_DAY_FULL_LABELS[day]).join('、');
 }

@@ -1,6 +1,8 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { AppContextHolder } from '../common/AppContextHolder';
+import { getPreferencesStorageDir, warmUpPreferencesStore } from '../services/PreferencesService';
 
 const DOMAIN = 0x0000;
 
@@ -11,6 +13,9 @@ export default class EntryAbility extends UIAbility {
     } catch {
       hilog.error(DOMAIN, 'testTag', '%{public}s', 'Failed to set colorMode.');
     }
+    AppContextHolder.bind(this.context);
+    warmUpPreferencesStore(this.context);
+    hilog.info(DOMAIN, 'testTag', 'preferences storage dir=%{public}s', getPreferencesStorageDir(this.context));
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
   }
 

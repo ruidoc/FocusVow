@@ -1,9 +1,9 @@
 import localUnitTest from './LocalUnit.test';
-import focusSessionTest from './FocusSession.test';
+import activeLockModelTest from './ActiveLockModel.test';
 import planModelTest from './PlanModel.test';
 
 export default function testsuite() {
   localUnitTest();
-  focusSessionTest();
+  activeLockModelTest();
   planModelTest();
 }
