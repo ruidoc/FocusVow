@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { AppActionButton } from '../../components/common/AppActionButton';
 import { AppTheme } from '../../constants/Theme';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { activateCycleGuard, deactivateCycleGuard } from '../../services/CycleGuardService';
@@ -287,22 +288,18 @@ export struct CycleGuardDetailPage {
           void this.saveDraft();
         })
 
-      Button(this.cycleEnabled ? '停止娱乐限额' : '启动娱乐限额')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Capsule)
-        .backgroundColor(this.cycleEnabled ? AppTheme.colors.dangerSoft : AppTheme.colors.primary)
-        .fontColor(this.cycleEnabled ? AppTheme.colors.danger : '#FFFFFF')
-        .fontWeight(FontWeight.Bold)
-        .enabled(!this.isSubmitting && this.hasConfiguration())
-        .opacity((this.isSubmitting || !this.hasConfiguration()) ? 0.7 : 1)
-        .onClick(() => {
+      AppActionButton({
+        label: this.cycleEnabled ? '停止娱乐限额' : '启动娱乐限额',
+        variant: this.cycleEnabled ? 'danger' : 'primary',
+        isEnabled: !this.isSubmitting && this.hasConfiguration(),
+        onPress: () => {
           if (this.cycleEnabled) {
             void this.stopCycle();
             return;
           }
           void this.startCycle();
-        })
+        }
+      })
 
       if (this.statusMessage.length > 0) {
         Text(this.statusMessage)

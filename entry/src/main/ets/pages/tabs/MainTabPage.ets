@@ -18,7 +18,7 @@ import { ProfilePage } from './ProfilePage';
 
 bootstrapStores();
 
-type MainTabKey = 'focus' | 'contract' | 'guard' | 'profile';
+export type MainTabKey = 'focus' | 'contract' | 'guard' | 'profile';
 
 @Entry
 @Component
@@ -142,7 +142,11 @@ struct MainTabPage {
   build() {
     Column() {
       if (this.currentTab === 'focus') {
-        FocusHomePage()
+        FocusHomePage({
+          onSelectTab: (tab: 'contract' | 'guard') => {
+            this.currentTab = tab;
+          }
+        })
           .layoutWeight(1)
       } else if (this.currentTab === 'contract') {
         ContractTabPage()

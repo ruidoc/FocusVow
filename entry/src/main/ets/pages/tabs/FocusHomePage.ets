@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { AppActionButton } from '../../components/common/AppActionButton';
 import { AppTheme } from '../../constants/Theme';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import {
@@ -24,10 +25,9 @@ bootstrapStores();
 
 @Component
 export struct FocusHomePage {
+  onSelectTab?: (tab: 'contract' | 'guard') => void;
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
-  @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
-  @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.SettingsStatusMessage) statusMessage: string = '先申请系统授权，再选择需要限制的应用';
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleSelectedAppCount: number = 0;
@@ -99,44 +99,6 @@ export struct FocusHomePage {
     this.startTimer();
   }
 
-  private getGreeting(): string {
-    const currentHour = new Date().getHours();
-    if (currentHour < 12) {
-      return '上午好';
-    }
-    if (currentHour < 18) {
-      return '下午好';
-    }
-    return '晚上好';
-  }
-
-  private getTodayPlanBadge(): string {
-    return this.planCollection.length > 0 ? `已有 ${this.planCollection.length} 个契约` : '还没有契约';
-  }
-
-  private getHeaderStatusText(): string {
-    if (!this.isActiveLocked()) {
-      if (!this.hasAuthorized) {
-        return '先完成授权，再开始你的专注管理。';
-      }
-      if (this.planCollection.length > 0) {
-        return `已准备 ${this.planCollection.length} 条契约，随时可以开始。`;
-      }
-      if (this.cycleSelectedAppCount > 0) {
-        return `已选 ${this.cycleSelectedAppCount} 个娱乐应用，可直接启用限额。`;
-      }
-      return '当前没有进行中的专注。';
-    }
-
-    if (this.activeLock.kind === 'covenant') {
-      return '契约锁定中，继续保持专注。';
-    }
-    if (this.activeLock.kind === 'cycle_guard') {
-      return '娱乐限额已用完，当前处于锁定中。';
-    }
-    return '这段专注正在进行，继续保持。';
-  }
-
   private getLockSubtitle(): string {
     const count = this.activeLock.selectedCount;
     if (this.activeLock.kind === 'covenant') {
@@ -169,8 +131,40 @@ export struct FocusHomePage {
   }
 
   @Builder
+  private buildStatusIcon(isLockedState: boolean): void {
+    Stack() {
+      if (!isLockedState) {
+        Column()
+          .width(112)
+          .height(112)
+          .borderRadius(56)
+          .backgroundColor(AppTheme.colors.primarySoft)
+          .opacity(0.22)
+          .blur(40)
+      }
+
+      Column()
+        .width(72)
+        .height(72)
+        .borderRadius(36)
+        .backgroundColor(AppTheme.colors.surface)
+        .opacity(0.82)
+
+      SymbolGlyph(isLockedState ? $r('sys.symbol.lock_fill') : $r('sys.symbol.timer'))
+        .fontSize(40)
+        .fontColor([isLockedState ? AppTheme.colors.success : '#F3B562'])
+        .fontWeight(500)
+    }
+    .width(120)
+    .height(120)
+    .alignContent(Alignment.Center)
+  }
+
+  @Builder
   private buildLockedState(): void {
     Column({ space: 18 }) {
+      this.buildStatusIcon(true)
+
       if (this.activeLock.endAt > 0) {
         Text(this.remainingLabel)
           .fontSize(56)
@@ -209,18 +203,14 @@ export struct FocusHomePage {
           })
       }
 
-      Button(this.getEndLockButtonLabel())
-        .width('100%')
-        .height(56)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.dangerSoft)
-        .fontColor(AppTheme.colors.danger)
-        .border({ width: 1, color: AppTheme.colors.danger })
-        .enabled(!this.isEndingLock)
-        .opacity(this.isEndingLock ? 0.7 : 1)
-        .onClick(() => {
+      AppActionButton({
+        label: this.getEndLockButtonLabel(),
+        variant: 'danger',
+        isEnabled: !this.isEndingLock,
+        onPress: () => {
           this.endCurrentLock();
-        })
+        }
+      })
 
       if (this.getLockHint().length > 0) {
         Text(this.getLockHint())
@@ -237,30 +227,7 @@ export struct FocusHomePage {
   @Builder
   private buildEmptyState(): void {
     Column({ space: 18 }) {
-      Stack() {
-        Column()
-          .width(112)
-          .height(112)
-          .borderRadius(56)
-          .backgroundColor(AppTheme.colors.primarySoft)
-          .opacity(0.22)
-          .blur(40)
-
-        Column()
-          .width(72)
-          .height(72)
-          .borderRadius(36)
-          .backgroundColor(AppTheme.colors.surface)
-          .opacity(0.75)
-
-        SymbolGlyph($r('sys.symbol.timer'))
-          .fontSize(40)
-          .fontColor(['#F3B562'])
-          .fontWeight(500)
-      }
-      .width(120)
-      .height(120)
-      .alignContent(Alignment.Center)
+      this.buildStatusIcon(false)
 
       Column({ space: 10 }) {
         Text('当前还没有进行中的专注')
@@ -277,32 +244,11 @@ export struct FocusHomePage {
       .width('100%')
       .alignItems(HorizontalAlign.Center)
 
-      Button('开始快速专注')
-        .width('100%')
-        .height(58)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
-        .onClick(() => {
+      AppActionButton({
+        label: '开始快速专注',
+        onPress: () => {
           pushRoute(PageRoutes.QuickStart);
-        })
-
-      Row({ space: 6 }) {
-        Text('想按固定时间自动开始？')
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-
-        SymbolGlyph($r('sys.symbol.doc_plaintext'))
-          .fontSize(14)
-          .fontColor([AppTheme.colors.primary])
-        Text('创建契约')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.primary)
-      }
-      .justifyContent(FlexAlign.Center)
-      .onClick(() => {
-        pushRoute(PageRoutes.PlanAdd);
+        }
       })
     }
     .width('100%')
@@ -367,21 +313,11 @@ export struct FocusHomePage {
   @Builder
   private buildModePanel(): void {
     Column({ space: 12 }) {
-      Text('开始方式')
+      Text('其他方式')
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
-
-      this.buildModeEntry(
-        '快速专注',
-        '立即开始',
-        '临时锁定分心应用，适合当前就想进入状态的场景',
-        $r('sys.symbol.timer'),
-        () => {
-          pushRoute(PageRoutes.QuickStart);
-        }
-      )
 
       this.buildModeEntry(
         '契约模式',
@@ -389,7 +325,7 @@ export struct FocusHomePage {
         '按固定时间自动生效，适合日常学习、工作和休息节奏',
         $r('sys.symbol.doc_plaintext'),
         () => {
-          pushRoute(this.planCollection.length > 0 ? PageRoutes.PlanList : PageRoutes.PlanAdd);
+          this.onSelectTab?.('contract');
         }
       )
 
@@ -401,7 +337,7 @@ export struct FocusHomePage {
           : '给娱乐类应用设置总可用时长，用完后统一锁定',
         $r('sys.symbol.bolt_shield'),
         () => {
-          pushRoute(PageRoutes.CycleGuardEdit);
+          this.onSelectTab?.('guard');
         }
       )
     }
@@ -417,31 +353,37 @@ export struct FocusHomePage {
 
   @Builder
   private buildHomeContent(): void {
-    Column({ space: 24 }) {
-
-      if (this.isActiveLocked()) {
+    if (this.isActiveLocked()) {
+      Column() {
         this.buildLockedState()
-      } else {
-        this.buildEmptyState()
       }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    } else {
+      Column({ space: 24 }) {
+        this.buildEmptyState()
 
-      this.buildModePanel()
+        this.buildModePanel()
 
-      Text(this.getFooterStatusMessage())
-        .fontSize(12)
-        .fontColor(AppTheme.colors.textMuted)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-        .margin({ top: 4 })
+        Text(this.getFooterStatusMessage())
+          .fontSize(12)
+          .fontColor(AppTheme.colors.textMuted)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 4 })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
     }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
   }
 
   build() {
     SystemNavPage({
       title: '专注',
       showTitleBar: false,
+      usePageScroll: !this.isActiveLocked(),
       content: (): void => {
         this.buildHomeContent();
       }

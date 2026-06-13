@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { PlanDraft, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel } from '../../models/PlanModel';
@@ -427,18 +428,13 @@ struct PlanAddPage {
       this.buildRepeatDaysCard()
       this.buildValidityCard()
 
-      Button('签定契约')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Capsule)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
-        .margin({ top: 8 })
-        .onClick(() => {
+      AppActionButton({
+        label: '签定契约',
+        onPress: () => {
           void this.savePlan();
-        })
+        }
+      })
+        .margin({ top: 8 })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
