@@ -18,11 +18,14 @@ bootstrapStores();
 @Component
 export struct PlanListContent {
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
+  onScrollerReady?: (scroller: Scroller) => void;
 
+  private listScroller: Scroller = new Scroller();
   @State isRefreshing: boolean = false;
   @State statusMessage: string = '';
 
   aboutToAppear(): void {
+    this.onScrollerReady?.(this.listScroller);
     this.refreshPlans();
   }
 
@@ -170,6 +173,7 @@ export struct PlanListContent {
       )
     }
     .width('100%')
+    .padding({ top: 16 })
   }
 
   @Builder
@@ -223,54 +227,61 @@ export struct PlanListContent {
   }
 
   build() {
-    Column({ space: 16 }) {
-      this.buildSummaryPanel()
-      this.buildSectionHeader()
+    Refresh({ refreshing: $$this.isRefreshing }) {
+      List({ space: 12, scroller: this.listScroller }) {
+        ListItem() {
+          this.buildSummaryPanel()
+        }
+        .margin({ bottom: 16 })
 
-      if (this.statusMessage.length > 0) {
-        Text(this.statusMessage)
-          .width('100%')
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textSecondary)
-      }
+        ListItem() {
+          this.buildSectionHeader()
+        }
 
-      Refresh({ refreshing: $$this.isRefreshing }) {
-        if (this.getVisiblePlans().length === 0) {
-          this.buildEmptyState()
-        } else {
-          List({ space: 12 }) {
-            ForEach(this.getVisiblePlans(), (plan: FocusPlan) => {
-              ListItem() {
-                PlanCard({
-                  plan,
-                  onPress: () => {
-                    PlanStore.setCurrentPlanId(plan.id);
-                    pushRoute(PageRoutes.PlanDetail);
-                  },
-                  onToggle: () => {
-                    void this.togglePlan(plan);
-                  },
-                  onDelete: () => {
-                    this.confirmDeletePlan(plan);
-                  }
-                })
-              }
-            }, (plan: FocusPlan) => plan.id)
+        if (this.statusMessage.length > 0) {
+          ListItem() {
+            Text(this.statusMessage)
+              .width('100%')
+              .fontSize(12)
+              .fontColor(AppTheme.colors.textSecondary)
           }
-          .width('100%')
-          .layoutWeight(1)
-          .edgeEffect(EdgeEffect.Spring)
+        }
+
+        if (this.getVisiblePlans().length === 0) {
+          ListItem() {
+            this.buildEmptyState()
+          }
+        } else {
+          ForEach(this.getVisiblePlans(), (plan: FocusPlan) => {
+            ListItem() {
+              PlanCard({
+                plan,
+                onPress: () => {
+                  PlanStore.setCurrentPlanId(plan.id);
+                  pushRoute(PageRoutes.PlanDetail);
+                },
+                onToggle: () => {
+                  void this.togglePlan(plan);
+                },
+                onDelete: () => {
+                  this.confirmDeletePlan(plan);
+                }
+              })
+            }
+          }, (plan: FocusPlan) => plan.id)
         }
       }
-      .onRefreshing(() => {
-        this.refreshPlans();
-      })
-      .layoutWeight(1)
       .width('100%')
-      .align(Alignment.TopStart)
+      .height('100%')
+      .edgeEffect(EdgeEffect.Spring)
+      .scrollBar(BarState.Off)
     }
+    .pullToRefresh(true)
+    .onRefreshing(() => {
+      this.refreshPlans();
+    })
     .width('100%')
     .height('100%')
-    .alignItems(HorizontalAlign.Start)
+    .align(Alignment.TopStart)
   }
 }

@@ -116,7 +116,6 @@ struct PermissionPage {
       SystemNavPage({
         title: '权限与应用管理',
         showBack: true,
-        horizontalPadding: 20,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildPermissionContent();

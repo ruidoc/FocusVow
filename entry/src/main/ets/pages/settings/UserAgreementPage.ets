@@ -53,7 +53,6 @@ struct UserAgreementPage {
       SystemNavPage({
         title: '用户协议',
         showBack: true,
-        horizontalPadding: 20,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildContent();

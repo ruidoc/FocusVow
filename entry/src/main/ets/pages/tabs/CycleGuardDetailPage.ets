@@ -351,7 +351,6 @@ export struct CycleGuardDetailPage {
   build() {
     SystemNavPage({
       title: '娱乐限额',
-      horizontalPadding: 20,
       content: (): void => {
         this.buildContent();
       }

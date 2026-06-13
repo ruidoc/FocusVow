@@ -91,7 +91,6 @@ struct AboutPage {
       SystemNavPage({
         title: '关于我们',
         showBack: true,
-        horizontalPadding: 20,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildContent();

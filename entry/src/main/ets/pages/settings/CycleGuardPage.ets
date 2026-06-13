@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { PageScaffold } from '../../components/common/PageScaffold';
+import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { CycleGuardPhase } from '../../models/CycleGuardModel';
 import { backRoute } from '../../router/PageRoutes';
@@ -103,11 +103,6 @@ struct CycleGuardPage {
   @Builder
   private buildStatusCard(): void {
     Column({ space: 12 }) {
-      Text('编辑娱乐限额')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
 
       Text('这里单独调整目标应用和总可用时长；启动与停止动作统一放在限额主页。')
         .fontSize(13)
@@ -217,68 +212,57 @@ struct CycleGuardPage {
 
   @Builder
   private buildBody(): void {
-    Scroll() {
-      Column({ space: 18 }) {
-        this.buildStatusCard()
+    Column({ space: 18 }) {
+      this.buildStatusCard()
 
-        Button(this.hasAuthorized ? '重新申请系统授权' : '申请系统授权')
-          .width('100%')
-          .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.surface)
-          .fontColor(AppTheme.colors.textPrimary)
-          .border({ width: 1, color: AppTheme.colors.border })
-          .onClick(() => {
-            this.authorize();
-          })
+      Button(this.hasAuthorized ? '重新申请系统授权' : '申请系统授权')
+        .width('100%')
+        .height(48)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.surface)
+        .fontColor(AppTheme.colors.textPrimary)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .onClick(() => {
+          this.authorize();
+        })
 
-        Button(this.selectedAppCount > 0 ? `重新选择目标应用（${this.selectedAppCount} 个）` : '选择目标应用')
-          .width('100%')
-          .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.surface)
-          .fontColor(AppTheme.colors.textPrimary)
-          .border({ width: 1, color: AppTheme.colors.border })
-          .onClick(() => {
-            this.chooseApps();
-          })
+      Button(this.selectedAppCount > 0 ? `重新选择目标应用（${this.selectedAppCount} 个）` : '选择目标应用')
+        .width('100%')
+        .height(48)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.surface)
+        .fontColor(AppTheme.colors.textPrimary)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .onClick(() => {
+          this.chooseApps();
+        })
 
-        this.buildQuotaSliderCard()
+      this.buildQuotaSliderCard()
 
-        Button('保存配置')
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.primary)
-          .fontColor('#FFFFFF')
-          .fontWeight(FontWeight.Bold)
-          .enabled(!this.isSaving)
-          .opacity(this.isSaving ? 0.7 : 1)
-          .onClick(() => {
-            this.saveDraft();
-          })
-      }
-      .width('100%')
-      .padding({ bottom: 24 })
-      .alignItems(HorizontalAlign.Start)
+      Button('保存配置')
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .fontWeight(FontWeight.Bold)
+        .enabled(!this.isSaving)
+        .opacity(this.isSaving ? 0.7 : 1)
+        .onClick(() => {
+          this.saveDraft();
+        })
     }
-    .scrollBar(BarState.Off)
     .width('100%')
-    .layoutWeight(1)
-    .align(Alignment.Top)
+    .alignItems(HorizontalAlign.Start)
+    .margin({ top: 10 })
   }
 
   build() {
     Stack() {
-      PageScaffold({
+      SystemNavPage({
         title: '娱乐限额设置',
-        subtitle: '拖动滑块时页面数值会立即变化，点击保存后写入正式配置',
         showBack: true,
-        headerMode: 'default',
-        showDecoration: false,
-        topPadding: 12,
-        bottomPadding: 12,
-        horizontalPadding: 20,
+        bottomSpacerHeight: 24,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildBody();

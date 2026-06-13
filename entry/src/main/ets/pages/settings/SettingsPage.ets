@@ -124,7 +124,6 @@ struct SettingsPage {
       SystemNavPage({
         title: '设置',
         showBack: true,
-        horizontalPadding: 20,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildSettingsContent();

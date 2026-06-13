@@ -164,7 +164,7 @@ export struct ProfilePage {
   build() {
     SystemNavPage({
       title: '用户中心',
-      horizontalPadding: 20,
+      showTitleBar: false,
       content: (): void => {
         this.buildProfileContent();
       }

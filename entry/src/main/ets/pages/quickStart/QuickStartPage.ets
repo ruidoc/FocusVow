@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { PageScaffold } from '../../components/common/PageScaffold';
+import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute, replaceRoute, PageRoutes } from '../../router/PageRoutes';
 import {
@@ -276,44 +276,41 @@ struct QuickStartPage {
 
   @Builder
   buildQuickBody(): void {
-    Scroll() {
-      Column({ space: 18 }) {
+    Column({ space: 18 }) {
+      Row() {
         this.buildModeSegment()
-        this.buildAppCard()
-        this.buildDurationCard()
-
-        Button('开始专注')
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Capsule)
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .backgroundColor(AppTheme.colors.primary)
-          .fontColor('#FFFFFF')
-          .margin({ top: 8 })
-          .onClick(() => {
-            this.startFocus();
-          })
       }
       .width('100%')
-      .padding({ bottom: 28 })
+      .justifyContent(FlexAlign.Center)
+      .margin({ top: 8 })
+
+      this.buildAppCard()
+      this.buildDurationCard()
+
+      Button('开始专注')
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Capsule)
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .margin({ top: 8 })
+        .onClick(() => {
+          this.startFocus();
+        })
     }
-    .scrollBar(BarState.Off)
     .width('100%')
-    .layoutWeight(1)
-    .align(Alignment.Top)
+    .alignItems(HorizontalAlign.Start)
   }
 
   build() {
     Stack() {
-      PageScaffold({
+      SystemNavPage({
         title: '快速专注',
         showBack: true,
-        headerMode: 'default',
-        showDecoration: false,
-        topPadding: 12,
-        bottomPadding: 16,
-        horizontalPadding: 20,
+        usePageScroll: true,
+        bottomSpacerHeight: 28,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildQuickBody();

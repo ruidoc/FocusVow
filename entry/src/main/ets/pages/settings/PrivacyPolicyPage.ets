@@ -53,7 +53,6 @@ struct PrivacyPolicyPage {
       SystemNavPage({
         title: '隐私政策',
         showBack: true,
-        horizontalPadding: 20,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildContent();

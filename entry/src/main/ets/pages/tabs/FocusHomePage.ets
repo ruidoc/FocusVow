@@ -169,56 +169,6 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildStatusCard(): void {
-    Column({ space: 14 }) {
-      Row() {
-        Column({ space: 6 }) {
-          Text(`${this.getGreeting()}，专注者！`)
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width('100%')
-
-          Text(this.getHeaderStatusText())
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(AppTheme.colors.textPrimary)
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.doc_plaintext'))
-            .fontSize(16)
-            .fontColor([AppTheme.colors.textPrimary])
-          Text(this.getTodayPlanBadge())
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-        }
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(AppTheme.radius.pill)
-        .border({ width: 1, color: AppTheme.colors.border })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Top)
-
-      Text('快速专注适合立刻进入状态，契约和娱乐限额适合长期管理分心应用。')
-        .fontSize(13)
-        .lineHeight(22)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-    }
-    .width('100%')
-    .padding(18)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
   private buildLockedState(): void {
     Column({ space: 18 }) {
       if (this.activeLock.endAt > 0) {
@@ -468,7 +418,6 @@ export struct FocusHomePage {
   @Builder
   private buildHomeContent(): void {
     Column({ space: 24 }) {
-      this.buildStatusCard()
 
       if (this.isActiveLocked()) {
         this.buildLockedState()
@@ -492,7 +441,7 @@ export struct FocusHomePage {
   build() {
     SystemNavPage({
       title: '专注',
-      horizontalPadding: 20,
+      showTitleBar: false,
       content: (): void => {
         this.buildHomeContent();
       }
