@@ -2,13 +2,12 @@ import { common } from '@kit.AbilityKit';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { AppTheme } from '../../constants/Theme';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { activateCycleGuard, deactivateCycleGuard } from '../../services/CycleGuardService';
-import { chooseRestrictedApps, requestScreenTimeAuthorization } from '../../services/ScreenTimeService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
-import { CycleGuardPhase } from '../../models/CycleGuardModel';
 
 bootstrapStores();
 
@@ -17,28 +16,15 @@ export struct CycleGuardDetailPage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.CycleGuardQuotaMinutes) storedQuotaMinutes: number = 60;
-  @StorageLink(StoreKeys.CycleGuardSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardPhase) phase: string = 'idle';
   @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置总可用时长和目标应用后，即可启动娱乐限额';
-  @State private draftQuotaMinutes: number = 60;
   @State private isSubmitting: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
-    this.draftQuotaMinutes = this.storedQuotaMinutes;
-  }
-
-  private hasConfiguration(): boolean {
-    return this.selectedAppCount > 0;
-  }
-
-  private normalizeMinutes(raw: number): number {
-    let next = Math.max(5, Math.min(180, Math.floor(raw)));
-    next = Math.round(next / 5) * 5;
-    return Math.max(5, Math.min(180, next));
   }
 
   private formatMinutesLabel(value: number): string {
@@ -53,63 +39,12 @@ export struct CycleGuardDetailPage {
     return `${value} 分钟`;
   }
 
-  private getPhaseLabel(): string {
-    if (this.phase === 'quota_running') {
-      return '可用时长消耗中';
-    }
-    if (this.phase === 'locked') {
-      return '额度已用完，当前锁定中';
-    }
-    return this.cycleEnabled ? '已启动' : '未启动';
+  private getStatusLabel(): string {
+    return this.cycleEnabled ? '生效中' : '未生效';
   }
 
-  private async authorize(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const result = await requestScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, result.ok, result.message);
-  }
-
-  private async chooseApps(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
-    if (result.data) {
-      CycleGuardStore.updateSelectedTokens(hostContext, result.data, result.message);
-      return;
-    }
-    CycleGuardStore.updateRuntimeState(
-      hostContext,
-      this.cycleEnabled,
-      this.phase as CycleGuardPhase,
-      result.message
-    );
-  }
-
-  private async saveDraft(): Promise<void> {
-    if (this.isSubmitting) {
-      return;
-    }
-    this.isSubmitting = true;
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    CycleGuardStore.updateQuotaMinutes(hostContext, this.draftQuotaMinutes);
-    CycleGuardStore.updateRuntimeState(
-      hostContext,
-      this.cycleEnabled,
-      this.phase as CycleGuardPhase,
-      '娱乐限额配置已保存'
-    );
-    CycleGuardStore.hydrate(hostContext);
-    this.isSubmitting = false;
-  }
-
-  private async startCycle(): Promise<void> {
-    if (this.isSubmitting || !this.hasConfiguration()) {
-      return;
-    }
-    this.isSubmitting = true;
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    await activateCycleGuard(hostContext);
-    CycleGuardStore.hydrate(hostContext);
-    this.isSubmitting = false;
+  private getStatusColor(): string {
+    return this.cycleEnabled ? AppTheme.colors.success : AppTheme.colors.danger;
   }
 
   private async stopCycle(): Promise<void> {
@@ -123,25 +58,51 @@ export struct CycleGuardDetailPage {
     this.isSubmitting = false;
   }
 
+  private async startCycle(): Promise<void> {
+    if (this.isSubmitting) {
+      return;
+    }
+    this.isSubmitting = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    await activateCycleGuard(hostContext);
+    CycleGuardStore.hydrate(hostContext);
+    this.isSubmitting = false;
+  }
+
+  @Builder
+  private buildMetricChip(label: string, value: string, valueColor: string = AppTheme.colors.textPrimary): void {
+    Column({ space: 4 }) {
+      Text(label)
+        .fontSize(11)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+
+      Text(value)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(valueColor)
+        .width('100%')
+    }
+    .layoutWeight(1)
+    .padding(14)
+    .backgroundColor(AppTheme.colors.surfaceRaised)
+    .borderRadius(AppTheme.radius.md)
+    .alignItems(HorizontalAlign.Start)
+  }
+
   @Builder
   private buildOverviewCard(): void {
     Column({ space: 12 }) {
-      Text('娱乐限额')
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-
-      Text('为娱乐类应用设置总可用时长，时间用完后统一锁定，适合短视频、游戏和社交软件。')
+      Text('这里仅查看当前限额状态与配置摘要，具体修改请点右上角进入设置。')
         .fontSize(13)
         .lineHeight(22)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
 
       Row({ space: 12 }) {
-        this.buildMetricChip('状态', this.getPhaseLabel())
+        this.buildMetricChip('状态', this.getStatusLabel(), this.getStatusColor())
         this.buildMetricChip('已选应用', `${this.selectedAppCount} 个`)
-        this.buildMetricChip('总时长', this.formatMinutesLabel(this.draftQuotaMinutes))
+        this.buildMetricChip('可用时长', this.formatMinutesLabel(this.storedQuotaMinutes))
       }
       .width('100%')
     }
@@ -154,191 +115,101 @@ export struct CycleGuardDetailPage {
   }
 
   @Builder
-  private buildMetricChip(label: string, value: string): void {
-    Column({ space: 4 }) {
-      Text(label)
-        .fontSize(11)
-        .fontColor(AppTheme.colors.textMuted)
-        .width('100%')
-
-      Text(value)
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-    }
-    .layoutWeight(1)
-    .padding(14)
-    .backgroundColor(AppTheme.colors.surfaceRaised)
-    .borderRadius(AppTheme.radius.md)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private buildActionCard(title: string, value: string, detail: string, label: string, onPress: () => void): void {
-    Column({ space: 12 }) {
+  private buildSummaryCard(): void {
+    Column({ space: 16 }) {
       Row() {
-        Column({ space: 4 }) {
-          Text(title)
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-            .width('100%')
-
-          Text(value)
-            .fontSize(13)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Button(label)
-          .height(34)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.primarySoft)
-          .fontColor(AppTheme.colors.primary)
-          .border({ width: 0, color: AppTheme.colors.primarySoft })
-          .onClick(() => {
-            onPress();
-          })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Text(detail)
-        .fontSize(12)
-        .lineHeight(20)
-        .fontColor(AppTheme.colors.textMuted)
-        .width('100%')
-    }
-    .width('100%')
-    .padding(18)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private buildQuotaCard(): void {
-    Column({ space: 14 }) {
-      Text('总可用时长')
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-
-      Text(this.formatMinutesLabel(this.draftQuotaMinutes))
-        .fontSize(26)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.primary)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      Slider({
-        value: this.draftQuotaMinutes,
-        min: 5,
-        max: 180,
-        step: 5,
-        style: SliderStyle.OutSet
-      })
-        .width('100%')
-        .blockColor(AppTheme.colors.primary)
-        .trackColor(AppTheme.colors.border)
-        .selectedColor(AppTheme.colors.primary)
-        .showSteps(false)
-        .showTips(false)
-        .onChange((nextValue: number) => {
-          this.draftQuotaMinutes = this.normalizeMinutes(nextValue);
-        })
-
-      Row() {
-        Text('5 分钟')
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
+        Text('当前配置')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
         Blank()
-        Text('3 小时')
+        Text(this.hasAuthorized ? '已授权' : '未授权')
           .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
+          .fontColor(this.hasAuthorized ? AppTheme.colors.success : AppTheme.colors.danger)
+      }
+      .width('100%')
+
+      Row() {
+        Text('目标应用')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+        Blank()
+        Text(this.selectedAppCount > 0 ? `${this.selectedAppCount} 个` : '尚未选择')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+      }
+      .width('100%')
+
+      Row() {
+        Text('可用时长')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+        Blank()
+        Text(this.formatMinutesLabel(this.storedQuotaMinutes))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
       }
       .width('100%')
     }
     .width('100%')
-    .padding(18)
+    .padding(20)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(AppTheme.radius.lg)
     .alignItems(HorizontalAlign.Start)
   }
 
-  @Builder
-  private buildFooterActions(): void {
-    Column({ space: 12 }) {
-      Button('保存配置')
-        .width('100%')
-        .height(50)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .fontColor(AppTheme.colors.textPrimary)
-        .border({ width: 0, color: AppTheme.colors.surfaceRaised })
-        .enabled(!this.isSubmitting)
-        .opacity(this.isSubmitting ? 0.7 : 1)
-        .onClick(() => {
-          void this.saveDraft();
-        })
-
-      AppActionButton({
-        label: this.cycleEnabled ? '停止娱乐限额' : '启动娱乐限额',
-        variant: this.cycleEnabled ? 'danger' : 'primary',
-        isEnabled: !this.isSubmitting && this.hasConfiguration(),
-        onPress: () => {
-          if (this.cycleEnabled) {
-            void this.stopCycle();
-            return;
-          }
-          void this.startCycle();
+  private confirmStopCycle(): void {
+    this.getUIContext().showAlertDialog({
+      title: '停止娱乐限额',
+      message: '停止后会结束当前娱乐限额计时，确认停止吗？',
+      autoCancel: true,
+      primaryButton: {
+        value: '停止',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.stopCycle();
         }
-      })
-
-      if (this.statusMessage.length > 0) {
-        Text(this.statusMessage)
-          .fontSize(12)
-          .lineHeight(20)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
       }
-    }
-    .width('100%')
+    });
   }
 
   @Builder
   private buildContent(): void {
-    Column({ space: 16 }) {
+    Column({ space: 18 }) {
       this.buildOverviewCard()
+      this.buildSummaryCard()
 
-      this.buildActionCard(
-        '系统授权',
-        this.hasAuthorized ? '已完成授权' : '未完成授权',
-        '授权后才能对你主动选择的娱乐应用应用总时长限制。',
-        this.hasAuthorized ? '重新授权' : '申请授权',
-        () => {
-          void this.authorize();
-        }
-      )
-
-      this.buildActionCard(
-        '目标应用',
-        this.selectedAppCount > 0 ? `已选择 ${this.selectedAppCount} 个应用` : '尚未选择应用',
-        '建议优先选择短视频、游戏、社交等高频娱乐应用，避免把必要通信工具一起锁住。',
-        this.selectedAppCount > 0 ? '重新选择' : '选择应用',
-        () => {
-          void this.chooseApps();
-        }
-      )
-
-      this.buildQuotaCard()
-      this.buildFooterActions()
+      if (this.cycleEnabled) {
+        Text('停止娱乐限额')
+          .fontSize(13)
+          .fontColor(this.isSubmitting ? AppTheme.colors.textMuted : AppTheme.colors.danger)
+          .opacity(this.isSubmitting ? 0.5 : 0.8)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 10, bottom: 4 })
+          .onClick(() => {
+            if (!this.isSubmitting) {
+              this.confirmStopCycle();
+            }
+          })
+      } else {
+        AppActionButton({
+          label: '启用娱乐限额',
+          isEnabled: !this.isSubmitting,
+          onPress: () => {
+            void this.startCycle();
+          }
+        })
+          .margin({ top: 10, bottom: 4 })
+      }
     }
     .width('100%')
     .padding({ bottom: 24 })
@@ -348,6 +219,12 @@ export struct CycleGuardDetailPage {
   build() {
     SystemNavPage({
       title: '娱乐限额',
+      showAction: true,
+      actionLabel: '设置',
+      actionIcon: $r('sys.symbol.gearshape'),
+      onAction: () => {
+        pushRoute(PageRoutes.CycleGuardEdit);
+      },
       content: (): void => {
         this.buildContent();
       }

@@ -53,14 +53,8 @@ struct CycleGuardPage {
     return `${value} 分钟`;
   }
 
-  private getPhaseLabel(): string {
-    if (this.phase === 'quota_running') {
-      return '额度计时中';
-    }
-    if (this.phase === 'locked') {
-      return '当前已锁定';
-    }
-    return this.cycleEnabled ? '已启动' : '未启动';
+  private getStatusLabel(): string {
+    return this.cycleEnabled ? '生效中' : '未生效';
   }
 
   private async authorize(): Promise<void> {
@@ -104,7 +98,7 @@ struct CycleGuardPage {
   private buildStatusCard(): void {
     Column({ space: 12 }) {
 
-      Text('这里单独调整目标应用和总可用时长；启动与停止动作统一放在限额主页。')
+      Text('这里单独调整目标应用和可用时长；启动与停止动作统一放在限额主页。')
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
@@ -117,7 +111,7 @@ struct CycleGuardPage {
           Text(this.hasAuthorized ? '已授权' : '未授权')
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.hasAuthorized ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
+            .fontColor(this.hasAuthorized ? AppTheme.colors.success : AppTheme.colors.danger)
         }
         .alignItems(HorizontalAlign.Start)
 
@@ -133,22 +127,24 @@ struct CycleGuardPage {
         .alignItems(HorizontalAlign.Start)
 
         Column({ space: 4 }) {
-          Text('运行状态')
+          Text('状态')
             .fontSize(11)
             .fontColor(AppTheme.colors.textMuted)
-          Text(this.getPhaseLabel())
+          Text(this.getStatusLabel())
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
+            .fontColor(this.cycleEnabled ? AppTheme.colors.success : AppTheme.colors.danger)
         }
         .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
 
-      Text(this.statusMessage)
-        .fontSize(12)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
+      if (this.statusMessage.length > 0) {
+        Text(this.statusMessage)
+          .fontSize(12)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+      }
     }
     .width('100%')
     .padding(20)
@@ -161,7 +157,7 @@ struct CycleGuardPage {
   @Builder
   private buildQuotaSliderCard(): void {
     Column({ space: 14 }) {
-      Text('总可用时长')
+      Text('可用时长')
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
@@ -215,16 +211,18 @@ struct CycleGuardPage {
     Column({ space: 18 }) {
       this.buildStatusCard()
 
-      Button(this.hasAuthorized ? '重新申请系统授权' : '申请系统授权')
-        .width('100%')
-        .height(48)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.surface)
-        .fontColor(AppTheme.colors.textPrimary)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .onClick(() => {
-          this.authorize();
-        })
+      if (!this.hasAuthorized) {
+        Button('授权')
+          .width('100%')
+          .height(48)
+          .type(ButtonType.Capsule)
+          .backgroundColor(AppTheme.colors.surface)
+          .fontColor(AppTheme.colors.textPrimary)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .onClick(() => {
+            this.authorize();
+          })
+      }
 
       Button(this.selectedAppCount > 0 ? `重新选择目标应用（${this.selectedAppCount} 个）` : '选择目标应用')
         .width('100%')
