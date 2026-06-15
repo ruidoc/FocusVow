@@ -1,22 +1,43 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { MsgContent, PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { getPreferencesStorageDir, warmUpPreferencesStore } from '../services/PreferencesService';
 
 const DOMAIN = 0x0000;
+const TAG = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
     } catch {
-      hilog.error(DOMAIN, 'testTag', '%{public}s', 'Failed to set colorMode.');
+      hilog.error(DOMAIN, TAG, '%{public}s', 'Failed to set colorMode.');
     }
     AppContextHolder.bind(this.context);
     warmUpPreferencesStore(this.context);
-    hilog.info(DOMAIN, 'testTag', 'preferences storage dir=%{public}s', getPreferencesStorageDir(this.context));
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+    this.setupPushAgent();
+    hilog.info(DOMAIN, TAG, 'preferences storage dir=%{public}s', getPreferencesStorageDir(this.context));
+    hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onCreate');
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    void PushAgent.onNewWant(want);
+  }
+
+  private setupPushAgent(): void {
+    PushAgent.initCallback((data: Record<string, string>) => {
+      hilog.info(DOMAIN, TAG, 'push init callback: %{public}s', JSON.stringify(data));
+    });
+
+    PushAgent.onClickMessage((extra: Record<string, string>) => {
+      hilog.info(DOMAIN, TAG, 'push click extra: %{public}s', JSON.stringify(extra));
+    });
+
+    PushAgent.onCustomMessage((customMsg: MsgContent) => {
+      hilog.info(DOMAIN, TAG, 'push custom message: %{public}s', JSON.stringify(customMsg));
+    });
   }
 
   onDestroy(): void {

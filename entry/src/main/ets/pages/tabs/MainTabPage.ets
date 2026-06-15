@@ -6,11 +6,14 @@ import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { warmUpPreferencesStore } from '../../services/PreferencesService';
 import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
+import { UmengSdkService } from '../../services/UmengSdkService';
 import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { UserStore } from '../../stores/UserStore';
+import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { ContractTabPage } from './ContractTabPage';
 import { CycleGuardDetailPage } from './CycleGuardDetailPage';
 import { FocusHomePage } from './FocusHomePage';
@@ -34,12 +37,15 @@ struct MainTabPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const ui = this.getUIContext();
     warmUpPreferencesStore(hostContext);
+    UserStore.hydrate(hostContext);
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
+    void UserStore.syncRemoteIfLoggedIn(hostContext);
     void syncAllPlanGuardStrategies(PlanStore.getPlans());
     this.startTimer();
+    this.bootstrapUmengSdk(hostContext);
 
     window.getLastWindow(hostContext, (err, win) => {
       if (err !== undefined && err.code !== 0) {
@@ -66,6 +72,40 @@ struct MainTabPage {
     this.timerId = setInterval(() => {
       this.syncLockLifecycle();
     }, 1000);
+  }
+
+  private bootstrapUmengSdk(context: common.UIAbilityContext): void {
+    const afterInit = (): void => {
+      UmengSdkService.ensureInitialized(context);
+      UmengSdkService.enablePushNotification(context);
+      if (UserStore.isLoggedIn()) {
+        UmengSdkService.bindUserAlias(UserStore.getUserInfo().id);
+      }
+    };
+
+    if (UmengSdkService.isPrivacyAgreed(context)) {
+      afterInit();
+      return;
+    }
+
+    this.getUIContext().showAlertDialog({
+      title: '服务说明',
+      message: '为向你发送专注提醒等通知，应用将使用友盟推送与统计服务。你可随时在系统设置中关闭通知权限。',
+      autoCancel: false,
+      primaryButton: {
+        value: '同意并继续',
+        action: () => {
+          UmengSdkService.markPrivacyAgreed(context);
+          afterInit();
+        }
+      },
+      secondaryButton: {
+        value: '查看隐私政策',
+        action: () => {
+          pushRoute(PageRoutes.PrivacyPolicy);
+        }
+      }
+    });
   }
 
   private syncLockLifecycle(): void {

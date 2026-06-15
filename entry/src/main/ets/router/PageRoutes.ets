@@ -14,6 +14,8 @@ export class PageRoutes {
   static readonly PrivacyPolicy: string = 'pages/settings/PrivacyPolicyPage';
   static readonly UserAgreement: string = 'pages/settings/UserAgreementPage';
   static readonly About: string = 'pages/settings/AboutPage';
+  static readonly Login: string = 'pages/login/LoginPage';
+  static readonly Register: string = 'pages/login/RegisterPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {

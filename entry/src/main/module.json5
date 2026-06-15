@@ -4,6 +4,7 @@
     "type": "entry",
     "description": "$string:module_desc",
     "mainElement": "EntryAbility",
+    "srcEntry": "./ets/abilityStage/MyAbilityStage.ets",
     "deviceTypes": [
       "phone"
     ],
@@ -13,6 +14,18 @@
     "requestPermissions": [
       {
         "name": "ohos.permission.MANAGE_SCREEN_TIME_GUARD"
+      },
+      {
+        "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.GET_NETWORK_INFO"
+      }
+    ],
+    "metadata": [
+      {
+        "name": "client_id",
+        "value": "6917601637922444081"
       }
     ],
     "abilities": [

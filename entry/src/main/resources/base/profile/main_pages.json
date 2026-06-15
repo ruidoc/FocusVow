@@ -10,6 +10,8 @@
     "pages/settings/CycleGuardPage",
     "pages/settings/PrivacyPolicyPage",
     "pages/settings/UserAgreementPage",
-    "pages/settings/AboutPage"
+    "pages/settings/AboutPage",
+    "pages/login/LoginPage",
+    "pages/login/RegisterPage"
   ]
 }

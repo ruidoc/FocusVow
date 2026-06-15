@@ -1,13 +1,16 @@
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import { showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
 import { common } from '@kit.AbilityKit';
 import { FocusPlan } from '../../models/PlanModel';
+import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { UserStore } from '../../stores/UserStore';
 
 bootstrapStores();
 
@@ -18,12 +21,46 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleSelectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
+  @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
+  @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    UserStore.hydrate(hostContext);
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
+    void UserStore.syncRemoteIfLoggedIn(hostContext);
+  }
+
+  private getDisplayName(): string {
+    if (this.isLoggedIn && this.userInfo.username.length > 0) {
+      return this.userInfo.username;
+    }
+    return '未登录';
+  }
+
+  private getDisplaySubtitle(): string {
+    if (this.isLoggedIn) {
+      if (this.userInfo.email.length > 0) {
+        return this.userInfo.email;
+      }
+      return '账号已登录';
+    }
+    return '登录后可同步账号数据';
+  }
+
+  private openAuthPage(): void {
+    if (this.isLoggedIn) {
+      return;
+    }
+    pushRoute(PageRoutes.Login);
+  }
+
+  private logout(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    UserStore.logout(hostContext);
+    showToast('已退出登录', this.getUIContext());
   }
 
   private getPermissionLabel(): string {
@@ -36,40 +73,53 @@ export struct ProfilePage {
 
   @Builder
   private buildProfileCard(): void {
-    Row({ space: 14 }) {
-      Row() {
-        Text('FV')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#FFFFFF')
-      }
-      .width(56)
-      .height(56)
-      .justifyContent(FlexAlign.Center)
-      .backgroundColor(AppTheme.colors.primary)
-      .borderRadius(28)
+    Button() {
+      Row({ space: 14 }) {
+        Row() {
+          Text('FV')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+        }
+        .width(56)
+        .height(56)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(AppTheme.colors.primary)
+        .borderRadius(28)
 
-      Column({ space: 4 }) {
-        Text('FocusVow 用户')
-          .fontSize(22)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
+        Column({ space: 4 }) {
+          Text(this.getDisplayName())
+            .fontSize(22)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .width('100%')
 
-        Text('本地专注配置与习惯管理')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+          Text(this.getDisplaySubtitle())
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        if (!this.isLoggedIn) {
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(16)
+            .fontColor([AppTheme.colors.textMuted])
+        }
       }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .padding({ left: 18, right: 18, top: 16, bottom: 16 })
+    .type(ButtonType.Normal)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: '#F1F3F8' })
     .borderRadius(24)
-    .alignItems(VerticalAlign.Center)
+    .padding({ left: 18, right: 18, top: 16, bottom: 16 })
+    .onClick(() => {
+      this.openAuthPage();
+    })
   }
 
   @Builder
@@ -145,9 +195,18 @@ export struct ProfilePage {
       .clip(true)
 
       Column({ space: 0 }) {
-        this.buildMenuRow('设置', $r('sys.symbol.gearshape'), '', false, () => {
+        this.buildMenuRow('设置', $r('sys.symbol.gearshape'), '', true, () => {
           pushRoute(PageRoutes.Settings);
         })
+        if (this.isLoggedIn) {
+          this.buildMenuRow('退出登录', $r('sys.symbol.lock'), '', false, () => {
+            this.logout();
+          })
+        } else {
+          this.buildMenuRow('登录 / 注册', $r('sys.symbol.person'), '', false, () => {
+            pushRoute(PageRoutes.Login);
+          })
+        }
       }
       .width('100%')
       .backgroundColor(AppTheme.colors.surface)

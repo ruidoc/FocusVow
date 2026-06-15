@@ -1,6 +1,7 @@
 import { createIdleLockState } from '../models/ActiveLockModel';
 import { createDefaultCycleGuardState } from '../models/CycleGuardModel';
 import { createDefaultSettingsState } from '../models/PermissionModel';
+import { createEmptyUserInfo } from '../models/UserModel';
 import { StoreKeys } from './StoreKeys';
 
 let bootstrapped: boolean = false;
@@ -27,5 +28,8 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedAppCount, cycleGuardState.selectedAppCount);
   AppStorage.setOrCreate(StoreKeys.CycleGuardPhase, cycleGuardState.phase);
   AppStorage.setOrCreate(StoreKeys.CycleGuardStatusMessage, cycleGuardState.statusMessage);
+  AppStorage.setOrCreate(StoreKeys.UserAccessToken, '');
+  AppStorage.setOrCreate(StoreKeys.UserIsLoggedIn, false);
+  AppStorage.setOrCreate(StoreKeys.UserInfo, createEmptyUserInfo());
   bootstrapped = true;
 }

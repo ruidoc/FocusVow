@@ -14,4 +14,7 @@ export class StoreKeys {
   static readonly CycleGuardSelectedAppCount: string = 'cycleGuard.selectedAppCount';
   static readonly CycleGuardPhase: string = 'cycleGuard.phase';
   static readonly CycleGuardStatusMessage: string = 'cycleGuard.statusMessage';
+  static readonly UserAccessToken: string = 'user.accessToken';
+  static readonly UserIsLoggedIn: string = 'user.isLoggedIn';
+  static readonly UserInfo: string = 'user.info';
 }
