@@ -11,13 +11,13 @@ import { FocusPlan } from '../../models/PlanModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import {
   endCycleGuardLock,
-  endQuickFocus,
-  skipCovenantWindow
+  skipCovenantWindow,
+  tearQuickFocus
 } from '../../services/ActiveLockLifecycleService';
-import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
+import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 
@@ -25,13 +25,10 @@ bootstrapStores();
 
 @Component
 export struct FocusHomePage {
-  onSelectTab?: (tab: 'contract' | 'guard') => void;
+  onSelectTab?: (tab: 'plans') => void;
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.SettingsStatusMessage) statusMessage: string = '先申请系统授权，再选择需要限制的应用';
-  @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
-  @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleSelectedAppCount: number = 0;
-  @StorageLink(StoreKeys.CycleGuardStatusMessage) cycleGuardStatusMessage: string = '';
   @State remainingLabel: string = LockStore.getRemainingLabel();
 
   private timerId: number = -1;
@@ -42,7 +39,6 @@ export struct FocusHomePage {
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
-    CycleGuardStore.hydrate(hostContext);
     this.syncRemainingLabel();
     this.startTimer();
   }
@@ -69,7 +65,6 @@ export struct FocusHomePage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
-    CycleGuardStore.hydrate(hostContext);
     this.remainingLabel = LockStore.getRemainingLabel();
   }
 
@@ -77,7 +72,87 @@ export struct FocusHomePage {
     return isLocked(this.activeLock);
   }
 
+  private getTearFirstMessage(): string {
+    if (this.activeLock.participationMode === 'duo') {
+      return '撕毁后本次专注立即失败，搭子也会被连坐。';
+    }
+    return '撕毁后本次专注记为违约，会进入耻辱柱。';
+  }
+
+  private getTearSecondMessage(): string {
+    if (this.activeLock.participationMode === 'duo') {
+      return '再次确认：撕毁契约后无法撤销，你与搭子都将受到连坐惩罚。';
+    }
+    return '再次确认：撕毁契约后无法撤销，本次将记入耻辱柱。';
+  }
+
   private async endCurrentLock(): Promise<void> {
+    if (this.isEndingLock || !this.isActiveLocked()) {
+      return;
+    }
+
+    if (this.activeLock.kind === 'quick_focus') {
+      this.openFirstTearConfirm();
+      return;
+    }
+
+    await this.performEndLock();
+  }
+
+  private openFirstTearConfirm(): void {
+    this.getUIContext().showAlertDialog({
+      title: '撕毁契约',
+      message: `${this.getTearFirstMessage()}这是第一次确认，请想清楚。`,
+      autoCancel: true,
+      primaryButton: {
+        value: '继续',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          this.openSecondTearConfirm();
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private openSecondTearConfirm(): void {
+    this.getUIContext().showAlertDialog({
+      title: '撕毁契约',
+      message: `${this.getTearSecondMessage()}这是第二次确认，请再次想清楚。`,
+      autoCancel: true,
+      primaryButton: {
+        value: '确认撕毁',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.performTearLock();
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private async performTearLock(): Promise<void> {
+    if (this.isEndingLock || this.activeLock.kind !== 'quick_focus') {
+      return;
+    }
+    this.isEndingLock = true;
+    this.clearTimer();
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    await tearQuickFocus(hostContext, this.activeLock);
+    this.remainingLabel = LockStore.getRemainingLabel();
+    this.isEndingLock = false;
+    this.startTimer();
+  }
+
+  private async performEndLock(): Promise<void> {
     if (this.isEndingLock || !this.isActiveLocked()) {
       return;
     }
@@ -86,9 +161,7 @@ export struct FocusHomePage {
     this.clearTimer();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
-    if (this.activeLock.kind === 'quick_focus') {
-      await endQuickFocus(hostContext, this.activeLock, '你已手动结束专注', '结束专注失败');
-    } else if (this.activeLock.kind === 'covenant') {
+    if (this.activeLock.kind === 'covenant') {
       await skipCovenantWindow(hostContext, this.activeLock);
     } else if (this.activeLock.kind === 'cycle_guard') {
       await endCycleGuardLock(hostContext);
@@ -107,17 +180,20 @@ export struct FocusHomePage {
     if (this.activeLock.kind === 'cycle_guard') {
       return `娱乐限额已用完，当前已限制 ${count} 个应用`;
     }
-    return `已限制 ${count} 个应用，结束后会自动解除限制`;
+    return `已限制 ${count} 个应用，计时结束后自动上岸`;
   }
 
   private getEndLockButtonLabel(): string {
+    if (this.activeLock.kind === 'quick_focus') {
+      return '撕毁契约';
+    }
     if (this.activeLock.kind === 'covenant') {
       return '结束本次契约';
     }
     if (this.activeLock.kind === 'cycle_guard') {
       return '结束当前锁定';
     }
-    return '结束专注';
+    return '结束';
   }
 
   private getLockHint(): string {
@@ -126,6 +202,9 @@ export struct FocusHomePage {
     }
     if (this.activeLock.kind === 'covenant') {
       return '仅跳过本次窗口，下一周期仍会正常执行';
+    }
+    if (this.activeLock.kind === 'quick_focus') {
+      return '提前结束视为撕毁契约，自然跑满才算上岸';
     }
     return '';
   }
@@ -224,19 +303,27 @@ export struct FocusHomePage {
     .alignItems(HorizontalAlign.Center)
   }
 
+  private ensureLoginThen(route: string): void {
+    if (!UserStore.isLoggedIn()) {
+      pushRoute(PageRoutes.Login);
+      return;
+    }
+    pushRoute(route);
+  }
+
   @Builder
   private buildEmptyState(): void {
     Column({ space: 18 }) {
       this.buildStatusIcon(false)
 
       Column({ space: 10 }) {
-        Text('当前还没有进行中的专注')
+        Text('选择一种专注方式')
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
 
-        Text('快速专注适合立即进入状态，契约和娱乐限额适合长期管理分心应用。')
+        Text('单人修炼立即开始；双人连坐需邀请搭子同时履约。')
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)
@@ -245,11 +332,23 @@ export struct FocusHomePage {
       .alignItems(HorizontalAlign.Center)
 
       AppActionButton({
-        label: '开始快速专注',
+        label: '单人修炼',
         onPress: () => {
-          pushRoute(PageRoutes.QuickStart);
+          this.ensureLoginThen(PageRoutes.QuickStart);
         }
       })
+
+      Button('双人连坐')
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.surface)
+        .fontColor(AppTheme.colors.textPrimary)
+        .fontWeight(FontWeight.Medium)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .onClick(() => {
+          this.ensureLoginThen(PageRoutes.DuoCreate);
+        })
     }
     .width('100%')
     .padding({ left: 12, right: 12 })
@@ -313,31 +412,19 @@ export struct FocusHomePage {
   @Builder
   private buildModePanel(): void {
     Column({ space: 12 }) {
-      Text('其他方式')
+      Text('定时契约')
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
 
       this.buildModeEntry(
-        '契约模式',
+        '计划模式',
         this.planCollection.length > 0 ? `${this.planCollection.length} 条` : '去创建',
-        '按固定时间自动生效，适合日常学习、工作和休息节奏',
+        '按固定时间自动生效，适合每日学习节奏',
         $r('sys.symbol.doc_plaintext'),
         () => {
-          this.onSelectTab?.('contract');
-        }
-      )
-
-      this.buildModeEntry(
-        '娱乐限额',
-        this.cycleEnabled ? '运行中' : '去设置',
-        this.cycleSelectedAppCount > 0
-          ? `已为 ${this.cycleSelectedAppCount} 个娱乐应用设置总时长`
-          : '给娱乐类应用设置总可用时长，用完后统一锁定',
-        $r('sys.symbol.bolt_shield'),
-        () => {
-          this.onSelectTab?.('guard');
+          this.onSelectTab?.('plans');
         }
       )
     }
@@ -345,9 +432,6 @@ export struct FocusHomePage {
   }
 
   private getFooterStatusMessage(): string {
-    if (this.isActiveLocked() && this.activeLock.kind === 'cycle_guard') {
-      return this.cycleGuardStatusMessage;
-    }
     return this.statusMessage;
   }
 

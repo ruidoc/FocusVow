@@ -2,6 +2,9 @@
   "src": [
     "pages/tabs/MainTabPage",
     "pages/quickStart/QuickStartPage",
+    "pages/focus/DuoCreatePage",
+    "pages/focus/DuoWaitPage",
+    "pages/focus/DuoJoinPage",
     "pages/plans/PlanListPage",
     "pages/plans/PlanAddPage",
     "pages/plans/PlanDetailPage",

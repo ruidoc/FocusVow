@@ -4,6 +4,11 @@ import { window } from '@kit.ArkUI';
 import { MsgContent, PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { getPreferencesStorageDir, warmUpPreferencesStore } from '../services/PreferencesService';
+import { DuoPushHandler } from '../services/DuoPushHandler';
+import { UmengPushMessageBody } from '../models/DuoModel';
+import { FocusSyncService } from '../services/FocusSyncService';
+import { UmengSdkService } from '../services/UmengSdkService';
+import { StoreKeys } from '../stores/StoreKeys';
 
 const DOMAIN = 0x0000;
 const TAG = 'EntryAbility';
@@ -27,16 +32,25 @@ export default class EntryAbility extends UIAbility {
   }
 
   private setupPushAgent(): void {
+    UmengSdkService.setupPushListeners();
+
     PushAgent.initCallback((data: Record<string, string>) => {
-      hilog.info(DOMAIN, TAG, 'push init callback: %{public}s', JSON.stringify(data));
+      UmengSdkService.handlePushInitCallback(data);
     });
 
     PushAgent.onClickMessage((extra: Record<string, string>) => {
       hilog.info(DOMAIN, TAG, 'push click extra: %{public}s', JSON.stringify(extra));
+      void DuoPushHandler.handlePayload(DuoPushHandler.parsePushPayload(extra));
     });
 
     PushAgent.onCustomMessage((customMsg: MsgContent) => {
       hilog.info(DOMAIN, TAG, 'push custom message: %{public}s', JSON.stringify(customMsg));
+      const bodyText = DuoPushHandler.extractCustomBody(customMsg.body as UmengPushMessageBody);
+      const payload = DuoPushHandler.parsePushPayload(
+        customMsg.extra as Record<string, string>,
+        bodyText
+      );
+      void DuoPushHandler.handlePayload(payload);
     });
   }
 
@@ -82,8 +96,12 @@ export default class EntryAbility extends UIAbility {
   }
 
   onForeground(): void {
-    // Ability has brought to foreground
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    AppStorage.setOrCreate(StoreKeys.AppForegroundAt, Date.now());
+    const context = AppContextHolder.get();
+    if (context) {
+      void FocusSyncService.flushPending(context);
+    }
   }
 
   onBackground(): void {

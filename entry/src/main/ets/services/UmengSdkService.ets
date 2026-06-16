@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { init, onProfileSignIn, onProfileSignOff } from '@umeng/analytics';
 import { PushAgent } from '@umeng/push';
+import { DuoPushHandler } from './DuoPushHandler';
 import { UmengConfig } from '../config/UmengConfig';
 import { readStoredString, writeStoredString } from './PreferencesService';
 
@@ -10,6 +11,7 @@ const TAG: string = 'UmengSdk';
 const PRIVACY_AGREED_KEY: string = 'umeng.privacyAgreed';
 
 let sdkInitialized: boolean = false;
+let lastUmengDeviceToken: string = '';
 
 export class UmengSdkService {
   static isPrivacyAgreed(context: common.Context): boolean {
@@ -32,6 +34,39 @@ export class UmengSdkService {
     init();
     sdkInitialized = true;
     hilog.info(DOMAIN, TAG, 'umeng sdk initialized');
+  }
+
+  static getLastUmengDeviceToken(): string {
+    return lastUmengDeviceToken;
+  }
+
+  static handlePushInitCallback(data: Record<string, string>): void {
+    hilog.info(DOMAIN, TAG, 'push init callback: %{public}s', JSON.stringify(data));
+
+    const code = String(data['code'] ?? '');
+    if (code.length > 0 && code !== '0') {
+      return;
+    }
+
+    const umengToken = String(data['data'] ?? data['device_token'] ?? '');
+    if (umengToken.length > 0) {
+      lastUmengDeviceToken = umengToken;
+      hilog.info(DOMAIN, TAG, 'umeng device token (后台测试用这个): %{public}s', umengToken);
+    }
+
+    setTimeout(() => {
+      void UmengSdkService.logPushDiagnostics();
+    }, 1500);
+  }
+
+  static setupPushListeners(): void {
+    PushAgent.onNotificationMessage((payload: Record<string, string>) => {
+      hilog.info(DOMAIN, TAG, 'notification arrived (fg/bg): %{public}s', JSON.stringify(payload));
+      const customText = String(payload['custom'] ?? payload['body'] ?? '');
+      void DuoPushHandler.handlePayload(
+        DuoPushHandler.parsePushPayload(payload, customText.length > 0 ? customText : undefined)
+      );
+    });
   }
 
   static enablePushNotification(context: common.UIAbilityContext): void {
@@ -60,7 +95,7 @@ export class UmengSdkService {
 
     try {
       const thirdToken = await PushAgent.getThirdToken();
-      hilog.info(DOMAIN, TAG, 'huawei third token: %{public}s', JSON.stringify(thirdToken));
+      hilog.info(DOMAIN, TAG, 'huawei third token (厂商通道用,勿填测试设备): %{public}s', JSON.stringify(thirdToken));
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'huawei third token failed: %{public}s', String(error));
     }

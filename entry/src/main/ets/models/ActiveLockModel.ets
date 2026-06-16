@@ -2,6 +2,15 @@ export type RestrictionMode = 'shield' | 'allow';
 
 export type LockKind = 'none' | 'covenant' | 'cycle_guard' | 'quick_focus';
 
+export type QuickFocusParticipationMode = 'solo' | 'duo' | '';
+
+export interface QuickFocusOptions {
+  title?: string;
+  duoSessionId?: string;
+  recordId?: string;
+  participationMode?: QuickFocusParticipationMode;
+}
+
 export const CYCLE_GUARD_STRATEGY_NAME: string = 'cycle_quota_strategy';
 
 export interface ActiveLockState {
@@ -15,6 +24,9 @@ export interface ActiveLockState {
   startedAt: number;
   endAt: number;
   updatedAt: number;
+  duoSessionId: string;
+  recordId: string;
+  participationMode: 'solo' | 'duo' | '';
 }
 
 export function createIdleLockState(): ActiveLockState {
@@ -28,7 +40,10 @@ export function createIdleLockState(): ActiveLockState {
     mode: 'shield',
     startedAt: 0,
     endAt: 0,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    duoSessionId: '',
+    recordId: '',
+    participationMode: ''
   };
 }
 
@@ -48,7 +63,10 @@ export function normalizeActiveLockState(state?: Partial<ActiveLockState> | null
     mode: state.mode ?? idle.mode,
     startedAt: state.startedAt ?? idle.startedAt,
     endAt: state.endAt ?? idle.endAt,
-    updatedAt: state.updatedAt ?? idle.updatedAt
+    updatedAt: state.updatedAt ?? idle.updatedAt,
+    duoSessionId: state.duoSessionId ?? idle.duoSessionId,
+    recordId: state.recordId ?? idle.recordId,
+    participationMode: state.participationMode ?? idle.participationMode
   };
 }
 
@@ -89,21 +107,28 @@ export function createQuickFocusLockState(
   selectedTokens: string[],
   durationMinutes: number,
   mode: RestrictionMode,
-  nowAt: number = Date.now()
+  nowAt: number = Date.now(),
+  title: string = '即时契约',
+  duoSessionId: string = '',
+  recordId: string = '',
+  participationMode: 'solo' | 'duo' | '' = ''
 ): ActiveLockState {
   const safeDuration = durationMinutes > 0 ? durationMinutes : 25;
 
   return {
     kind: 'quick_focus',
     strategyName: '',
-    title: '快速专注',
+    title,
     planId: '',
     selectedTokens: [...selectedTokens],
     selectedCount: selectedTokens.length,
     mode,
     startedAt: nowAt,
     endAt: nowAt + safeDuration * 60 * 1000,
-    updatedAt: nowAt
+    updatedAt: nowAt,
+    duoSessionId,
+    recordId,
+    participationMode
   };
 }
 
@@ -126,7 +151,10 @@ export function createCovenantLockState(
     mode,
     startedAt: windowStartAt,
     endAt: windowEndAt,
-    updatedAt: nowAt
+    updatedAt: nowAt,
+    duoSessionId: '',
+    recordId: '',
+    participationMode: ''
   };
 }
 
@@ -145,6 +173,9 @@ export function createCycleGuardLockState(
     mode: 'allow',
     startedAt: nowAt,
     endAt: 0,
-    updatedAt: nowAt
+    updatedAt: nowAt,
+    duoSessionId: '',
+    recordId: '',
+    participationMode: ''
   };
 }

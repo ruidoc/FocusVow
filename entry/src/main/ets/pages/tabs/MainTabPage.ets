@@ -3,6 +3,9 @@ import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
 import { ActiveLockState, createIdleLockState } from '../../models/ActiveLockModel';
 import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
+import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
+import { DuoPushHandler } from '../../services/DuoPushHandler';
+import { FocusSyncService } from '../../services/FocusSyncService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { warmUpPreferencesStore } from '../../services/PreferencesService';
 import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
@@ -15,13 +18,13 @@ import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { ContractTabPage } from './ContractTabPage';
-import { CycleGuardDetailPage } from './CycleGuardDetailPage';
 import { FocusHomePage } from './FocusHomePage';
 import { ProfilePage } from './ProfilePage';
+import { StatsPage } from './StatsPage';
 
 bootstrapStores();
 
-export type MainTabKey = 'focus' | 'contract' | 'guard' | 'profile';
+export type MainTabKey = 'focus' | 'plans' | 'stats' | 'profile';
 
 @Entry
 @Component
@@ -29,9 +32,12 @@ struct MainTabPage {
   @State currentTab: MainTabKey = 'focus';
   @State private bottomGestureInsetVp: number = 0;
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
+  @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
+  private duoBreachPollTick: number = 0;
+  private lastClipboardProbeAt: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -43,9 +49,13 @@ struct MainTabPage {
     LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     void UserStore.syncRemoteIfLoggedIn(hostContext);
+    if (UserStore.isLoggedIn()) {
+      void FocusSyncService.flushPending(hostContext);
+    }
     void syncAllPlanGuardStrategies(PlanStore.getPlans());
     this.startTimer();
     this.bootstrapUmengSdk(hostContext);
+    void this.probeClipboardInvite(hostContext);
 
     window.getLastWindow(hostContext, (err, win) => {
       if (err !== undefined && err.code !== 0) {
@@ -72,6 +82,18 @@ struct MainTabPage {
     this.timerId = setInterval(() => {
       this.syncLockLifecycle();
     }, 1000);
+  }
+
+  private async probeClipboardInvite(context: common.UIAbilityContext): Promise<void> {
+    await DuoInviteClipboardService.probeClipboard(context, this.getUIContext());
+  }
+
+  private maybeProbeClipboardOnForeground(context: common.UIAbilityContext): void {
+    if (this.foregroundAt <= this.lastClipboardProbeAt) {
+      return;
+    }
+    this.lastClipboardProbeAt = this.foregroundAt;
+    void this.probeClipboardInvite(context);
   }
 
   private bootstrapUmengSdk(context: common.UIAbilityContext): void {
@@ -110,6 +132,7 @@ struct MainTabPage {
 
   private syncLockLifecycle(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.maybeProbeClipboardOnForeground(hostContext);
     warmUpPreferencesStore(hostContext);
     SettingsStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
@@ -117,6 +140,22 @@ struct MainTabPage {
 
     if (this.activeLock.kind === 'quick_focus' && LockStore.shouldAutoFinish()) {
       this.finishQuickFocus();
+    }
+
+    if (
+      this.activeLock.kind === 'quick_focus' &&
+      this.activeLock.participationMode === 'duo' &&
+      this.activeLock.duoSessionId.length > 0
+    ) {
+      this.duoBreachPollTick += 1;
+      if (this.duoBreachPollTick % 3 === 0) {
+        void DuoPushHandler.checkRemoteSessionState(
+          hostContext,
+          this.activeLock.duoSessionId
+        );
+      }
+    } else {
+      this.duoBreachPollTick = 0;
     }
   }
 
@@ -130,7 +169,7 @@ struct MainTabPage {
     await endQuickFocus(
       hostContext,
       this.activeLock,
-      '专注已完成，限制已自动解除',
+      '契约已履行，恭喜上岸',
       '专注已结束，但解除限制失败'
     );
     this.isEndingLock = false;
@@ -150,12 +189,12 @@ struct MainTabPage {
       return selected ? $r('sys.symbol.timer_circle_fill') : $r('sys.symbol.timer');
     }
 
-    if (tab === 'contract') {
+    if (tab === 'plans') {
       return selected ? $r('sys.symbol.doc_plaintext_fill') : $r('sys.symbol.doc_plaintext');
     }
 
-    if (tab === 'guard') {
-      return selected ? $r('sys.symbol.bolt_shield_fill') : $r('sys.symbol.bolt_shield');
+    if (tab === 'stats') {
+      return selected ? $r('sys.symbol.calendar') : $r('sys.symbol.calendar');
     }
 
     return selected ? $r('sys.symbol.person_fill') : $r('sys.symbol.person');
@@ -183,16 +222,16 @@ struct MainTabPage {
     Column() {
       if (this.currentTab === 'focus') {
         FocusHomePage({
-          onSelectTab: (tab: 'contract' | 'guard') => {
+          onSelectTab: (tab: 'plans') => {
             this.currentTab = tab;
           }
         })
           .layoutWeight(1)
-      } else if (this.currentTab === 'contract') {
+      } else if (this.currentTab === 'plans') {
         ContractTabPage()
           .layoutWeight(1)
-      } else if (this.currentTab === 'guard') {
-        CycleGuardDetailPage()
+      } else if (this.currentTab === 'stats') {
+        StatsPage()
           .layoutWeight(1)
       } else {
         ProfilePage()
@@ -201,8 +240,8 @@ struct MainTabPage {
 
       Row() {
         this.buildTabItem('focus', '专注')
-        this.buildTabItem('contract', '契约')
-        this.buildTabItem('guard', '限额')
+        this.buildTabItem('plans', '计划')
+        this.buildTabItem('stats', '统计')
         this.buildTabItem('profile', '我的')
       }
       .width('100%')

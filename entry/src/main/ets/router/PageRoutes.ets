@@ -4,6 +4,9 @@ import { BusinessError } from '@kit.BasicServicesKit';
 export class PageRoutes {
   static readonly FocusHome: string = 'pages/tabs/MainTabPage';
   static readonly QuickStart: string = 'pages/quickStart/QuickStartPage';
+  static readonly DuoCreate: string = 'pages/focus/DuoCreatePage';
+  static readonly DuoWait: string = 'pages/focus/DuoWaitPage';
+  static readonly DuoJoin: string = 'pages/focus/DuoJoinPage';
   static readonly PlanList: string = 'pages/plans/PlanListPage';
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';

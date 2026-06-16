@@ -29,7 +29,7 @@ struct PlanDetailPage {
   @State endTime: string = '18:00';
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
-  @State mode: 'shield' | 'allow' = 'shield';
+  @State mode: 'shield' | 'allow' = 'allow';
   @State statusMessage: string = '';
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
@@ -423,13 +423,6 @@ struct PlanDetailPage {
   @Builder
   buildContractBody(): void {
     Column({ space: 18 }) {
-      Row() {
-        this.buildModeSegment()
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .margin({ top: 8 })
-
       this.buildNameCard()
       this.buildTimeCard()
       this.buildAppCard()

@@ -1,15 +1,13 @@
 import { common } from '@kit.AbilityKit';
-import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { showErrorToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute, replaceRoute, PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, backRoute, pushRoute, replaceRoute } from '../../router/PageRoutes';
 import {
-  applyScreenRestriction,
   chooseRestrictedApps,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
-import { LockStore } from '../../stores/LockStore';
+import { DuoApiService } from '../../services/DuoApiService';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -19,13 +17,13 @@ bootstrapStores();
 
 @Entry
 @Component
-struct QuickStartPage {
+struct DuoCreatePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
-  @State durationMinutes: number = 15;
-  @State mode: 'shield' | 'allow' = 'allow';
   @State title: string = '';
+  @State durationMinutes: number = 45;
+  @State isSubmitting: boolean = false;
 
   private readonly durationMin: number = 5;
   private readonly durationMax: number = 180;
@@ -34,20 +32,12 @@ struct QuickStartPage {
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
-    LockStore.hydrate(hostContext);
     if (!UserStore.isLoggedIn()) {
       pushRoute(PageRoutes.Login);
-      return;
-    }
-    const rawDuration = LockStore.getQuickFocusDurationMinutes();
-    const normalized = this.normalizeDurationMinutes(rawDuration);
-    this.durationMinutes = normalized;
-    if (normalized !== rawDuration) {
-      LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
     }
   }
 
-  private normalizeDurationMinutes(raw: number): number {
+  private normalizeDuration(raw: number): number {
     let d = Math.max(this.durationMin, Math.min(this.durationMax, Math.floor(raw)));
     d = Math.round(d / this.durationStep) * this.durationStep;
     return Math.max(this.durationMin, Math.min(this.durationMax, d));
@@ -65,32 +55,17 @@ struct QuickStartPage {
     return `${this.durationMinutes} 分钟`;
   }
 
-  private appCardTitle(): string {
-    return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
-  }
-
-  private durationCardTitle(): string {
-    return this.mode === 'shield' ? '锁定时长' : '放行时长';
-  }
-
   private toastError(message: string): void {
     showErrorToast(message, this.getUIContext());
-  }
-
-  private async authorize(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const result = await requestScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, result.ok, result.message);
-    if (!result.ok) {
-      this.toastError(result.message);
-    }
   }
 
   private async chooseApps(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (!this.hasAuthorized) {
-      await this.authorize();
-      if (!SettingsStore.getState().hasAuthorized) {
+      const auth = await requestScreenTimeAuthorization(hostContext);
+      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
+      if (!auth.ok) {
+        this.toastError(auth.message);
         return;
       }
     }
@@ -102,90 +77,41 @@ struct QuickStartPage {
     this.toastError(result.message);
   }
 
-  private async startFocus(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (LockStore.isLocked()) {
-      this.toastError('当前已有进行中的锁定，请先回首页结束后再开始新的专注');
+  private async createInvite(): Promise<void> {
+    if (this.isSubmitting) {
       return;
     }
-
+    if (this.title.trim().length === 0) {
+      this.toastError('请先填写本次契约要做什么');
+      return;
+    }
     if (this.selectedTokens.length === 0) {
       this.toastError('请先选择至少 1 个应用');
       return;
     }
 
-    if (!this.hasAuthorized) {
-      await this.authorize();
-      if (!SettingsStore.getState().hasAuthorized) {
-        return;
-      }
-    }
-
-    const result = await applyScreenRestriction(this.selectedTokens, this.mode);
-    if (!result.ok) {
-      this.toastError(result.message);
+    this.isSubmitting = true;
+    const response = await DuoApiService.instantCreate(this.title.trim(), this.durationMinutes);
+    const session = DuoApiService.parseSession(response);
+    if (!session) {
+      this.toastError(response.message ?? '创建失败');
+      this.isSubmitting = false;
       return;
     }
 
-    const taskTitle = this.title.trim().length > 0 ? this.title.trim() : '单人修炼';
-    const focusOptions: QuickFocusOptions = {
-      title: taskTitle,
-      duoSessionId: '',
-      recordId: '',
-      participationMode: 'solo'
-    };
-    LockStore.startQuickFocus(hostContext, this.selectedTokens, this.durationMinutes, this.mode, focusOptions);
-    replaceRoute(PageRoutes.FocusHome);
-  }
-
-  private onDurationSliderChange(value: number): void {
-    const next = this.normalizeDurationMinutes(value);
-    this.durationMinutes = next;
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    LockStore.setQuickFocusDurationMinutes(hostContext, next);
+    AppStorage.setOrCreate('duo.wait.session_id', session.session_id);
+    AppStorage.setOrCreate('duo.wait.duration_min', this.durationMinutes);
+    AppStorage.setOrCreate('duo.wait.title', this.title.trim());
+    AppStorage.setOrCreate('duo.wait.invite_text', session.invite_text ?? '');
+    this.isSubmitting = false;
+    replaceRoute(PageRoutes.DuoWait);
   }
 
   @Builder
-  buildModeSegment(): void {
-    Row({ space: 0 }) {
-      Text('锁定模式')
-        .layoutWeight(1)
-        .fontSize(15)
-        .fontColor(this.mode === 'shield' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
-        .fontWeight(this.mode === 'shield' ? FontWeight.Medium : FontWeight.Regular)
-        .textAlign(TextAlign.Center)
-        .padding({ top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor(this.mode === 'shield' ? AppTheme.colors.surfaceRaised : Color.Transparent)
-        .onClick(() => {
-          this.mode = 'shield';
-        })
-
-      Text('放行模式')
-        .layoutWeight(1)
-        .fontSize(15)
-        .fontColor(this.mode === 'allow' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
-        .fontWeight(this.mode === 'allow' ? FontWeight.Medium : FontWeight.Regular)
-        .textAlign(TextAlign.Center)
-        .padding({ top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor(this.mode === 'allow' ? AppTheme.colors.surfaceRaised : Color.Transparent)
-        .onClick(() => {
-          this.mode = 'allow';
-        })
-    }
-    .width('80%')
-    .padding(4)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(999)
-  }
-
-  @Builder
-  buildAppCard(): void {
+  private buildAppCard(): void {
     Column({ space: 14 }) {
       Row() {
-        Text(this.appCardTitle())
+        Text('要放行的应用')
           .layoutWeight(1)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
@@ -196,7 +122,7 @@ struct QuickStartPage {
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.primary)
           .onClick(() => {
-            this.chooseApps();
+            void this.chooseApps();
           })
       }
       .width('100%')
@@ -223,9 +149,9 @@ struct QuickStartPage {
   }
 
   @Builder
-  buildDurationCard(): void {
+  private buildDurationCard(): void {
     Column({ space: 16 }) {
-      Text(this.durationCardTitle())
+      Text('专注时长')
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
@@ -251,8 +177,8 @@ struct QuickStartPage {
         .selectedColor(AppTheme.colors.primary)
         .showSteps(false)
         .showTips(false)
-        .onChange((v: number) => {
-          this.onDurationSliderChange(v);
+        .onChange((value: number) => {
+          this.durationMinutes = this.normalizeDuration(value);
         })
 
       Row() {
@@ -275,7 +201,7 @@ struct QuickStartPage {
   }
 
   @Builder
-  buildQuickBody(): void {
+  private buildPageBody(): void {
     Column({ space: 18 }) {
       TextInput({ text: this.title, placeholder: '今天要完成什么？' })
         .width('100%')
@@ -287,7 +213,7 @@ struct QuickStartPage {
       this.buildAppCard()
       this.buildDurationCard()
 
-      Button('开始单人修炼')
+      Button('生成口令邀请搭子')
         .width('100%')
         .height(52)
         .type(ButtonType.Capsule)
@@ -295,9 +221,10 @@ struct QuickStartPage {
         .fontWeight(FontWeight.Bold)
         .backgroundColor(AppTheme.colors.primary)
         .fontColor('#FFFFFF')
-        .margin({ top: 8 })
+        .enabled(!this.isSubmitting)
+        .opacity(this.isSubmitting ? 0.55 : 1)
         .onClick(() => {
-          this.startFocus();
+          void this.createInvite();
         })
     }
     .width('100%')
@@ -307,13 +234,13 @@ struct QuickStartPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '单人修炼',
+        title: '双人连坐',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,
         onBack: () => backRoute(),
         content: (): void => {
-          this.buildQuickBody();
+          this.buildPageBody();
         }
       })
     }

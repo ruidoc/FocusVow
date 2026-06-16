@@ -6,12 +6,18 @@ import { common } from '@kit.AbilityKit';
  */
 export class AppContextHolder {
   private static appContext: common.Context | null = null;
+  private static abilityContext: common.UIAbilityContext | null = null;
 
-  static bind(context: common.Context): void {
+  static bind(context: common.UIAbilityContext): void {
+    AppContextHolder.abilityContext = context;
     AppContextHolder.appContext = context.getApplicationContext();
   }
 
   static get(): common.Context | null {
     return AppContextHolder.appContext;
+  }
+
+  static getAbility(): common.UIAbilityContext | null {
+    return AppContextHolder.abilityContext;
   }
 }

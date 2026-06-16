@@ -1,17 +1,34 @@
 import { common } from '@kit.AbilityKit';
 import { ActiveLockState } from '../models/ActiveLockModel';
+import { FocusSyncResult } from '../models/FocusSyncModel';
 import { endCurrentCycleGuardLockAndRestart, restartCycleGuardIfEnabled } from './CycleGuardService';
+import { FocusSyncService } from './FocusSyncService';
 import { GuardResult, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
 
 let endingLock: boolean = false;
 
+function saveQuickFocusPending(
+  context: common.Context,
+  state: ActiveLockState,
+  result: FocusSyncResult,
+  endedAt: number = Date.now()
+): void {
+  console.info(`[FocusSync] save pending kind=${state.duoSessionId.length > 0 ? 'session_terminal' : 'solo_instant'} result=${result}`);
+  if (state.duoSessionId.length > 0) {
+    FocusSyncService.saveSessionTerminalPending(context, state, result, endedAt);
+  } else {
+    FocusSyncService.saveSoloInstantPending(context, state, result, endedAt);
+  }
+}
+
 export async function endQuickFocus(
   context: common.UIAbilityContext,
   state: ActiveLockState,
   successMessage: string,
-  failurePrefix: string
+  failurePrefix: string,
+  markCompleted: boolean = true
 ): Promise<boolean> {
   if (endingLock || state.kind !== 'quick_focus') {
     return false;
@@ -19,13 +36,45 @@ export async function endQuickFocus(
 
   endingLock = true;
   try {
+    if (markCompleted) {
+      saveQuickFocusPending(context, state, 'SUCCESS');
+    }
+
     const result = await releaseScreenRestriction(state.selectedTokens, state.mode);
     if (result.ok) {
       LockStore.clear(context);
+      void FocusSyncService.flushPending(context);
     }
     SettingsStore.updateStatusMessage(
       context,
       result.ok ? successMessage : `${failurePrefix}：${result.message}`
+    );
+    return result.ok;
+  } finally {
+    endingLock = false;
+  }
+}
+
+export async function tearQuickFocus(
+  context: common.UIAbilityContext,
+  state: ActiveLockState
+): Promise<boolean> {
+  if (endingLock || state.kind !== 'quick_focus') {
+    return false;
+  }
+
+  endingLock = true;
+  try {
+    saveQuickFocusPending(context, state, 'VIOLATION');
+
+    const result = await releaseScreenRestriction(state.selectedTokens, state.mode);
+    if (result.ok) {
+      LockStore.clear(context);
+      void FocusSyncService.flushPending(context);
+    }
+    SettingsStore.updateStatusMessage(
+      context,
+      result.ok ? '契约已撕毁' : `撕毁失败：${result.message}`
     );
     return result.ok;
   } finally {

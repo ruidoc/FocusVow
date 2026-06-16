@@ -3,14 +3,17 @@ import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { PlanDraft, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel } from '../../models/PlanModel';
+import { DuoScheduledCreatePayload } from '../../models/DuoModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
   ensureScreenTimeAuthorization,
   syncPlanGuardStrategy
 } from '../../services/ScreenTimeService';
+import { DuoApiService } from '../../services/DuoApiService';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
+import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -29,7 +32,7 @@ struct PlanAddPage {
   @State endTime: string = '09:30';
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
-  @State mode: 'shield' | 'allow' = 'shield';
+  @State mode: 'shield' | 'allow' = 'allow';
   @State statusMessage: string = '';
   @State hasInitializedDefaultTime: boolean = false;
 
@@ -89,7 +92,7 @@ struct PlanAddPage {
   }
 
   private appCardTitle(): string {
-    return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
+    return '要放行的应用';
   }
 
   private shouldShowStatusLine(): boolean {
@@ -136,6 +139,13 @@ struct PlanAddPage {
     this.statusMessage = result.message;
   }
 
+  private timeToMinutes(time: string): number {
+    const parts = time.split(':');
+    const hour = Math.floor(Number(parts[0]) || 0);
+    const minute = Math.floor(Number(parts[1]) || 0);
+    return hour * 60 + minute;
+  }
+
   private async savePlan(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (this.selectedTokens.length === 0) {
@@ -166,6 +176,23 @@ struct PlanAddPage {
     const syncResult = await syncPlanGuardStrategy(savedPlan);
     this.statusMessage = syncResult.message;
     SettingsStore.updateStatusMessage(hostContext, syncResult.message);
+
+    if (UserStore.isLoggedIn()) {
+      const schedulePayload: DuoScheduledCreatePayload = {
+        title: savedPlan.name.length > 0 ? savedPlan.name : '定时契约',
+        start: savedPlan.startTime,
+        start_min: this.timeToMinutes(savedPlan.startTime),
+        end: savedPlan.endTime,
+        end_min: this.timeToMinutes(savedPlan.endTime),
+        repeat: savedPlan.repeatDays.join(',')
+      };
+      const scheduleResponse = await DuoApiService.scheduledCreate(schedulePayload);
+      const session = DuoApiService.parseSession(scheduleResponse);
+      if (session?.invite_text) {
+        AppStorage.setOrCreate('duo.last.invite_text', session.invite_text);
+      }
+    }
+
     replaceRoute(PageRoutes.PlanList);
   }
 
@@ -415,13 +442,6 @@ struct PlanAddPage {
   @Builder
   buildContractBody(): void {
     Column({ space: 18 }) {
-      Row() {
-        this.buildModeSegment()
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-      .margin({ top: 8 })
-
       this.buildNameCard()
       this.buildTimeCard()
       this.buildAppCard()

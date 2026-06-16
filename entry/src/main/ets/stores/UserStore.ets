@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { createEmptyUserInfo, parseUserInfo, UserInfo } from '../models/UserModel';
 import { AuthApiService } from '../services/AuthApiService';
+import { FocusSyncService } from '../services/FocusSyncService';
 import { UmengSdkService } from '../services/UmengSdkService';
 import {
   clearUserSession,
@@ -136,6 +137,7 @@ export class UserStore {
       UserStore.logout(context);
       return refreshError;
     }
+    void FocusSyncService.flushPending(context);
     return null;
   }
 }

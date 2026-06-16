@@ -17,4 +17,5 @@ export class StoreKeys {
   static readonly UserAccessToken: string = 'user.accessToken';
   static readonly UserIsLoggedIn: string = 'user.isLoggedIn';
   static readonly UserInfo: string = 'user.info';
+  static readonly AppForegroundAt: string = 'app.foregroundAt';
 }

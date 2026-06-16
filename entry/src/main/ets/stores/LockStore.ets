@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import {
   ActiveLockState,
+  QuickFocusOptions,
   RestrictionMode,
   createCovenantLockState,
   createIdleLockState,
@@ -123,9 +124,19 @@ export class LockStore {
     context: common.Context,
     selectedTokens: string[],
     durationMinutes: number,
-    mode: RestrictionMode
+    mode: RestrictionMode,
+    options?: QuickFocusOptions
   ): ActiveLockState {
-    const nextState = createQuickFocusLockState(selectedTokens, durationMinutes, mode);
+    const nextState = createQuickFocusLockState(
+      selectedTokens,
+      durationMinutes,
+      mode,
+      Date.now(),
+      options?.title ?? '即时契约',
+      options?.duoSessionId ?? '',
+      options?.recordId ?? '',
+      options?.participationMode ?? ''
+    );
     LockStore.setState(context, nextState);
     LockStore.setQuickFocusDurationMinutes(context, durationMinutes);
     return nextState;
