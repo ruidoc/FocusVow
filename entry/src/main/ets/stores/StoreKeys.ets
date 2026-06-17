@@ -18,4 +18,6 @@ export class StoreKeys {
   static readonly UserIsLoggedIn: string = 'user.isLoggedIn';
   static readonly UserInfo: string = 'user.info';
   static readonly AppForegroundAt: string = 'app.foregroundAt';
+  static readonly AppIsForeground: string = 'app.isForeground';
+  static readonly InAppMessage: string = 'app.inAppMessage';
 }

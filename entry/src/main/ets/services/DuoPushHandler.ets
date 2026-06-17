@@ -1,11 +1,14 @@
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { showToast } from '../common/Toast';
-import { isLocked, QuickFocusOptions } from '../models/ActiveLockModel';
-import { DuoPushPayload, UmengPushMessageBody } from '../models/DuoModel';
+import { ActiveLockState, isLocked, QuickFocusOptions } from '../models/ActiveLockModel';
+import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody } from '../models/DuoModel';
+import { PageRoutes, replaceRoute } from '../router/PageRoutes';
+import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
 import { applyScreenRestriction, releaseScreenRestriction } from './ScreenTimeService';
 import { DuoApiService } from './DuoApiService';
+import { InAppMessageService } from './InAppMessageService';
+import { readStoredString, removeStoredKey, writeStoredString } from './PreferencesService';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { bootstrapStores } from '../stores/StoreBootstrap';
@@ -13,6 +16,13 @@ import { bootstrapStores } from '../stores/StoreBootstrap';
 bootstrapStores();
 
 const handledBreachSessionIds: Set<string> = new Set();
+const PENDING_BREACH_KEY: string = 'duo.push.pendingBreach';
+
+type PushMessageHandler = (
+  context: common.UIAbilityContext,
+  payload: DuoPushPayload,
+  options?: PushDispatchOptions
+) => Promise<void>;
 
 export class DuoPushHandler {
   static extractCustomBody(body: UmengPushMessageBody | undefined): string {
@@ -53,36 +63,65 @@ export class DuoPushHandler {
     }
   }
 
-  static async handlePayload(payload: DuoPushPayload): Promise<void> {
+  static async handlePayload(
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions,
+    hostContext?: common.UIAbilityContext
+  ): Promise<void> {
     if (payload.type.length === 0) {
       return;
     }
 
-    const context = AppContextHolder.getAbility();
+    const context = hostContext ?? AppContextHolder.getAbility();
     if (!context) {
       return;
     }
 
-    if (payload.type === 'duo_joined') {
-      await DuoPushHandler.handleDuoJoined(payload);
+    const handler = DuoPushHandler.resolveHandler(payload.type);
+    if (handler) {
+      await handler(context, payload, options);
       return;
     }
 
-    if (payload.type === 'duo_start') {
-      await DuoPushHandler.handleDuoStart(context, payload);
-      return;
-    }
-
-    if (payload.type === 'duo_breach') {
-      await DuoPushHandler.handleDuoBreach(context, payload);
+    if (options?.isForeground) {
+      DuoPushHandler.showForegroundBanner(payload, options);
     }
   }
 
-  static async checkRemoteSessionState(
+  /** 冷启动或推送唤醒时，处理上次未完成的撕毁解除 */
+  static async processPendingBreach(context: common.UIAbilityContext): Promise<void> {
+    const raw = readStoredString(context, PENDING_BREACH_KEY, '');
+    if (raw.length === 0) {
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(raw) as DuoPushPayload;
+      if (payload.type !== 'duo_breach') {
+        DuoPushHandler.clearPendingBreach(context);
+        return;
+      }
+      await DuoPushHandler.handleDuoBreach(context, payload, { isForeground: false });
+    } catch {
+      DuoPushHandler.clearPendingBreach(context);
+    }
+  }
+
+  /**
+   * 用户未点通知、直接打开 App 时，用一次远端状态补齐撕毁解除。
+   * 仅在本地仍有双人专注锁时查询，不是定时轮询。
+   */
+  static async syncActiveDuoBreachIfNeeded(
     context: common.UIAbilityContext,
-    sessionId: string
+    options?: PushDispatchOptions
   ): Promise<void> {
-    if (sessionId.length === 0) {
+    const state = DuoPushHandler.resolveActiveLockState(context);
+    if (state.kind !== 'quick_focus' || state.participationMode !== 'duo') {
+      return;
+    }
+
+    const sessionId = state.duoSessionId;
+    if (sessionId.length === 0 || handledBreachSessionIds.has(sessionId)) {
       return;
     }
 
@@ -92,14 +131,72 @@ export class DuoPushHandler {
       return;
     }
 
-    const violatorName = session.breached_by_name || '搭子';
+    const violatorName = session.breached_by_name && session.breached_by_name.length > 0
+      ? session.breached_by_name
+      : '搭子';
     const breachPayload: DuoPushPayload = {
       type: 'duo_breach',
       session_id: sessionId,
       violator_name: violatorName,
       message: `由于你的搭子 ${violatorName} 撕毁了契约，本次专注已中止`
     };
-    await DuoPushHandler.handleDuoBreach(context, breachPayload);
+    await DuoPushHandler.handleDuoBreach(context, breachPayload, options);
+  }
+
+  private static persistPendingBreach(context: common.Context, payload: DuoPushPayload): void {
+    writeStoredString(context, PENDING_BREACH_KEY, JSON.stringify(payload));
+  }
+
+  private static clearPendingBreach(context: common.Context): void {
+    removeStoredKey(context, PENDING_BREACH_KEY);
+  }
+
+  private static resolveActiveLockState(context: common.Context): ActiveLockState {
+    LockStore.hydrate(context);
+    const persisted = loadPersistedActiveLockState(context);
+    if (persisted) {
+      return persisted;
+    }
+    return LockStore.getState();
+  }
+
+  private static resolveHandler(type: string): PushMessageHandler | null {
+    switch (type) {
+      case 'duo_joined':
+        return DuoPushHandler.handleDuoJoined;
+      case 'duo_start':
+        return DuoPushHandler.handleDuoStart;
+      case 'duo_breach':
+        return DuoPushHandler.handleDuoBreach;
+      case 'duo_scheduled_joined':
+        return DuoPushHandler.handleDuoScheduledJoined;
+      default:
+        return null;
+    }
+  }
+
+  private static showForegroundBanner(
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): void {
+    const title = options?.title && options.title.length > 0
+      ? options.title
+      : '专注契约提醒';
+    const message = DuoPushHandler.resolveBannerMessage(payload, options);
+    InAppMessageService.show(title, message, payload.type);
+  }
+
+  private static resolveBannerMessage(
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): string {
+    if (payload.message && payload.message.length > 0) {
+      return payload.message;
+    }
+    if (options?.text && options.text.length > 0) {
+      return options.text;
+    }
+    return '你有一条新的专注通知';
   }
 
   private static recordToPayload(record: Record<string, string>): DuoPushPayload {
@@ -147,19 +244,52 @@ export class DuoPushHandler {
     return merged;
   }
 
-  private static async handleDuoJoined(payload: DuoPushPayload): Promise<void> {
+  private static async handleDuoJoined(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
     const partnerName = payload.partner_name && payload.partner_name.length > 0
       ? payload.partner_name
       : '搭子';
-    showToast(`${partnerName} 加入了你的契约`);
+    const message = `${partnerName} 加入了你的契约`;
+
+    if (options?.isForeground) {
+      const title = options.title && options.title.length > 0 ? options.title : '搭子加入';
+      InAppMessageService.show(title, message, payload.type);
+    }
+
+    await DuoPushHandler.handleDuoStart(context, payload, options);
+  }
+
+  private static async handleDuoScheduledJoined(
+    _context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    if (!options?.isForeground) {
+      return;
+    }
+
+    const partnerName = payload.partner_name && payload.partner_name.length > 0
+      ? payload.partner_name
+      : '搭子';
+    const title = options.title && options.title.length > 0 ? options.title : '搭子加入';
+    InAppMessageService.show(title, `${partnerName} 加入了你的定时连坐`, payload.type);
   }
 
   private static async handleDuoStart(
     context: common.UIAbilityContext,
-    payload: DuoPushPayload
+    payload: DuoPushPayload,
+    _options?: PushDispatchOptions
   ): Promise<void> {
     const sessionId = payload.session_id ?? '';
-    if (sessionId.length === 0 || LockStore.isLocked()) {
+    if (sessionId.length === 0) {
+      return;
+    }
+
+    LockStore.hydrate(context);
+    if (LockStore.isLocked()) {
       return;
     }
 
@@ -190,18 +320,22 @@ export class DuoPushHandler {
       participationMode: 'duo'
     };
     LockStore.startQuickFocus(context, tokens, durationMin, 'allow', focusOptions);
+    replaceRoute(PageRoutes.FocusHome);
   }
 
   private static async handleDuoBreach(
     context: common.UIAbilityContext,
-    payload: DuoPushPayload
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
   ): Promise<void> {
     const sessionId = payload.session_id ?? '';
     if (sessionId.length === 0 || handledBreachSessionIds.has(sessionId)) {
+      DuoPushHandler.clearPendingBreach(context);
       return;
     }
 
-    const state = LockStore.getState();
+    DuoPushHandler.persistPendingBreach(context, payload);
+    const state = DuoPushHandler.resolveActiveLockState(context);
     if (state.duoSessionId.length === 0 || state.duoSessionId !== sessionId) {
       return;
     }
@@ -219,15 +353,19 @@ export class DuoPushHandler {
 
     LockStore.clear(context);
     SettingsStore.updateStatusMessage(context, message);
+    DuoPushHandler.clearPendingBreach(context);
 
-    try {
-      await promptAction.showDialog({
-        title: '契约被撕毁',
-        message,
-        buttons: [{ text: '知道了', color: '#DC2626' }]
-      });
-    } catch (error) {
-      console.error(`show breach dialog failed: ${String(error)}`);
+    if (options?.isForeground) {
+      InAppMessageService.dismiss();
+      try {
+        await promptAction.showDialog({
+          title: '契约被撕毁',
+          message,
+          buttons: [{ text: '知道了', color: '#DC2626' }]
+        });
+      } catch (error) {
+        console.error(`show breach dialog failed: ${String(error)}`);
+      }
     }
   }
 }

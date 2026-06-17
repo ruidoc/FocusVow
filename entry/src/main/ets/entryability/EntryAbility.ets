@@ -21,14 +21,16 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, TAG, '%{public}s', 'Failed to set colorMode.');
     }
     AppContextHolder.bind(this.context);
+    AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
     warmUpPreferencesStore(this.context);
     this.setupPushAgent();
+    UmengSdkService.handleLaunchWant(want, this.context);
     hilog.info(DOMAIN, TAG, 'preferences storage dir=%{public}s', getPreferencesStorageDir(this.context));
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onCreate');
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    void PushAgent.onNewWant(want);
+    UmengSdkService.handleLaunchWant(want, this.context);
   }
 
   private setupPushAgent(): void {
@@ -40,7 +42,11 @@ export default class EntryAbility extends UIAbility {
 
     PushAgent.onClickMessage((extra: Record<string, string>) => {
       hilog.info(DOMAIN, TAG, 'push click extra: %{public}s', JSON.stringify(extra));
-      void DuoPushHandler.handlePayload(DuoPushHandler.parsePushPayload(extra));
+      void DuoPushHandler.handlePayload(
+        DuoPushHandler.parsePushPayload(extra),
+        { isForeground: AppStorage.get<boolean>(StoreKeys.AppIsForeground) ?? false },
+        this.context
+      );
     });
 
     PushAgent.onCustomMessage((customMsg: MsgContent) => {
@@ -50,7 +56,9 @@ export default class EntryAbility extends UIAbility {
         customMsg.extra as Record<string, string>,
         bodyText
       );
-      void DuoPushHandler.handlePayload(payload);
+      void DuoPushHandler.handlePayload(payload, {
+        isForeground: AppStorage.get<boolean>(StoreKeys.AppIsForeground) ?? false
+      }, this.context);
     });
   }
 
@@ -97,15 +105,20 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    AppStorage.setOrCreate(StoreKeys.AppIsForeground, true);
     AppStorage.setOrCreate(StoreKeys.AppForegroundAt, Date.now());
     const context = AppContextHolder.get();
     if (context) {
       void FocusSyncService.flushPending(context);
+      void DuoPushHandler.processPendingBreach(this.context).then(() => {
+        return DuoPushHandler.syncActiveDuoBreachIfNeeded(this.context, { isForeground: true });
+      });
     }
   }
 
   onBackground(): void {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
   }
 }

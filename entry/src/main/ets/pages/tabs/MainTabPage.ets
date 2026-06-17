@@ -4,7 +4,6 @@ import { AppTheme } from '../../constants/Theme';
 import { ActiveLockState, createIdleLockState } from '../../models/ActiveLockModel';
 import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
-import { DuoPushHandler } from '../../services/DuoPushHandler';
 import { FocusSyncService } from '../../services/FocusSyncService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { warmUpPreferencesStore } from '../../services/PreferencesService';
@@ -21,6 +20,7 @@ import { ContractTabPage } from './ContractTabPage';
 import { FocusHomePage } from './FocusHomePage';
 import { ProfilePage } from './ProfilePage';
 import { StatsPage } from './StatsPage';
+import { InAppMessageBanner } from '../../components/common/InAppMessageBanner';
 
 bootstrapStores();
 
@@ -36,7 +36,6 @@ struct MainTabPage {
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
-  private duoBreachPollTick: number = 0;
   private lastClipboardProbeAt: number = 0;
 
   aboutToAppear(): void {
@@ -141,22 +140,6 @@ struct MainTabPage {
     if (this.activeLock.kind === 'quick_focus' && LockStore.shouldAutoFinish()) {
       this.finishQuickFocus();
     }
-
-    if (
-      this.activeLock.kind === 'quick_focus' &&
-      this.activeLock.participationMode === 'duo' &&
-      this.activeLock.duoSessionId.length > 0
-    ) {
-      this.duoBreachPollTick += 1;
-      if (this.duoBreachPollTick % 3 === 0) {
-        void DuoPushHandler.checkRemoteSessionState(
-          hostContext,
-          this.activeLock.duoSessionId
-        );
-      }
-    } else {
-      this.duoBreachPollTick = 0;
-    }
   }
 
   private async finishQuickFocus(): Promise<void> {
@@ -219,39 +202,45 @@ struct MainTabPage {
   }
 
   build() {
-    Column() {
-      if (this.currentTab === 'focus') {
-        FocusHomePage({
-          onSelectTab: (tab: 'plans') => {
-            this.currentTab = tab;
-          }
-        })
-          .layoutWeight(1)
-      } else if (this.currentTab === 'plans') {
-        ContractTabPage()
-          .layoutWeight(1)
-      } else if (this.currentTab === 'stats') {
-        StatsPage()
-          .layoutWeight(1)
-      } else {
-        ProfilePage()
-          .layoutWeight(1)
-      }
+    Stack({ alignContent: Alignment.Top }) {
+      Column() {
+        if (this.currentTab === 'focus') {
+          FocusHomePage({
+            onSelectTab: (tab: 'plans') => {
+              this.currentTab = tab;
+            }
+          })
+            .layoutWeight(1)
+        } else if (this.currentTab === 'plans') {
+          ContractTabPage()
+            .layoutWeight(1)
+        } else if (this.currentTab === 'stats') {
+          StatsPage()
+            .layoutWeight(1)
+        } else {
+          ProfilePage()
+            .layoutWeight(1)
+        }
 
-      Row() {
-        this.buildTabItem('focus', '专注')
-        this.buildTabItem('plans', '计划')
-        this.buildTabItem('stats', '统计')
-        this.buildTabItem('profile', '我的')
+        Row() {
+          this.buildTabItem('focus', '专注')
+          this.buildTabItem('plans', '计划')
+          this.buildTabItem('stats', '统计')
+          this.buildTabItem('profile', '我的')
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 + this.bottomGestureInsetVp })
+        .backgroundColor(AppTheme.colors.backgroundSoft)
+        .border({ width: 1, color: AppTheme.colors.border })
       }
       .width('100%')
-      .padding({ left: 12, right: 12, top: 8, bottom: 8 + this.bottomGestureInsetVp })
-      .backgroundColor(AppTheme.colors.backgroundSoft)
-      .border({ width: 1, color: AppTheme.colors.border })
+      .height('100%')
+      .backgroundColor(AppTheme.colors.background)
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+
+      InAppMessageBanner()
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(AppTheme.colors.background)
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 }

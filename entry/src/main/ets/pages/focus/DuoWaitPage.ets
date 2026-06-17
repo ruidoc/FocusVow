@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
+import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView } from '../../models/DuoModel';
@@ -25,7 +26,6 @@ struct DuoWaitPage {
 
   private sessionId: string = '';
   private timerId: number = -1;
-  private pollId: number = -1;
 
   aboutToAppear(): void {
     this.sessionId = String(AppStorage.get<string>('duo.wait.session_id') ?? '');
@@ -47,10 +47,6 @@ struct DuoWaitPage {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
-    if (this.pollId !== -1) {
-      clearInterval(this.pollId);
-      this.pollId = -1;
-    }
   }
 
   private startTimers(): void {
@@ -58,11 +54,10 @@ struct DuoWaitPage {
     this.timerId = setInterval(() => {
       if (this.remainSeconds > 0) {
         this.remainSeconds -= 1;
+        return;
       }
-    }, 1000);
-    this.pollId = setInterval(() => {
       void this.refreshSession();
-    }, 2500);
+    }, 1000);
   }
 
   private toastError(message: string): void {
@@ -73,6 +68,28 @@ struct DuoWaitPage {
     const minutes = Math.floor(this.remainSeconds / 60);
     const seconds = (this.remainSeconds % 60).toString().padStart(2, '0');
     return `${minutes}:${seconds}`;
+  }
+
+  private getSessionTitle(): string {
+    return this.session?.title ?? String(AppStorage.get<string>('duo.wait.title') ?? '双人连坐');
+  }
+
+  private getSessionDurationLabel(): string {
+    const durationMin = Number(AppStorage.get<number>('duo.wait.duration_min') ?? this.session?.duration_min ?? 0);
+    if (durationMin >= 60) {
+      const h = Math.floor(durationMin / 60);
+      const m = durationMin % 60;
+      return m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分钟`;
+    }
+    return `${durationMin} 分钟`;
+  }
+
+  private getInitiatorName(): string {
+    return this.session?.initiator?.nickname ?? '我';
+  }
+
+  private getPartnerName(): string {
+    return this.session?.partner?.nickname ?? '等待搭子';
   }
 
   private async refreshSession(): Promise<void> {
@@ -143,6 +160,7 @@ struct DuoWaitPage {
     const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.inviteText);
     const systemPasteboard = pasteboard.getSystemPasteboard();
     await systemPasteboard.setData(pasteData);
+    DuoInviteClipboardService.dismissToken(extractDuoInviteToken(this.inviteText));
     showToast('口令已复制，请发给搭子', this.getUIContext());
   }
 
@@ -150,6 +168,73 @@ struct DuoWaitPage {
     await DuoApiService.cancelSession(this.sessionId);
     this.clearTimers();
     replaceRoute(PageRoutes.FocusHome);
+  }
+
+  @Builder
+  private buildParticipantRow(name: string, status: string, active: boolean): void {
+    Row({ space: 10 }) {
+      Text(name.substring(0, 1))
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(active ? AppTheme.colors.primary : AppTheme.colors.textMuted)
+        .width(36)
+        .height(36)
+        .textAlign(TextAlign.Center)
+        .backgroundColor(active ? AppTheme.colors.primarySoft : AppTheme.colors.surfaceRaised)
+        .borderRadius(18)
+
+      Column({ space: 2 }) {
+        Text(name)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+        Text(status)
+          .fontSize(12)
+          .fontColor(active ? AppTheme.colors.success : AppTheme.colors.textMuted)
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private buildRitualCard(): void {
+    Column({ space: 16 }) {
+      Column({ space: 6 }) {
+        Text(this.getSessionTitle())
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+
+        Text(`${this.getSessionDurationLabel()} · 一人撕毁，两人失败`)
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+
+      Column({ space: 12 }) {
+        this.buildParticipantRow(this.getInitiatorName(), '已发起契约', true)
+        this.buildParticipantRow(
+          this.getPartnerName(),
+          this.session?.partner ? '已加入，准备开始' : '等待加入',
+          this.session?.partner !== null && this.session?.partner !== undefined
+        )
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(20)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
   }
 
   @Builder
@@ -199,6 +284,7 @@ struct DuoWaitPage {
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
 
+      this.buildRitualCard()
       this.buildInviteCard()
 
       Button('复制口令')

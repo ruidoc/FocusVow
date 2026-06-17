@@ -45,7 +45,40 @@ export class DuoInviteClipboardService {
   }
 
   static clearJoinFlow(): void {
-    suppressedToken = '';
+    AppStorage.setOrCreate(DUO_JOIN_TOKEN_KEY, '');
+  }
+
+  static dismissToken(token: string): void {
+    if (token.length === 0) {
+      return;
+    }
+    dismissedToken = token;
+    suppressedToken = token;
+  }
+
+  static async clearInviteClipboard(): Promise<void> {
+    try {
+      const systemPasteboard = pasteboard.getSystemPasteboard();
+      const data = await systemPasteboard.getData();
+      const text = data.getPrimaryText() ?? '';
+      if (!isFocusInviteClipboardText(text)) {
+        return;
+      }
+      const emptyData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, '');
+      await systemPasteboard.setData(emptyData);
+    } catch (error) {
+      console.warn(`clear invite clipboard failed: ${String(error)}`);
+    }
+  }
+
+  private static isOwnInvite(session: DuoSessionView, myUserId: string): boolean {
+    if (myUserId.length === 0) {
+      return false;
+    }
+    if (session.viewer_role === 'initiator') {
+      return true;
+    }
+    return session.initiator?.id === myUserId;
   }
 
   static async probeClipboard(
@@ -72,7 +105,24 @@ export class DuoInviteClipboardService {
 
       const response = await DuoApiService.getByToken(token);
       const session = DuoApiService.parseSession(response);
-      if (!session || session.status === 'expired' || session.status === 'cancelled') {
+      if (!session) {
+        const message = response.message ?? '';
+        if (message.includes('自己发起') || message.includes('不能加入')) {
+          DuoInviteClipboardService.dismissToken(token);
+          await DuoInviteClipboardService.clearInviteClipboard();
+        }
+        return;
+      }
+
+      const myUserId = UserStore.getUserInfo().id;
+      if (DuoInviteClipboardService.isOwnInvite(session, myUserId)) {
+        DuoInviteClipboardService.dismissToken(token);
+        await DuoInviteClipboardService.clearInviteClipboard();
+        return;
+      }
+
+      if (session.status === 'expired' || session.status === 'cancelled') {
+        DuoInviteClipboardService.dismissToken(token);
         return;
       }
 
@@ -85,14 +135,14 @@ export class DuoInviteClipboardService {
           value: '加入契约',
           action: () => {
             DuoInviteClipboardService.stashJoinToken(token);
+            DuoInviteClipboardService.dismissToken(token);
             pushRoute(PageRoutes.DuoJoin);
           }
         },
         secondaryButton: {
           value: '暂不',
           action: () => {
-            dismissedToken = token;
-            suppressedToken = '';
+            DuoInviteClipboardService.dismissToken(token);
           }
         }
       });

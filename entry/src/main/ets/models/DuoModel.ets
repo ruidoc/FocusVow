@@ -41,6 +41,11 @@ export interface DuoStatsSummary {
   failed_count: number;
   actual_mins: number;
   success_rate: number;
+  streak_days: number;
+  best_streak_days: number;
+  total_completed_count: number;
+  total_actual_mins: number;
+  duo_success_rate: number;
 }
 
 export interface DuoTimelineRecord {
@@ -98,6 +103,12 @@ export interface DuoPushPayload {
   duration_min?: string;
 }
 
+export interface PushDispatchOptions {
+  isForeground?: boolean;
+  title?: string;
+  text?: string;
+}
+
 export interface UmengPushMessageBody {
   custom?: string;
 }
@@ -147,7 +158,12 @@ export function parseDuoStatsSummary(raw: Record<string, Object> | undefined): D
     completed_count: Number(raw['completed_count'] ?? 0),
     failed_count: Number(raw['failed_count'] ?? 0),
     actual_mins: Number(raw['actual_mins'] ?? 0),
-    success_rate: Number(raw['success_rate'] ?? 0)
+    success_rate: Number(raw['success_rate'] ?? 0),
+    streak_days: Number(raw['streak_days'] ?? 0),
+    best_streak_days: Number(raw['best_streak_days'] ?? 0),
+    total_completed_count: Number(raw['total_completed_count'] ?? 0),
+    total_actual_mins: Number(raw['total_actual_mins'] ?? 0),
+    duo_success_rate: Number(raw['duo_success_rate'] ?? 0)
   };
 }
 

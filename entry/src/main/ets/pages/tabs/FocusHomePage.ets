@@ -323,7 +323,7 @@ export struct FocusHomePage {
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
 
-        Text('单人修炼立即开始；双人连坐需邀请搭子同时履约。')
+        Text('第一次建议先用 15 分钟单人修炼；熟悉后再和搭子连坐。')
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)
@@ -338,17 +338,38 @@ export struct FocusHomePage {
         }
       })
 
-      Button('双人连坐')
+      Row({ space: 12 }) {
+        Button('发起连坐')
+          .layoutWeight(1)
+          .height(52)
+          .type(ButtonType.Capsule)
+          .backgroundColor(AppTheme.colors.surface)
+          .fontColor(AppTheme.colors.textPrimary)
+          .fontWeight(FontWeight.Medium)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .onClick(() => {
+            this.ensureLoginThen(PageRoutes.DuoCreate);
+          })
+
+        Button('加入连坐')
+          .layoutWeight(1)
+          .height(52)
+          .type(ButtonType.Capsule)
+          .backgroundColor(AppTheme.colors.surface)
+          .fontColor(AppTheme.colors.textPrimary)
+          .fontWeight(FontWeight.Medium)
+          .border({ width: 1, color: AppTheme.colors.border })
+          .onClick(() => {
+            this.ensureLoginThen(PageRoutes.DuoJoin);
+          })
+      }
+      .width('100%')
+
+      Text('双人连坐：一人撕毁，两人都记为失败。')
+        .fontSize(13)
+        .fontColor(AppTheme.colors.textMuted)
+        .textAlign(TextAlign.Center)
         .width('100%')
-        .height(52)
-        .type(ButtonType.Capsule)
-        .backgroundColor(AppTheme.colors.surface)
-        .fontColor(AppTheme.colors.textPrimary)
-        .fontWeight(FontWeight.Medium)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .onClick(() => {
-          this.ensureLoginThen(PageRoutes.DuoCreate);
-        })
     }
     .width('100%')
     .padding({ left: 12, right: 12 })

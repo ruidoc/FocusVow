@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { showErrorToast } from '../../common/Toast';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView } from '../../models/DuoModel';
@@ -28,9 +29,14 @@ struct DuoJoinPage {
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State tokenInput: string = '';
   @State preview: DuoSessionView | null = null;
+  @State isLoadingPreview: boolean = false;
   @State isSubmitting: boolean = false;
 
   aboutToDisappear(): void {
+    const token = extractDuoInviteToken(this.tokenInput);
+    if (token.length > 0) {
+      DuoInviteClipboardService.dismissToken(token);
+    }
     DuoInviteClipboardService.clearJoinFlow();
   }
 
@@ -53,17 +59,38 @@ struct DuoJoinPage {
     showErrorToast(message, this.getUIContext());
   }
 
+  private async pasteInvite(): Promise<void> {
+    try {
+      const systemPasteboard = pasteboard.getSystemPasteboard();
+      const data = await systemPasteboard.getData();
+      const text = data.getPrimaryText() ?? '';
+      if (text.trim().length === 0) {
+        this.toastError('剪贴板里没有可用口令');
+        return;
+      }
+      this.tokenInput = text;
+      await this.loadPreview();
+    } catch (error) {
+      this.toastError(`读取剪贴板失败：${String(error)}`);
+    }
+  }
+
   private async loadPreview(): Promise<void> {
+    if (this.isLoadingPreview) {
+      return;
+    }
     const token = extractDuoInviteToken(this.tokenInput);
     if (token.length === 0) {
       this.toastError('未找到有效口令');
       return;
     }
+    this.isLoadingPreview = true;
     const response = await DuoApiService.getByToken(token);
     this.preview = DuoApiService.parseSession(response);
     if (!this.preview) {
       this.toastError(response.message ?? '无法识别口令');
     }
+    this.isLoadingPreview = false;
   }
 
   private async chooseApps(): Promise<void> {
@@ -95,7 +122,9 @@ struct DuoJoinPage {
 
     this.isSubmitting = true;
     const token = extractDuoInviteToken(this.tokenInput);
-    const response = await DuoApiService.instantJoin(token, this.selectedTokens.length);
+    const response = this.preview.type === 'scheduled'
+      ? await DuoApiService.scheduledJoin(token, this.selectedTokens.length)
+      : await DuoApiService.instantJoin(token, this.selectedTokens.length);
     const session = DuoApiService.parseSession(response);
     if (!session) {
       this.toastError(response.message ?? '加入失败');
@@ -103,7 +132,26 @@ struct DuoJoinPage {
       return;
     }
 
+    if (session.type === 'scheduled') {
+      DuoInviteClipboardService.dismissToken(token);
+      void DuoInviteClipboardService.clearInviteClipboard();
+      showToast('已加入定时连坐，开始时会一起履约', this.getUIContext());
+      this.isSubmitting = false;
+      replaceRoute(PageRoutes.FocusHome);
+      return;
+    }
+
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (!this.hasAuthorized) {
+      const auth = await requestScreenTimeAuthorization(hostContext);
+      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
+      if (!auth.ok) {
+        this.toastError(auth.message);
+        this.isSubmitting = false;
+        return;
+      }
+    }
+
     const lockResult = await applyScreenRestriction(this.selectedTokens, 'allow');
     if (!lockResult.ok) {
       this.toastError(lockResult.message);
@@ -118,6 +166,8 @@ struct DuoJoinPage {
       participationMode: 'duo'
     };
     LockStore.startQuickFocus(hostContext, this.selectedTokens, session.duration_min, 'allow', focusOptions);
+    DuoInviteClipboardService.dismissToken(token);
+    void DuoInviteClipboardService.clearInviteClipboard();
     this.isSubmitting = false;
     replaceRoute(PageRoutes.FocusHome);
   }
@@ -138,7 +188,9 @@ struct DuoJoinPage {
           .fontColor(AppTheme.colors.textPrimary)
           .width('100%')
 
-        Text(`时长 ${this.preview.duration_min} 分钟 · 白名单模式`)
+        Text(this.preview.type === 'scheduled'
+          ? '定时契约 · 到点一起履约'
+          : `时长 ${this.preview.duration_min} 分钟 · 白名单模式`)
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
@@ -203,10 +255,47 @@ struct DuoJoinPage {
   @Builder
   private buildPageBody(): void {
     Column({ space: 18 }) {
-      Text('选择要放行的应用，确认后将与搭子同时开始锁机。')
+      Text('粘贴或输入搭子的口令，先确认契约信息，再选择要放行的应用。')
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
+
+      Column({ space: 12 }) {
+        TextInput({ text: this.tokenInput, placeholder: '粘贴口令，例如 $FOCUS123$' })
+          .width('100%')
+          .height(44)
+          .onChange((value: string) => {
+            this.tokenInput = value;
+            this.preview = null;
+          })
+
+        Row({ space: 12 }) {
+          Button('粘贴口令')
+            .layoutWeight(1)
+            .height(44)
+            .type(ButtonType.Capsule)
+            .backgroundColor(AppTheme.colors.surfaceRaised)
+            .fontColor(AppTheme.colors.textPrimary)
+            .border({ width: 1, color: AppTheme.colors.border })
+            .onClick(() => {
+              void this.pasteInvite();
+            })
+
+          Button(this.isLoadingPreview ? '识别中...' : '识别口令')
+            .layoutWeight(1)
+            .height(44)
+            .type(ButtonType.Capsule)
+            .backgroundColor(AppTheme.colors.primary)
+            .fontColor('#FFFFFF')
+            .enabled(!this.isLoadingPreview)
+            .opacity(this.isLoadingPreview ? 0.55 : 1)
+            .onClick(() => {
+              void this.loadPreview();
+            })
+        }
+        .width('100%')
+      }
+      .width('100%')
 
       this.buildPreviewCard()
       this.buildAppCard()

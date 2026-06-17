@@ -19,3 +19,4 @@ export default class MyAbilityStage extends AbilityStage {
     });
   }
 }
+

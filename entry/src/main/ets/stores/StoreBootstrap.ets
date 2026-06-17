@@ -1,4 +1,5 @@
 import { createIdleLockState } from '../models/ActiveLockModel';
+import { createHiddenInAppMessage } from '../models/InAppMessageModel';
 import { createDefaultCycleGuardState } from '../models/CycleGuardModel';
 import { createDefaultSettingsState } from '../models/PermissionModel';
 import { createEmptyUserInfo } from '../models/UserModel';
@@ -31,5 +32,6 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.UserAccessToken, '');
   AppStorage.setOrCreate(StoreKeys.UserIsLoggedIn, false);
   AppStorage.setOrCreate(StoreKeys.UserInfo, createEmptyUserInfo());
+  AppStorage.setOrCreate(StoreKeys.InAppMessage, createHiddenInAppMessage());
   bootstrapped = true;
 }

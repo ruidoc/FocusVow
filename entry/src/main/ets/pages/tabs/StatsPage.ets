@@ -22,7 +22,9 @@ export struct StatsPage {
   @State summary: DuoStatsSummary | null = null;
   @State timeline: DuoTimelineDay[] = [];
   @State shame: DuoShameDay[] = [];
+  @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
+  @State errorMessage: string = '';
 
   private statsScroller: Scroller = new Scroller();
   @State private scrollerReady: boolean = false;
@@ -45,27 +47,42 @@ export struct StatsPage {
   private async reload(fromPull: boolean = false): Promise<void> {
     if (fromPull) {
       this.isRefreshing = true;
+    } else {
+      this.isLoading = true;
     }
+    this.errorMessage = '';
 
     if (!UserStore.isLoggedIn()) {
-      showErrorToast('登录后可查看上岸时光轴与耻辱柱', this.getUIContext());
+      this.errorMessage = '登录后可查看上岸时光轴与耻辱柱';
       this.summary = null;
       this.timeline = [];
       this.shame = [];
+      this.isLoading = false;
       this.isRefreshing = false;
       return;
     }
 
     const period = this.currentPeriod;
-    const summaryRes = await DuoApiService.getStatsSummary(period);
-    const timelineRes = await DuoApiService.getStatsTimeline(period);
-    const shameRes = await DuoApiService.getStatsShame(period);
+    const responses = await Promise.all([
+      DuoApiService.getStatsSummary(period),
+      DuoApiService.getStatsTimeline(period),
+      DuoApiService.getStatsShame(period)
+    ]);
+    const summaryRes = responses[0];
+    const timelineRes = responses[1];
+    const shameRes = responses[2];
+
+    if (summaryRes.statusCode !== 200 || timelineRes.statusCode !== 200 || shameRes.statusCode !== 200) {
+      this.errorMessage = summaryRes.message ?? timelineRes.message ?? shameRes.message ?? '统计加载失败';
+      showErrorToast(this.errorMessage, this.getUIContext());
+    }
 
     this.summary = DuoApiService.parseSummary(summaryRes);
     const timelineData = DuoApiService.parseTimeline(timelineRes);
     const shameData = DuoApiService.parseShame(shameRes);
     this.timeline = timelineData?.items ?? [];
     this.shame = shameData?.items ?? [];
+    this.isLoading = false;
     this.isRefreshing = false;
   }
 
@@ -105,6 +122,73 @@ export struct StatsPage {
     .borderRadius(AppTheme.radius.lg)
     .border({ width: 1, color: AppTheme.colors.border })
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private buildGrowthMetric(label: string, value: string, hint: string): void {
+    Column({ space: 5 }) {
+      Text(value)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+      Text(label)
+        .fontSize(12)
+        .fontColor(AppTheme.colors.textSecondary)
+        .width('100%')
+      Text(hint)
+        .fontSize(11)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+        .maxLines(1)
+    }
+    .layoutWeight(1)
+    .padding(14)
+    .backgroundColor(AppTheme.colors.surface)
+    .borderRadius(AppTheme.radius.md)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private buildGrowthSection(): void {
+    Column({ space: 10 }) {
+      Text('上岸进度')
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+
+      Row({ space: 10 }) {
+        this.buildGrowthMetric('连续上岸', `${this.summary?.streak_days ?? 0} 天`, `最长 ${this.summary?.best_streak_days ?? 0} 天`)
+        this.buildGrowthMetric('累计守约', `${this.summary?.total_completed_count ?? 0} 次`, `${this.summary?.total_actual_mins ?? 0} 分钟`)
+      }
+      .width('100%')
+
+      Row({ space: 10 }) {
+        this.buildGrowthMetric('双人成功率', `${this.summary?.duo_success_rate ?? 0}%`, '和搭子一起')
+        this.buildGrowthMetric('本期成功率', `${this.summary?.success_rate ?? 0}%`, this.getPeriodLabel(this.currentPeriod))
+      }
+      .width('100%')
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private buildStatusNotice(): void {
+    if (this.isLoading) {
+      Text('正在整理你的上岸记录...')
+        .fontSize(13)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+        .textAlign(TextAlign.Center)
+    } else if (this.errorMessage.length > 0) {
+      Text(this.errorMessage)
+        .fontSize(13)
+        .fontColor(AppTheme.colors.danger)
+        .width('100%')
+        .textAlign(TextAlign.Center)
+    }
   }
 
   @Builder
@@ -193,7 +277,9 @@ export struct StatsPage {
           }
           .width('100%')
 
+          this.buildStatusNotice()
           this.buildSummaryCard()
+          this.buildGrowthSection()
           this.buildTimelineSection()
           this.buildShameSection()
         }

@@ -277,6 +277,11 @@ struct QuickStartPage {
   @Builder
   buildQuickBody(): void {
     Column({ space: 18 }) {
+      Text('新手推荐 15 分钟，先跑通一次完整上岸。')
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textSecondary)
+        .width('100%')
+
       TextInput({ text: this.title, placeholder: '今天要完成什么？' })
         .width('100%')
         .height(44)

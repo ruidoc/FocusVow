@@ -8,6 +8,7 @@ import {
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
+import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -103,6 +104,9 @@ struct DuoCreatePage {
     AppStorage.setOrCreate('duo.wait.duration_min', this.durationMinutes);
     AppStorage.setOrCreate('duo.wait.title', this.title.trim());
     AppStorage.setOrCreate('duo.wait.invite_text', session.invite_text ?? '');
+    if (session.token.length > 0) {
+      DuoInviteClipboardService.dismissToken(session.token);
+    }
     this.isSubmitting = false;
     replaceRoute(PageRoutes.DuoWait);
   }
@@ -203,6 +207,21 @@ struct DuoCreatePage {
   @Builder
   private buildPageBody(): void {
     Column({ space: 18 }) {
+      Column({ space: 8 }) {
+        Text('和搭子一起立约')
+          .fontSize(24)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+
+        Text('对方加入后双方同时开始。一人撕毁，两人都会记为失败。')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
       TextInput({ text: this.title, placeholder: '今天要完成什么？' })
         .width('100%')
         .height(44)
