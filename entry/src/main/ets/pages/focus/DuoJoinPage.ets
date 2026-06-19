@@ -5,14 +5,17 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView } from '../../models/DuoModel';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
-import { PageRoutes, backRoute, pushRoute, replaceRoute } from '../../router/PageRoutes';
+import { PageRoutes, backRoute, pushRoute, replaceRoute, navigateToMainTab } from '../../router/PageRoutes';
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
+  ensureScreenTimeAuthorization,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
+import { syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
@@ -123,7 +126,7 @@ struct DuoJoinPage {
     this.isSubmitting = true;
     const token = extractDuoInviteToken(this.tokenInput);
     const response = this.preview.type === 'scheduled'
-      ? await DuoApiService.scheduledJoin(token, this.selectedTokens.length)
+      ? await DuoApiService.scheduledJoin(token, [...this.selectedTokens])
       : await DuoApiService.instantJoin(token, this.selectedTokens.length);
     const session = DuoApiService.parseSession(response);
     if (!session) {
@@ -133,11 +136,27 @@ struct DuoJoinPage {
     }
 
     if (session.type === 'scheduled') {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const auth = await ensureScreenTimeAuthorization(hostContext);
+      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
+      if (!auth.ok) {
+        this.toastError(auth.message);
+        this.isSubmitting = false;
+        return;
+      }
+      const guardResult = await syncGuardForSession(hostContext, session);
+      if (!guardResult.ok) {
+        this.toastError(guardResult.message);
+        this.isSubmitting = false;
+        return;
+      }
       DuoInviteClipboardService.dismissToken(token);
       void DuoInviteClipboardService.clearInviteClipboard();
-      showToast('已加入定时连坐，开始时会一起履约', this.getUIContext());
+      showToast('已加入定时契约，屏时策略已注册', this.getUIContext());
+      ScheduledListStore.markDirty();
+      ScheduledListStore.setFilter('joined');
       this.isSubmitting = false;
-      replaceRoute(PageRoutes.FocusHome);
+      navigateToMainTab('plans');
       return;
     }
 
@@ -321,7 +340,7 @@ struct DuoJoinPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '加入连坐',
+        title: '加入互督',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

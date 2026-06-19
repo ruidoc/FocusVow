@@ -9,6 +9,7 @@ import {
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
+import { setInstantDuoWait } from '../../services/DuoWaitContextService';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -100,10 +101,7 @@ struct DuoCreatePage {
       return;
     }
 
-    AppStorage.setOrCreate('duo.wait.session_id', session.session_id);
-    AppStorage.setOrCreate('duo.wait.duration_min', this.durationMinutes);
-    AppStorage.setOrCreate('duo.wait.title', this.title.trim());
-    AppStorage.setOrCreate('duo.wait.invite_text', session.invite_text ?? '');
+    setInstantDuoWait(session, this.title.trim(), this.durationMinutes);
     if (session.token.length > 0) {
       DuoInviteClipboardService.dismissToken(session.token);
     }
@@ -253,7 +251,7 @@ struct DuoCreatePage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '双人连坐',
+        title: '搭子互督',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

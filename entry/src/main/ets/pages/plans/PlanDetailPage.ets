@@ -1,17 +1,29 @@
 import { common } from '@kit.AbilityKit';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { window } from '@kit.ArkUI';
+import { showErrorToast, showToast } from '../../common/Toast';
+import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
-import { showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
-import { FocusPlan, PlanDraft, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel } from '../../models/PlanModel';
-import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
+import {
+  DuoScheduledUpdatePayload,
+  DuoSessionView,
+  getScheduleRepeatDays,
+  getScheduledSessionStatusLabel
+} from '../../models/DuoModel';
+import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, summarizeRepeatDays } from '../../models/PlanModel';
+import { PageRoutes, backRoute, navigateToMainTab } from '../../router/PageRoutes';
+import { DuoApiService } from '../../services/DuoApiService';
+import { removeGuardForSession, syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import {
   chooseRestrictedApps,
-  ensureScreenTimeAuthorization,
-  syncPlanGuardStrategy
+  ensureScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
-import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
+import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { StoreKeys } from '../../stores/StoreKeys';
 
 bootstrapStores();
 
@@ -23,31 +35,223 @@ interface PlanTimePickerAcceptValue {
 @Entry
 @Component
 struct PlanDetailPage {
-  @State planId: string = '';
+  @State sessionId: string = '';
+  @State session: DuoSessionView | null = null;
+  @State isLoading: boolean = true;
+  @State isEditing: boolean = false;
+  @State isSaving: boolean = false;
+  @State statusMessage: string = '';
+  @State topSafeInsetVp: number = 0;
+
   @State planName: string = '';
   @State startTime: string = '09:00';
   @State endTime: string = '18:00';
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'allow';
-  @State statusMessage: string = '';
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
+
+  aboutToAppear(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    SettingsStore.hydrate(hostContext);
+    UserStore.hydrate(hostContext);
+    const ui = this.getUIContext();
+    window.getLastWindow(hostContext, (err, win) => {
+      if (err.code) {
+        return;
+      }
+      const systemAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      this.topSafeInsetVp = ui.px2vp(systemAvoid.topRect.height);
+    });
+    this.sessionId = AppStorage.get<string>(StoreKeys.ScheduledSessionCurrentId) ?? '';
+    if (this.sessionId.length === 0 || !UserStore.isLoggedIn()) {
+      navigateToMainTab('plans');
+    }
+  }
+
+  onPageShow(): void {
+    if (this.sessionId.length === 0 || !UserStore.isLoggedIn()) {
+      return;
+    }
+    void this.loadSession();
+  }
+
+  private async loadSession(): Promise<void> {
+    this.isLoading = true;
+    const response = await DuoApiService.getSession(this.sessionId);
+    const nextSession = DuoApiService.parseSession(response);
+    if (!nextSession) {
+      showErrorToast(response.message ?? '无法加载契约', this.getUIContext());
+      navigateToMainTab('plans');
+      return;
+    }
+    this.session = nextSession;
+    this.fillFormFromSession(nextSession);
+    this.isLoading = false;
+  }
+
+  private fillFormFromSession(session: DuoSessionView): void {
+    this.planName = session.title;
+    this.startTime = session.schedule_start && session.schedule_start.length > 0
+      ? session.schedule_start
+      : '09:00';
+    this.endTime = session.schedule_end && session.schedule_end.length > 0
+      ? session.schedule_end
+      : '18:00';
+    this.repeatDays = getScheduleRepeatDays(session.schedule_repeat ?? '');
+    this.selectedTokens = [...(session.my_apps ?? [])];
+    this.mode = session.mode === 'shield' ? 'shield' : 'allow';
+  }
+
+  private isInitiator(): boolean {
+    return this.session?.viewer_role === 'initiator';
+  }
+
+  private isPartner(): boolean {
+    return this.session?.viewer_role === 'partner';
+  }
+
+  private canEditAll(): boolean {
+    return Boolean(this.session?.editable) && this.isInitiator();
+  }
+
+  private canEditApps(): boolean {
+    return Boolean(this.session?.editable);
+  }
+
+  private canShowEditEntry(): boolean {
+    return this.canEditAll() || this.canEditApps();
+  }
+
+  private showInviteEntry(): boolean {
+    return Boolean(this.session?.expects_duo) && this.session?.status === 'scheduled';
+  }
+
+  private getDisplayStatusLabel(): string {
+    if (this.session === null) {
+      return '';
+    }
+    return getScheduledSessionStatusLabel(this.session);
+  }
+
+  private getParticipationLabel(): string {
+    if (this.session?.expects_duo) {
+      return '搭子互督';
+    }
+    return '单练';
+  }
+
+  private getModeLabel(): string {
+    return this.mode === 'shield' ? '锁定模式' : '放行模式';
+  }
+
+  private getPartnerNickname(): string {
+    return this.session?.partner?.nickname ?? '';
+  }
+
+  private hasJoinedPartner(): boolean {
+    return this.getPartnerNickname().length > 0;
+  }
+
+  private getInviteCode(): string {
+    return this.session?.token ?? '';
+  }
+
+  private shouldShowEditAction(): boolean {
+    return !this.isLoading && !this.isEditing && this.canShowEditEntry();
+  }
+
+  private shouldShowDestructiveFooter(): boolean {
+    if (this.isLoading || this.isEditing) {
+      return false;
+    }
+    if (this.session?.status === 'active') {
+      return false;
+    }
+    return this.isPartner() || this.isInitiator();
+  }
+
+  private getBottomSpacerHeight(): number {
+    return this.shouldShowDestructiveFooter() ? 84 : 28;
+  }
+
+  private confirmLeaveSession(): void {
+    this.getUIContext().showAlertDialog({
+      title: '退出契约',
+      message: '退出后将不再参与这条契约，确认退出吗？',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认退出',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.leaveSession();
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private confirmCancelSession(): void {
+    this.getUIContext().showAlertDialog({
+      title: '作废契约',
+      message: '作废后契约将无法恢复，双方都会从列表中移除，确认作废吗？',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认作废',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.cancelSession();
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private getPageTitle(): string {
+    if (this.isEditing) {
+      return '编辑契约';
+    }
+    return this.planName.length > 0 ? this.planName : '契约详情';
+  }
+
+  private enterEditMode(): void {
+    if (!this.canShowEditEntry() || this.session === null) {
+      return;
+    }
+    this.fillFormFromSession(this.session);
+    this.isEditing = true;
+  }
+
+  private cancelEditMode(): void {
+    if (this.session !== null) {
+      this.fillFormFromSession(this.session);
+    }
+    this.isEditing = false;
+    this.statusMessage = '';
+  }
+
+  private timeToMinutes(time: string): number {
+    const parts = time.split(':');
+    return Math.floor(Number(parts[0]) || 0) * 60 + Math.floor(Number(parts[1]) || 0);
+  }
 
   private padTimePart(value: number): string {
     return value.toString().padStart(2, '0');
   }
 
   private timeStringToDate(time: string): Date {
-    const normalized = time.trim();
     const result = new Date();
-    if (!normalized.includes(':')) {
-      return result;
-    }
-    const parts = normalized.split(':');
-    const hour = Math.min(23, Math.max(0, Math.floor(Number(parts[0]) || 0)));
-    const minute = Math.min(59, Math.max(0, Math.floor(Number(parts[1]) || 0)));
-    result.setHours(hour, minute, 0, 0);
+    const parts = time.split(':');
+    result.setHours(Math.floor(Number(parts[0]) || 0), Math.floor(Number(parts[1]) || 0), 0, 0);
     return result;
   }
 
@@ -75,6 +279,17 @@ struct PlanDetailPage {
     });
   }
 
+  private toggleRepeatDay(day: number): void {
+    if (!this.canEditAll()) {
+      return;
+    }
+    if (this.repeatDays.includes(day)) {
+      this.repeatDays = this.repeatDays.filter((item: number) => item !== day);
+      return;
+    }
+    this.repeatDays = [...this.repeatDays, day].sort((left: number, right: number) => left - right);
+  }
+
   private appCardTitle(): string {
     return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
   }
@@ -90,131 +305,304 @@ struct PlanDetailPage {
     return true;
   }
 
-  aboutToAppear(): void {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    PlanStore.hydrate(hostContext);
-    SettingsStore.hydrate(hostContext);
-    const currentPlan = PlanStore.getCurrentPlan();
-    if (!currentPlan) {
-      replaceRoute(PageRoutes.PlanList);
-      return;
-    }
-
-    this.fillForm(currentPlan);
-  }
-
-  private fillForm(plan: FocusPlan): void {
-    this.planId = plan.id;
-    this.planName = plan.name;
-    this.startTime = plan.startTime;
-    this.endTime = plan.endTime;
-    this.repeatDays = [...plan.repeatDays];
-    this.selectedTokens = [...plan.selectedTokens];
-    this.mode = plan.mode;
-    this.statusMessage = SettingsStore.getState().statusMessage;
-  }
-
-  private toggleRepeatDay(day: number): void {
-    if (this.repeatDays.includes(day)) {
-      this.repeatDays = this.repeatDays.filter((item: number) => item !== day);
-      return;
-    }
-
-    this.repeatDays = [...this.repeatDays, day].sort((left, right) => left - right);
-  }
-
-  private buildDraft(): PlanDraft {
-    return {
-      name: this.planName,
-      startTime: this.startTime,
-      endTime: this.endTime,
-      repeatDays: this.repeatDays,
-      selectedTokens: this.selectedTokens,
-      mode: this.mode
-    };
-  }
-
   private async chooseApps(): Promise<void> {
+    if (!this.canEditApps()) {
+      return;
+    }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     if (result.data) {
       this.selectedTokens = [...result.data];
-      SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
       this.statusMessage = result.message;
-      return;
     }
-
-    this.statusMessage = result.message;
   }
 
-  private async savePlan(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+  private async copyInvite(): Promise<void> {
+    if (!this.session?.token) {
+      return;
+    }
+    const inviteText = this.session.invite_text && this.session.invite_text.length > 0
+      ? this.session.invite_text
+      : this.session.token;
+    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, inviteText);
+    const systemPasteboard = pasteboard.getSystemPasteboard();
+    await systemPasteboard.setData(pasteData);
+    showToast('邀请口令已复制', this.getUIContext());
+  }
+
+  private async saveChanges(): Promise<void> {
+    if (!this.session || this.isSaving) {
+      return;
+    }
     if (this.selectedTokens.length === 0) {
-      this.statusMessage = '请先至少选择 1 个应用，再保存契约';
+      this.statusMessage = '请先至少选择 1 个应用';
       return;
     }
 
-    const savedPlan = PlanStore.savePlan(hostContext, this.buildDraft(), this.planId);
-    this.planId = savedPlan.id;
+    this.isSaving = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const payload: DuoScheduledUpdatePayload = this.isInitiator()
+      ? {
+        title: this.planName,
+        start: this.startTime,
+        start_min: this.timeToMinutes(this.startTime),
+        end: this.endTime,
+        end_min: this.timeToMinutes(this.endTime),
+        repeat: this.repeatDays.join(','),
+        mode: this.mode,
+        initiator_apps: this.selectedTokens
+      }
+      : {
+        partner_apps: this.selectedTokens
+      };
+
+    const response = await DuoApiService.scheduledUpdate(this.session.session_id, payload);
+    const nextSession = DuoApiService.parseSession(response);
+    if (!nextSession) {
+      showErrorToast(response.message ?? '保存失败', this.getUIContext());
+      this.isSaving = false;
+      return;
+    }
 
     const authResult = await ensureScreenTimeAuthorization(hostContext);
     SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (!authResult.ok) {
-      const message = '契约已保存，但未完成系统授权，系统不会自动按时生效';
-      this.statusMessage = message;
-      SettingsStore.updateStatusMessage(hostContext, message);
-      replaceRoute(PageRoutes.PlanList);
-      return;
+    if (authResult.ok) {
+      const guardResult = await syncGuardForSession(hostContext, nextSession);
+      this.statusMessage = guardResult.message;
     }
 
-    const syncResult = await syncPlanGuardStrategy(savedPlan);
-    if (!syncResult.ok) {
-      this.statusMessage = syncResult.message;
-      showToast(syncResult.message, this.getUIContext(), 3000);
+    this.session = nextSession;
+    this.fillFormFromSession(nextSession);
+    this.isEditing = false;
+    this.isSaving = false;
+    ScheduledListStore.markDirty();
+    showToast('已保存', this.getUIContext());
+  }
+
+  private async leaveSession(): Promise<void> {
+    if (!this.session) {
       return;
     }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const response = await DuoApiService.scheduledLeave(this.session.session_id);
+    if (response.statusCode !== 200) {
+      showErrorToast(response.message ?? '退出失败', this.getUIContext());
+      return;
+    }
+    await removeGuardForSession(hostContext, this.session.session_id);
+    ScheduledListStore.markDirty();
+    showToast('已退出契约', this.getUIContext());
+    navigateToMainTab('plans');
+  }
 
-    backRoute();
+  private async cancelSession(): Promise<void> {
+    if (!this.session) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const response = await DuoApiService.scheduledCancel(this.session.session_id);
+    if (response.statusCode !== 200) {
+      showErrorToast(response.message ?? '作废失败', this.getUIContext());
+      return;
+    }
+    await removeGuardForSession(hostContext, this.session.session_id);
+    ScheduledListStore.markDirty();
+    showToast('契约已作废', this.getUIContext());
+    navigateToMainTab('plans');
   }
 
   @Builder
-  buildModeSegment(): void {
-    Row({ space: 0 }) {
-      Text('锁定模式')
-        .layoutWeight(1)
+  private buildViewRow(label: string, value: string): void {
+    Row() {
+      Text(label)
         .fontSize(15)
-        .fontColor(this.mode === 'shield' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
-        .fontWeight(this.mode === 'shield' ? FontWeight.Medium : FontWeight.Regular)
-        .textAlign(TextAlign.Center)
-        .padding({ top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor(this.mode === 'shield' ? AppTheme.colors.surfaceRaised : Color.Transparent)
-        .onClick(() => {
-          this.mode = 'shield';
-        })
-
-      Text('放行模式')
-        .layoutWeight(1)
+        .fontColor(AppTheme.colors.textMuted)
+        .width(88)
+      Text(value)
         .fontSize(15)
-        .fontColor(this.mode === 'allow' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
-        .fontWeight(this.mode === 'allow' ? FontWeight.Medium : FontWeight.Regular)
-        .textAlign(TextAlign.Center)
-        .padding({ top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor(this.mode === 'allow' ? AppTheme.colors.surfaceRaised : Color.Transparent)
-        .onClick(() => {
-          this.mode = 'allow';
-        })
+        .fontColor(AppTheme.colors.textPrimary)
+        .layoutWeight(1)
     }
-    .width('80%')
-    .padding(4)
-    .backgroundColor(AppTheme.colors.surface)
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
+  private buildViewBody(): void {
+    Column({ space: 18 }) {
+      Column({ space: 14 }) {
+        Row() {
+          Text(this.planName.length > 0 ? this.planName : '定时契约')
+            .fontSize(20)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .layoutWeight(1)
+
+          Text(this.getDisplayStatusLabel())
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.primary)
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .backgroundColor(AppTheme.colors.primarySoft)
+            .borderRadius(AppTheme.radius.pill)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Column({ space: 12 }) {
+          this.buildViewRow('专注时段', `${this.startTime} - ${this.endTime}`)
+          this.buildViewRow('每周重复', summarizeRepeatDays(this.repeatDays))
+          this.buildViewRow('应用数量', `${this.selectedTokens.length} 个`)
+          this.buildViewRow('锁机模式', this.getModeLabel())
+          this.buildViewRow('履约方式', this.getParticipationLabel())
+          if (this.getPartnerNickname().length > 0 && !this.showInviteEntry()) {
+            this.buildViewRow('搭子', this.getPartnerNickname())
+          }
+        }
+        .width('100%')
+      }
+      .width('100%')
+      .padding(20)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(AppTheme.radius.lg)
+
+      this.buildInviteCard()
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private buildInviteCard(): void {
+    if (this.showInviteEntry() && this.isInitiator()) {
+      Column({ space: 12 }) {
+        Text('邀请搭子')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+
+        if (this.hasJoinedPartner()) {
+          Text('搭子已加入')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+          Row({ space: 10 }) {
+            Text(this.getPartnerNickname().length > 0 ? this.getPartnerNickname().charAt(0) : '搭')
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.primary)
+              .textAlign(TextAlign.Center)
+              .width(40)
+              .height(40)
+              .borderRadius(20)
+              .backgroundColor(AppTheme.colors.primarySoft)
+            Column({ space: 4 }) {
+              Text(this.getPartnerNickname())
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.colors.textPrimary)
+                .width('100%')
+              Text('已接受邀请')
+                .fontSize(12)
+                .fontColor(AppTheme.colors.textMuted)
+                .width('100%')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+          }
+          .width('100%')
+          .padding(12)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .borderRadius(12)
+        } else {
+          Text('邀请码')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+          Text(this.getInviteCode().length > 0 ? this.getInviteCode() : '生成中…')
+            .fontSize(22)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .letterSpacing(1)
+            .width('100%')
+          Text('复制口令发给搭子，对方加入后会出现在双方契约列表。')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+          Button('复制邀请口令')
+            .width('100%')
+            .height(42)
+            .type(ButtonType.Capsule)
+            .backgroundColor(AppTheme.colors.primarySoft)
+            .fontColor(AppTheme.colors.primary)
+            .onClick(() => {
+              void this.copyInvite();
+            })
+        }
+      }
+      .width('100%')
+      .padding(20)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(AppTheme.radius.lg)
+      .alignItems(HorizontalAlign.Start)
+    }
+  }
+
+  @Builder
+  private buildEditActionButton(): void {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph($r('sys.symbol.square_and_pencil'))
+        .fontSize(18)
+        .fontColor([AppTheme.colors.primary])
+    }
+    .width(40)
+    .height(40)
+    .backgroundColor(AppTheme.colors.primarySoft)
     .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(999)
+    .margin({ top: this.topSafeInsetVp + 8, right: 12 })
+    .onClick(() => {
+      this.enterEditMode();
+    })
   }
 
   @Builder
-  buildNameCard(): void {
+  private buildDestructiveFooter(): void {
+    Column({ space: 8 }) {
+      if (this.isPartner()) {
+        Text('退出契约')
+          .fontSize(13)
+          .fontColor(AppTheme.colors.danger)
+          .opacity(0.85)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 8, bottom: 8 })
+          .onClick(() => {
+            this.confirmLeaveSession();
+          })
+      }
+      if (this.isInitiator()) {
+        Text('作废契约')
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textMuted)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 8, bottom: 8 })
+          .onClick(() => {
+            this.confirmCancelSession();
+          })
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+    .backgroundColor(AppTheme.colors.background)
+  }
+
+  @Builder
+  private buildNameCard(): void {
     Column({ space: 14 }) {
       Text('契约名称')
         .fontSize(16)
@@ -245,7 +633,7 @@ struct PlanDetailPage {
   }
 
   @Builder
-  buildTimeCard(): void {
+  private buildTimeCard(): void {
     Column({ space: 14 }) {
       Text('专注时段')
         .fontSize(16)
@@ -301,7 +689,7 @@ struct PlanDetailPage {
   }
 
   @Builder
-  buildAppCard(): void {
+  private buildAppCard(): void {
     Column({ space: 14 }) {
       Row() {
         Text(this.appCardTitle())
@@ -315,7 +703,7 @@ struct PlanDetailPage {
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.primary)
           .onClick(() => {
-            this.chooseApps();
+            void this.chooseApps();
           })
       }
       .width('100%')
@@ -349,7 +737,7 @@ struct PlanDetailPage {
   }
 
   @Builder
-  buildRepeatDaysCard(): void {
+  private buildRepeatDaysCard(): void {
     Column({ space: 14 }) {
       Row() {
         Text('每周几重复')
@@ -396,68 +784,80 @@ struct PlanDetailPage {
   }
 
   @Builder
-  buildValidityCard(): void {
-    Row() {
-      Text('有效时长')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-      Blank()
-      Row({ space: 4 }) {
-        Text('长期有效')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-        Text('›')
-          .fontSize(18)
-          .fontColor(AppTheme.colors.textMuted)
-      }
-    }
-    .width('100%')
-    .padding(20)
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-  }
-
-  @Builder
-  buildContractBody(): void {
+  private buildEditBody(): void {
     Column({ space: 18 }) {
-      this.buildNameCard()
-      this.buildTimeCard()
-      this.buildAppCard()
-      this.buildRepeatDaysCard()
-      this.buildValidityCard()
+      if (this.canEditAll()) {
+        this.buildNameCard()
+        this.buildTimeCard()
+      }
+      if (this.canEditApps()) {
+        this.buildAppCard()
+      }
+      if (this.canEditAll()) {
+        this.buildRepeatDaysCard()
+      }
 
-      Button('保存修改')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Capsule)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
+      AppActionButton({
+        label: this.isSaving ? '保存中...' : '保存修改',
+        onPress: () => {
+          void this.saveChanges();
+        }
+      })
         .margin({ top: 8 })
-        .onClick(() => {
-          void this.savePlan();
-        })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
   }
 
+  @Builder
+  private buildBody(): void {
+    if (this.isLoading) {
+      Text('加载中...')
+        .fontColor(AppTheme.colors.textSecondary)
+    } else if (this.isEditing) {
+      this.buildEditBody()
+    } else {
+      this.buildViewBody()
+    }
+  }
+
   build() {
     Stack() {
       SystemNavPage({
-        title: '编辑契约',
+        title: this.getPageTitle(),
         showBack: true,
         usePageScroll: true,
-        bottomSpacerHeight: 28,
-        onBack: () => backRoute(),
+        bottomSpacerHeight: this.getBottomSpacerHeight(),
+        showAction: false,
+        onBack: () => {
+          if (this.isEditing) {
+            this.cancelEditMode();
+            return;
+          }
+          backRoute();
+        },
         content: (): void => {
-          this.buildContractBody();
+          this.buildBody();
         }
       })
+
+      if (this.shouldShowEditAction()) {
+        Stack({ alignContent: Alignment.TopEnd }) {
+          this.buildEditActionButton()
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
+
+      if (this.shouldShowDestructiveFooter()) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          this.buildDestructiveFooter()
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
     }
     .width('100%')
     .height('100%')

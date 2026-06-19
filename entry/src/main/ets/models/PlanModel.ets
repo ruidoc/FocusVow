@@ -21,6 +21,7 @@ export interface FocusPlan {
   selectedCount: number;
   mode: RestrictionMode;
   enabled: boolean;
+  duoSessionId: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -117,6 +118,7 @@ export function createPlanFromDraft(draft: PlanDraft, nowAt: number): FocusPlan 
     selectedCount: draft.selectedTokens.length,
     mode: draft.mode,
     enabled: true,
+    duoSessionId: '',
     createdAt: nowAt,
     updatedAt: nowAt
   };
@@ -139,6 +141,32 @@ export function getPlanDurationMinutes(plan: FocusPlan): number {
 function getTimeMinutes(timeText: string): number {
   const parts = timeText.split(':');
   return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+/** 若今天在重复日内，开始时间必须晚于当前时刻 */
+export function validateScheduledStartTime(
+  startTime: string,
+  repeatDays: number[],
+  nowAt: number = Date.now()
+): string {
+  const normalizedDays = normalizeRepeatDays(repeatDays);
+  if (normalizedDays.length === 0) {
+    return '请至少选择一天重复';
+  }
+
+  const todayWeekday = getTodayRepeatDay();
+  if (!normalizedDays.includes(todayWeekday)) {
+    return '';
+  }
+
+  const nowDate = new Date(nowAt);
+  const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
+  const startMinutes = getTimeMinutes(normalizeTimeText(startTime, '09:00'));
+  if (startMinutes <= nowMinutes) {
+    return '开始时间必须晚于当前时间';
+  }
+
+  return '';
 }
 
 function getPreviousWeekday(day: number): number {
@@ -300,6 +328,7 @@ export function updatePlanFromDraft(plan: FocusPlan, draft: PlanDraft, nowAt: nu
     selectedCount: draft.selectedTokens.length,
     mode: draft.mode,
     enabled: plan.enabled,
+    duoSessionId: plan.duoSessionId,
     createdAt: plan.createdAt,
     updatedAt: nowAt
   };

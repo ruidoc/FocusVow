@@ -1,5 +1,11 @@
 import { router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { StoreKeys } from '../stores/StoreKeys';
+import { bootstrapStores } from '../stores/StoreBootstrap';
+
+bootstrapStores();
+
+export type MainTabKey = 'focus' | 'plans' | 'stats' | 'profile';
 
 export class PageRoutes {
   static readonly FocusHome: string = 'pages/tabs/MainTabPage';
@@ -39,4 +45,15 @@ export function replaceRoute(url: string): void {
 
 export function backRoute(): void {
   router.back();
+}
+
+/** 已在主 Tab 内时，仅切换底部 Tab（如「我的」页内入口） */
+export function openMainTab(tab: MainTabKey = 'plans'): void {
+  AppStorage.setOrCreate(StoreKeys.MainTabTarget, tab);
+}
+
+/** 从二级页返回主 Tab，并打开指定 Tab */
+export function navigateToMainTab(tab: MainTabKey = 'plans'): void {
+  openMainTab(tab);
+  replaceRoute(PageRoutes.FocusHome);
 }

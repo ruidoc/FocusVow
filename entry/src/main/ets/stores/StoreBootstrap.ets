@@ -33,5 +33,15 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.UserIsLoggedIn, false);
   AppStorage.setOrCreate(StoreKeys.UserInfo, createEmptyUserInfo());
   AppStorage.setOrCreate(StoreKeys.InAppMessage, createHiddenInAppMessage());
+  AppStorage.setOrCreate(StoreKeys.ScheduledListAll, []);
+  AppStorage.setOrCreate(StoreKeys.ScheduledListFilter, 'all');
+  AppStorage.setOrCreate(StoreKeys.ScheduledListDirty, true);
+  AppStorage.setOrCreate(StoreKeys.MainTabTarget, '');
+  AppStorage.setOrCreate(StoreKeys.DuoWaitSessionId, '');
+  AppStorage.setOrCreate(StoreKeys.DuoWaitTitle, '');
+  AppStorage.setOrCreate(StoreKeys.DuoWaitInviteText, '');
+  AppStorage.setOrCreate(StoreKeys.DuoWaitIsScheduled, false);
+  AppStorage.setOrCreate(StoreKeys.DuoWaitScheduleLabel, '');
+  AppStorage.setOrCreate(StoreKeys.DuoWaitDurationMin, 0);
   bootstrapped = true;
 }

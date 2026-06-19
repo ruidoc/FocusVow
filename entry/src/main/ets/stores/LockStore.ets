@@ -48,7 +48,10 @@ function enrichCovenantLockFromPlans(context: common.Context, state: ActiveLockS
     plan.mode,
     planWindow.startAt,
     planWindow.endAt,
-    state.updatedAt
+    state.updatedAt,
+    state.duoSessionId.length > 0 ? state.duoSessionId : plan.duoSessionId,
+    state.recordId,
+    state.participationMode
   );
 }
 
@@ -118,6 +121,11 @@ export class LockStore {
   static shouldAutoFinish(nowAt: number = Date.now()): boolean {
     const state = LockStore.getState();
     return state.kind === 'quick_focus' && isTimedLockFinished(state, nowAt);
+  }
+
+  static shouldAutoCompleteCovenant(nowAt: number = Date.now()): boolean {
+    const state = LockStore.getState();
+    return state.kind === 'covenant' && state.endAt > 0 && isTimedLockFinished(state, nowAt);
   }
 
   static startQuickFocus(

@@ -74,6 +74,22 @@ export function isLocked(state: ActiveLockState): boolean {
   return state.kind !== 'none';
 }
 
+export function resolveDuoSessionIdFromLock(lock: ActiveLockState): string {
+  if (lock.duoSessionId.length > 0) {
+    return lock.duoSessionId;
+  }
+  if (lock.planId.startsWith('session_')) {
+    return lock.planId.replace('session_', '');
+  }
+  return '';
+}
+
+export function isDuoCovenantLock(lock: ActiveLockState): boolean {
+  return lock.kind === 'covenant' &&
+    lock.participationMode === 'duo' &&
+    resolveDuoSessionIdFromLock(lock).length > 0;
+}
+
 export function getRemainingSeconds(state: ActiveLockState, nowAt: number): number {
   if (!isLocked(state) || state.endAt <= 0) {
     return 0;
@@ -139,7 +155,10 @@ export function createCovenantLockState(
   mode: RestrictionMode,
   windowStartAt: number,
   windowEndAt: number,
-  nowAt: number = Date.now()
+  nowAt: number = Date.now(),
+  duoSessionId: string = '',
+  recordId: string = '',
+  participationMode: QuickFocusParticipationMode = ''
 ): ActiveLockState {
   return {
     kind: 'covenant',
@@ -152,9 +171,9 @@ export function createCovenantLockState(
     startedAt: windowStartAt,
     endAt: windowEndAt,
     updatedAt: nowAt,
-    duoSessionId: '',
-    recordId: '',
-    participationMode: ''
+    duoSessionId,
+    recordId,
+    participationMode
   };
 }
 

@@ -3,7 +3,7 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { SettingsActionRow } from '../../components/settings/SettingsActionRow';
 import { AppTheme } from '../../constants/Theme';
 import { FocusPlan } from '../../models/PlanModel';
-import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, backRoute, pushRoute, navigateToMainTab } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
@@ -96,7 +96,7 @@ struct SettingsPage {
         value: `${this.planCollection.length} 条`,
         description: '快速进入契约列表，统一查看和编辑计划',
         symbol: $r('sys.symbol.doc_plaintext'),
-        onPress: () => pushRoute(PageRoutes.PlanList)
+        onPress: () => navigateToMainTab('plans')
       })
 
       Button('清空本地数据')

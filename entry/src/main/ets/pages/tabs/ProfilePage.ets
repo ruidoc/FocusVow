@@ -4,7 +4,7 @@ import { AppTheme } from '../../constants/Theme';
 import { common } from '@kit.AbilityKit';
 import { FocusPlan } from '../../models/PlanModel';
 import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
-import { PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, pushRoute, openMainTab } from '../../router/PageRoutes';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -179,7 +179,7 @@ export struct ProfilePage {
           pushRoute(PageRoutes.Permission);
         })
         this.buildMenuRow('契约管理', $r('sys.symbol.doc_plaintext'), `${this.planCollection.length} 条`, true, () => {
-          pushRoute(PageRoutes.PlanList);
+          openMainTab('plans');
         })
         this.buildMenuRow('娱乐限额', $r('sys.symbol.bolt'), this.getCycleStatusLabel(), true, () => {
           pushRoute(PageRoutes.CycleGuardEdit);

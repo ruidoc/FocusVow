@@ -36,6 +36,7 @@ function migratePersistedPlan(plan: FocusPlan): FocusPlan {
     selectedCount: plan.selectedCount,
     mode: plan.mode,
     enabled: plan.enabled,
+    duoSessionId: plan.duoSessionId ?? '',
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt
   };
@@ -98,6 +99,35 @@ export class PlanStore {
     return nextPlan;
   }
 
+  static attachDuoSessionId(
+    context: common.UIAbilityContext,
+    planId: string,
+    duoSessionId: string
+  ): void {
+    const currentPlan = getPlanById(PlanStore.getPlans(), planId);
+    if (!currentPlan) {
+      return;
+    }
+
+    const nextPlan: FocusPlan = {
+      id: currentPlan.id,
+      name: currentPlan.name,
+      startTime: currentPlan.startTime,
+      endTime: currentPlan.endTime,
+      repeatDays: currentPlan.repeatDays,
+      selectedTokens: currentPlan.selectedTokens,
+      selectedCount: currentPlan.selectedCount,
+      mode: currentPlan.mode,
+      enabled: currentPlan.enabled,
+      duoSessionId,
+      createdAt: currentPlan.createdAt,
+      updatedAt: Date.now()
+    };
+    const nextPlans = upsertPlan(PlanStore.getPlans(), nextPlan);
+    AppStorage.setOrCreate(StoreKeys.PlanCollection, nextPlans);
+    savePersistedPlans(context, nextPlans);
+  }
+
   static togglePlanEnabled(context: common.UIAbilityContext, planId: string, enabled: boolean): void {
     const currentPlan = getPlanById(PlanStore.getPlans(), planId);
     if (!currentPlan) {
@@ -114,6 +144,7 @@ export class PlanStore {
       selectedCount: currentPlan.selectedCount,
       mode: currentPlan.mode,
       enabled,
+      duoSessionId: currentPlan.duoSessionId,
       createdAt: currentPlan.createdAt,
       updatedAt: Date.now()
     };

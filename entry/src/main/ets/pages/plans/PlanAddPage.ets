@@ -1,17 +1,20 @@
 import { common } from '@kit.AbilityKit';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { PlanDraft, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel } from '../../models/PlanModel';
-import { DuoScheduledCreatePayload } from '../../models/DuoModel';
+import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, validateScheduledStartTime } from '../../models/PlanModel';
+import { DuoScheduledCreatePayload, DuoParticipationMode } from '../../models/DuoModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
-  ensureScreenTimeAuthorization,
-  syncPlanGuardStrategy
+  ensureScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
-import { PlanStore } from '../../stores/PlanStore';
+import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
+import { setScheduledDuoWait } from '../../services/DuoWaitContextService';
+import { syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -33,7 +36,8 @@ struct PlanAddPage {
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'allow';
-  @State statusMessage: string = '';
+  @State participationMode: DuoParticipationMode = 'solo';
+  @State isSaving: boolean = false;
   @State hasInitializedDefaultTime: boolean = false;
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
@@ -48,8 +52,9 @@ struct PlanAddPage {
 
   private initDefaultTimeRange(): void {
     const now = new Date();
-    const end = new Date(now.getTime() + 30 * 60 * 1000);
-    this.startTime = this.formatTime(now);
+    const start = new Date(now.getTime() + 5 * 60 * 1000);
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    this.startTime = this.formatTime(start);
     this.endTime = this.formatTime(end);
     this.hasInitializedDefaultTime = true;
   }
@@ -95,23 +100,12 @@ struct PlanAddPage {
     return '要放行的应用';
   }
 
-  private shouldShowStatusLine(): boolean {
-    if (this.statusMessage.length === 0) {
-      return false;
-    }
-    const m = /^已选择 (\d+) 个应用$/.exec(this.statusMessage);
-    if (m !== null && Number(m[1]) === this.selectedTokens.length) {
-      return false;
-    }
-    return true;
-  }
-
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
+    UserStore.hydrate(hostContext);
     const settingsState = SettingsStore.getState();
     this.selectedTokens = [...settingsState.selectedTokens];
-    this.statusMessage = settingsState.statusMessage;
     if (!this.hasInitializedDefaultTime) {
       this.initDefaultTimeRange();
     }
@@ -132,11 +126,12 @@ struct PlanAddPage {
     if (result.data) {
       this.selectedTokens = [...result.data];
       SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
-      this.statusMessage = result.message;
       return;
     }
 
-    this.statusMessage = result.message;
+    if (result.message.length > 0) {
+      showErrorToast(result.message, this.getUIContext());
+    }
   }
 
   private timeToMinutes(time: string): number {
@@ -147,53 +142,143 @@ struct PlanAddPage {
   }
 
   private async savePlan(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (this.selectedTokens.length === 0) {
-      this.statusMessage = '请先至少选择 1 个应用，再保存契约';
+    if (this.isSaving) {
       return;
     }
 
-    const draft: PlanDraft = {
-      name: this.planName,
-      startTime: this.startTime,
-      endTime: this.endTime,
-      repeatDays: this.repeatDays,
-      selectedTokens: this.selectedTokens,
-      mode: this.mode
-    };
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const uiContext = this.getUIContext();
+    if (!UserStore.isLoggedIn()) {
+      showErrorToast('请先登录后再创建契约', uiContext);
+      return;
+    }
+    if (this.selectedTokens.length === 0) {
+      showErrorToast('请先至少选择 1 个应用，再保存契约', uiContext);
+      return;
+    }
+    if (this.planName.trim().length === 0) {
+      showErrorToast('请先填写本次契约要做什么', uiContext);
+      return;
+    }
+    if (this.participationMode === 'duo' && !UserStore.isLoggedIn()) {
+      showErrorToast('搭子互督需要先登录账号', uiContext);
+      return;
+    }
 
+    const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
+    if (startTimeError.length > 0) {
+      showErrorToast(startTimeError, uiContext);
+      return;
+    }
+
+    this.isSaving = true;
     const authResult = await ensureScreenTimeAuthorization(hostContext);
     SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    const savedPlan = PlanStore.savePlan(hostContext, draft);
     if (!authResult.ok) {
-      const message = '契约已保存，但未完成系统授权，系统不会自动按时生效';
-      this.statusMessage = message;
-      SettingsStore.updateStatusMessage(hostContext, message);
-      replaceRoute(PageRoutes.PlanList);
+      showErrorToast('未完成系统授权，无法注册屏时策略', uiContext);
+      this.isSaving = false;
       return;
     }
 
-    const syncResult = await syncPlanGuardStrategy(savedPlan);
-    this.statusMessage = syncResult.message;
-    SettingsStore.updateStatusMessage(hostContext, syncResult.message);
-
-    if (UserStore.isLoggedIn()) {
-      const schedulePayload: DuoScheduledCreatePayload = {
-        title: savedPlan.name.length > 0 ? savedPlan.name : '定时契约',
-        start: savedPlan.startTime,
-        start_min: this.timeToMinutes(savedPlan.startTime),
-        end: savedPlan.endTime,
-        end_min: this.timeToMinutes(savedPlan.endTime),
-        repeat: savedPlan.repeatDays.join(',')
-      };
-      const scheduleResponse = await DuoApiService.scheduledCreate(schedulePayload);
-      const session = DuoApiService.parseSession(scheduleResponse);
-      if (session?.invite_text) {
-        AppStorage.setOrCreate('duo.last.invite_text', session.invite_text);
-      }
+    const title = this.planName.trim();
+    const schedulePayload: DuoScheduledCreatePayload = {
+      title,
+      start: this.startTime,
+      start_min: this.timeToMinutes(this.startTime),
+      end: this.endTime,
+      end_min: this.timeToMinutes(this.endTime),
+      repeat: this.repeatDays.join(','),
+      participation_mode: this.participationMode,
+      initiator_apps: [...this.selectedTokens],
+      mode: this.mode
+    };
+    const scheduleResponse = await DuoApiService.scheduledCreate(schedulePayload);
+    const session = DuoApiService.parseSession(scheduleResponse);
+    if (!session) {
+      showErrorToast(scheduleResponse.message ?? '创建契约失败', uiContext);
+      this.isSaving = false;
+      return;
     }
 
-    replaceRoute(PageRoutes.PlanList);
+    const guardResult = await syncGuardForSession(hostContext, session);
+    SettingsStore.updateStatusMessage(hostContext, guardResult.message);
+
+    if (session.token.length > 0) {
+      DuoInviteClipboardService.dismissToken(session.token);
+    }
+
+    ScheduledListStore.markDirty();
+    ScheduledListStore.setFilter('initiated');
+
+    if (this.participationMode === 'duo') {
+      const scheduleLabel = `${this.startTime} - ${this.endTime}`;
+      setScheduledDuoWait(session, scheduleLabel);
+      showToast('创建成功，请邀请搭子加入', uiContext);
+      this.isSaving = false;
+      replaceRoute(PageRoutes.DuoWait);
+      return;
+    }
+
+    showToast('创建成功', uiContext);
+    this.isSaving = false;
+    backRoute();
+  }
+
+  @Builder
+  buildParticipationCard(): void {
+    Column({ space: 14 }) {
+      Text('履约方式')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+
+      Row({ space: 0 }) {
+        Text('单练')
+          .layoutWeight(1)
+          .fontSize(15)
+          .fontColor(this.participationMode === 'solo' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
+          .fontWeight(this.participationMode === 'solo' ? FontWeight.Medium : FontWeight.Regular)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 10, bottom: 10 })
+          .borderRadius(20)
+          .backgroundColor(this.participationMode === 'solo' ? AppTheme.colors.surfaceRaised : Color.Transparent)
+          .onClick(() => {
+            this.participationMode = 'solo';
+          })
+
+        Text('搭子互督')
+          .layoutWeight(1)
+          .fontSize(15)
+          .fontColor(this.participationMode === 'duo' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
+          .fontWeight(this.participationMode === 'duo' ? FontWeight.Medium : FontWeight.Regular)
+          .textAlign(TextAlign.Center)
+          .padding({ top: 10, bottom: 10 })
+          .borderRadius(20)
+          .backgroundColor(this.participationMode === 'duo' ? AppTheme.colors.surfaceRaised : Color.Transparent)
+          .onClick(() => {
+            this.participationMode = 'duo';
+          })
+      }
+      .width('100%')
+      .padding(4)
+      .backgroundColor(AppTheme.colors.surfaceRaised)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(999)
+
+      Text(this.participationMode === 'duo'
+        ? '保存后邀请搭子，到点双方一起履约；一人撕毁，两人都记为失败。'
+        : '仅自己按时段履约，适合固定学习节奏。')
+        .fontSize(13)
+        .fontColor(AppTheme.colors.textSecondary)
+        .width('100%')
+    }
+    .width('100%')
+    .padding(20)
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg)
   }
 
   @Builder
@@ -351,13 +436,6 @@ struct PlanAddPage {
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
       }
-
-      if (this.shouldShowStatusLine()) {
-        Text(this.statusMessage)
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
-      }
     }
     .width('100%')
     .padding(20)
@@ -415,41 +493,17 @@ struct PlanAddPage {
   }
 
   @Builder
-  buildValidityCard(): void {
-    Row() {
-      Text('有效时长')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-      Blank()
-      Row({ space: 4 }) {
-        Text('长期有效')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-        Text('›')
-          .fontSize(18)
-          .fontColor(AppTheme.colors.textMuted)
-      }
-    }
-    .width('100%')
-    .padding(20)
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-  }
-
-  @Builder
   buildContractBody(): void {
     Column({ space: 18 }) {
       this.buildNameCard()
       this.buildTimeCard()
+      this.buildParticipationCard()
       this.buildAppCard()
       this.buildRepeatDaysCard()
-      this.buildValidityCard()
 
       AppActionButton({
-        label: '签定契约',
+        label: this.isSaving ? '创建中...' : '签定契约',
+        isEnabled: !this.isSaving,
         onPress: () => {
           void this.savePlan();
         }

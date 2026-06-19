@@ -8,6 +8,7 @@ import { FocusSyncService } from '../../services/FocusSyncService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { warmUpPreferencesStore } from '../../services/PreferencesService';
 import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
+import { reconcileLockLifecycle } from '../../services/LockReconcileService';
 import { UmengSdkService } from '../../services/UmengSdkService';
 import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
@@ -33,6 +34,7 @@ struct MainTabPage {
   @State private bottomGestureInsetVp: number = 0;
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
+  @StorageLink(StoreKeys.MainTabTarget) @Watch('onMainTabTargetChanged') pendingTab: string = '';
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
@@ -55,6 +57,7 @@ struct MainTabPage {
     this.startTimer();
     this.bootstrapUmengSdk(hostContext);
     void this.probeClipboardInvite(hostContext);
+    this.consumePendingTab();
 
     window.getLastWindow(hostContext, (err, win) => {
       if (err !== undefined && err.code !== 0) {
@@ -81,6 +84,20 @@ struct MainTabPage {
     this.timerId = setInterval(() => {
       this.syncLockLifecycle();
     }, 1000);
+  }
+
+  private onMainTabTargetChanged(): void {
+    this.consumePendingTab();
+  }
+
+  private consumePendingTab(): void {
+    if (this.pendingTab === 'focus' ||
+      this.pendingTab === 'plans' ||
+      this.pendingTab === 'stats' ||
+      this.pendingTab === 'profile') {
+      this.currentTab = this.pendingTab;
+      this.pendingTab = '';
+    }
   }
 
   private async probeClipboardInvite(context: common.UIAbilityContext): Promise<void> {
@@ -136,6 +153,7 @@ struct MainTabPage {
     SettingsStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
+    void reconcileLockLifecycle(hostContext);
 
     if (this.activeLock.kind === 'quick_focus' && LockStore.shouldAutoFinish()) {
       this.finishQuickFocus();
@@ -204,23 +222,33 @@ struct MainTabPage {
   build() {
     Stack({ alignContent: Alignment.Top }) {
       Column() {
-        if (this.currentTab === 'focus') {
+        Stack() {
           FocusHomePage({
             onSelectTab: (tab: 'plans') => {
               this.currentTab = tab;
             }
           })
-            .layoutWeight(1)
-        } else if (this.currentTab === 'plans') {
-          ContractTabPage()
-            .layoutWeight(1)
-        } else if (this.currentTab === 'stats') {
+            .width('100%')
+            .height('100%')
+            .visibility(this.currentTab === 'focus' ? Visibility.Visible : Visibility.Hidden)
+
+          ContractTabPage({ isPageActive: this.currentTab === 'plans' })
+            .width('100%')
+            .height('100%')
+            .visibility(this.currentTab === 'plans' ? Visibility.Visible : Visibility.Hidden)
+
           StatsPage()
-            .layoutWeight(1)
-        } else {
+            .width('100%')
+            .height('100%')
+            .visibility(this.currentTab === 'stats' ? Visibility.Visible : Visibility.Hidden)
+
           ProfilePage()
-            .layoutWeight(1)
+            .width('100%')
+            .height('100%')
+            .visibility(this.currentTab === 'profile' ? Visibility.Visible : Visibility.Hidden)
         }
+        .width('100%')
+        .layoutWeight(1)
 
         Row() {
           this.buildTabItem('focus', '专注')

@@ -166,7 +166,7 @@ export struct StatsPage {
       .width('100%')
 
       Row({ space: 10 }) {
-        this.buildGrowthMetric('双人成功率', `${this.summary?.duo_success_rate ?? 0}%`, '和搭子一起')
+        this.buildGrowthMetric('互督成功率', `${this.summary?.duo_success_rate ?? 0}%`, '和搭子一起')
         this.buildGrowthMetric('本期成功率', `${this.summary?.success_rate ?? 0}%`, this.getPeriodLabel(this.currentPeriod))
       }
       .width('100%')
@@ -249,7 +249,7 @@ export struct StatsPage {
               .fontWeight(FontWeight.Medium)
               .fontColor(AppTheme.colors.textPrimary)
             ForEach(day.records, (record: DuoShameRecord) => {
-              Text(`${record.title} · ${record.breach_role === 'violator' ? '主动撕毁' : '被连坐'}`)
+              Text(`${record.title} · ${record.breach_role === 'violator' ? '主动撕毁' : '被连带'}`)
                 .fontSize(13)
                 .fontColor(AppTheme.colors.danger)
             })

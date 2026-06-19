@@ -31,6 +31,16 @@ export interface DuoSessionView {
   breach_reason?: string;
   initiator?: DuoPartnerBrief;
   partner?: DuoPartnerBrief | null;
+  expects_duo?: boolean;
+  has_ever_activated?: boolean;
+  editable?: boolean;
+  initiator_apps?: string[];
+  partner_apps?: string[];
+  my_apps?: string[];
+  my_app_count?: number;
+  schedule_start?: string;
+  schedule_end?: string;
+  schedule_repeat?: string;
 }
 
 export interface DuoStatsSummary {
@@ -92,6 +102,25 @@ export interface DuoScheduledCreatePayload {
   end: string;
   end_min: number;
   repeat: string;
+  participation_mode?: DuoParticipationMode;
+  initiator_apps?: string[];
+  mode?: string;
+}
+
+export interface DuoScheduledUpdatePayload {
+  title?: string;
+  start?: string;
+  start_min?: number;
+  end?: string;
+  end_min?: number;
+  repeat?: string;
+  mode?: string;
+  initiator_apps?: string[];
+  partner_apps?: string[];
+}
+
+export interface DuoScheduledListResult {
+  items: DuoSessionView[];
 }
 
 export interface DuoPushPayload {
@@ -113,6 +142,44 @@ export interface UmengPushMessageBody {
   custom?: string;
 }
 
+export function parseStringArray(raw: Object | undefined): string[] {
+  if (!raw || !Array.isArray(raw)) {
+    return [];
+  }
+  const result: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const value = String(raw[i] ?? '');
+    if (value.length > 0) {
+      result.push(value);
+    }
+  }
+  return result;
+}
+
+export function getScheduleRepeatDays(repeat: string): number[] {
+  const days = repeat
+    .split(',')
+    .map((item: string) => Math.floor(Number(item.trim())))
+    .filter((day: number) => day >= 1 && day <= 7);
+  return days.length > 0 ? days : [1, 2, 3, 4, 5];
+}
+
+export function getScheduledSessionStatusLabel(session: DuoSessionView): string {
+  if (session.status === 'active') {
+    return '进行中';
+  }
+  if (session.status === 'scheduled') {
+    if (session.expects_duo && session.participation_mode !== 'duo') {
+      return '等待搭子';
+    }
+    return '待开始';
+  }
+  if (session.status === 'cancelled') {
+    return '已作废';
+  }
+  return session.status;
+}
+
 export function parseDuoSessionView(raw: Record<string, Object> | undefined): DuoSessionView | null {
   if (!raw) {
     return null;
@@ -131,6 +198,7 @@ export function parseDuoSessionView(raw: Record<string, Object> | undefined): Du
     duration_min: Number(raw['duration_min'] ?? 0),
     mode: String(raw['mode'] ?? 'allow'),
     participation_mode: (String(raw['participation_mode'] ?? 'solo') as DuoParticipationMode),
+    schedule_json: raw['schedule_json'] as Record<string, string | number> | undefined,
     expire_at: raw['expire_at'] ? String(raw['expire_at']) : undefined,
     active_at: raw['active_at'] ? String(raw['active_at']) : undefined,
     end_at: raw['end_at'] ? String(raw['end_at']) : undefined,
@@ -143,8 +211,32 @@ export function parseDuoSessionView(raw: Record<string, Object> | undefined): Du
     breached_by_name: raw['breached_by_name'] ? String(raw['breached_by_name']) : undefined,
     breach_reason: raw['breach_reason'] ? String(raw['breach_reason']) : undefined,
     initiator: raw['initiator'] as DuoPartnerBrief | undefined,
-    partner: raw['partner'] as DuoPartnerBrief | null | undefined
+    partner: raw['partner'] as DuoPartnerBrief | null | undefined,
+    expects_duo: raw['expects_duo'] === true || raw['expects_duo'] === 'true',
+    has_ever_activated: raw['has_ever_activated'] === true || raw['has_ever_activated'] === 'true',
+    editable: raw['editable'] === true || raw['editable'] === 'true',
+    initiator_apps: parseStringArray(raw['initiator_apps'] as Object),
+    partner_apps: parseStringArray(raw['partner_apps'] as Object),
+    my_apps: parseStringArray(raw['my_apps'] as Object),
+    my_app_count: Number(raw['my_app_count'] ?? 0),
+    schedule_start: String(raw['schedule_start'] ?? ''),
+    schedule_end: String(raw['schedule_end'] ?? ''),
+    schedule_repeat: String(raw['schedule_repeat'] ?? '')
   };
+}
+
+export function parseDuoScheduledList(raw: Record<string, Object> | undefined): DuoScheduledListResult {
+  const items: DuoSessionView[] = [];
+  const listRaw = raw?.['items'] as Object[];
+  if (listRaw) {
+    for (let i = 0; i < listRaw.length; i++) {
+      const session = parseDuoSessionView(listRaw[i] as Record<string, Object>);
+      if (session) {
+        items.push(session);
+      }
+    }
+  }
+  return { items };
 }
 
 export function parseDuoStatsSummary(raw: Record<string, Object> | undefined): DuoStatsSummary | null {

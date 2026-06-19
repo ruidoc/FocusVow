@@ -20,6 +20,7 @@ export struct PlanCard {
     selectedCount: 0,
     mode: 'shield',
     enabled: true,
+    duoSessionId: '',
     createdAt: 0,
     updatedAt: 0
   };

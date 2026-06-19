@@ -6,11 +6,13 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView } from '../../models/DuoModel';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
-import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
+import { PageRoutes, backRoute, replaceRoute, navigateToMainTab } from '../../router/PageRoutes';
 import { applyScreenRestriction } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
+import { clearDuoWaitContext } from '../../services/DuoWaitContextService';
 import { LockStore } from '../../stores/LockStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 
 bootstrapStores();
@@ -23,13 +25,19 @@ struct DuoWaitPage {
   @State inviteText: string = '';
   @State remainSeconds: number = 300;
   @State isStarting: boolean = false;
+  @State partnerReady: boolean = false;
 
   private sessionId: string = '';
+  private isScheduled: boolean = false;
+  private scheduleLabel: string = '';
   private timerId: number = -1;
+  private pollId: number = -1;
 
   aboutToAppear(): void {
-    this.sessionId = String(AppStorage.get<string>('duo.wait.session_id') ?? '');
-    this.inviteText = String(AppStorage.get<string>('duo.wait.invite_text') ?? '');
+    this.sessionId = String(AppStorage.get<string>(StoreKeys.DuoWaitSessionId) ?? '');
+    this.inviteText = String(AppStorage.get<string>(StoreKeys.DuoWaitInviteText) ?? '');
+    this.isScheduled = AppStorage.get<boolean>(StoreKeys.DuoWaitIsScheduled) === true;
+    this.scheduleLabel = String(AppStorage.get<string>(StoreKeys.DuoWaitScheduleLabel) ?? '');
     if (this.sessionId.length === 0) {
       backRoute();
       return;
@@ -47,10 +55,21 @@ struct DuoWaitPage {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
+    if (this.pollId !== -1) {
+      clearInterval(this.pollId);
+      this.pollId = -1;
+    }
   }
 
   private startTimers(): void {
     this.clearTimers();
+    if (this.isScheduled) {
+      this.pollId = setInterval(() => {
+        void this.refreshSession();
+      }, 3000);
+      return;
+    }
+
     this.timerId = setInterval(() => {
       if (this.remainSeconds > 0) {
         this.remainSeconds -= 1;
@@ -71,11 +90,15 @@ struct DuoWaitPage {
   }
 
   private getSessionTitle(): string {
-    return this.session?.title ?? String(AppStorage.get<string>('duo.wait.title') ?? '双人连坐');
+    return this.session?.title ?? String(AppStorage.get<string>(StoreKeys.DuoWaitTitle) ?? '搭子互督');
   }
 
   private getSessionDurationLabel(): string {
-    const durationMin = Number(AppStorage.get<number>('duo.wait.duration_min') ?? this.session?.duration_min ?? 0);
+    if (this.isScheduled && this.scheduleLabel.length > 0) {
+      return this.scheduleLabel;
+    }
+
+    const durationMin = Number(AppStorage.get<number>(StoreKeys.DuoWaitDurationMin) ?? this.session?.duration_min ?? 0);
     if (durationMin >= 60) {
       const h = Math.floor(durationMin / 60);
       const m = durationMin % 60;
@@ -92,6 +115,44 @@ struct DuoWaitPage {
     return this.session?.partner?.nickname ?? '等待搭子';
   }
 
+  private getHeaderTitle(): string {
+    if (this.isScheduled) {
+      return this.partnerReady ? '搭子已就位' : '等待搭子加入';
+    }
+    return '等待搭子加入';
+  }
+
+  private getHeaderValue(): string {
+    if (this.isScheduled) {
+      return this.scheduleLabel.length > 0 ? this.scheduleLabel : '定时履约';
+    }
+    return this.remainLabel();
+  }
+
+  private getHintText(): string {
+    if (this.isScheduled) {
+      return this.partnerReady
+        ? '契约已保存，到点将按定时计划自动履约。'
+        : '把下方口令发给搭子，对方加入后将在定时时段一起履约。';
+    }
+    return '把下方口令发给搭子，对方加入后双方将同时开始锁机。';
+  }
+
+  private getPartnerStatus(): string {
+    if (this.session?.partner) {
+      return this.isScheduled ? '已加入，等待定时开始' : '已加入，准备开始';
+    }
+    return '等待加入';
+  }
+
+  private exitToPlansOrFocus(): void {
+    if (this.isScheduled) {
+      navigateToMainTab('plans');
+      return;
+    }
+    replaceRoute(PageRoutes.FocusHome);
+  }
+
   private async refreshSession(): Promise<void> {
     const response = await DuoApiService.getSession(this.sessionId);
     const next = DuoApiService.parseSession(response);
@@ -99,7 +160,8 @@ struct DuoWaitPage {
       if (response.statusCode === 400 && (response.message ?? '').includes('过期')) {
         this.toastError('邀请已过期');
         this.clearTimers();
-        replaceRoute(PageRoutes.FocusHome);
+        clearDuoWaitContext();
+        this.exitToPlansOrFocus();
       }
       return;
     }
@@ -107,21 +169,31 @@ struct DuoWaitPage {
     this.session = next;
     if (next.invite_text && next.invite_text.length > 0) {
       this.inviteText = next.invite_text;
-      AppStorage.setOrCreate('duo.wait.invite_text', next.invite_text);
+      AppStorage.setOrCreate(StoreKeys.DuoWaitInviteText, next.invite_text);
     }
-    if (next.expire_at) {
+    if (!this.isScheduled && next.expire_at) {
       const remain = Math.max(0, Math.floor((new Date(next.expire_at).getTime() - Date.now()) / 1000));
       this.remainSeconds = remain;
     }
 
     if (next.status === 'expired' || next.status === 'cancelled') {
       this.clearTimers();
+      clearDuoWaitContext();
       this.toastError(next.status === 'cancelled' ? '已取消邀请' : '邀请已过期');
-      replaceRoute(PageRoutes.FocusHome);
+      this.exitToPlansOrFocus();
       return;
     }
 
-    if (next.status === 'active') {
+    if (this.isScheduled) {
+      const wasReady = this.partnerReady;
+      this.partnerReady = next.participation_mode === 'duo' && next.partner !== null && next.partner !== undefined;
+      if (!wasReady && this.partnerReady) {
+        ScheduledListStore.markDirty();
+      }
+      return;
+    }
+
+    if (next.status === 'active' && next.type !== 'scheduled') {
       await this.startLocalFocus(next);
     }
   }
@@ -134,8 +206,8 @@ struct DuoWaitPage {
     this.clearTimers();
 
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const durationMin = Number(AppStorage.get<number>('duo.wait.duration_min') ?? session.duration_min);
-    const title = String(AppStorage.get<string>('duo.wait.title') ?? session.title);
+    const durationMin = Number(AppStorage.get<number>(StoreKeys.DuoWaitDurationMin) ?? session.duration_min);
+    const title = String(AppStorage.get<string>(StoreKeys.DuoWaitTitle) ?? session.title);
     const result = await applyScreenRestriction(this.selectedTokens, 'allow');
     if (!result.ok) {
       this.toastError(result.message);
@@ -150,6 +222,7 @@ struct DuoWaitPage {
       participationMode: 'duo'
     };
     LockStore.startQuickFocus(hostContext, this.selectedTokens, durationMin, 'allow', focusOptions);
+    clearDuoWaitContext();
     replaceRoute(PageRoutes.FocusHome);
   }
 
@@ -165,9 +238,20 @@ struct DuoWaitPage {
   }
 
   private async cancelInvite(): Promise<void> {
-    await DuoApiService.cancelSession(this.sessionId);
+    if (this.isScheduled) {
+      await DuoApiService.scheduledCancel(this.sessionId);
+    } else {
+      await DuoApiService.cancelSession(this.sessionId);
+    }
     this.clearTimers();
-    replaceRoute(PageRoutes.FocusHome);
+    clearDuoWaitContext();
+    this.exitToPlansOrFocus();
+  }
+
+  private finishScheduledInvite(): void {
+    this.clearTimers();
+    clearDuoWaitContext();
+    navigateToMainTab('plans');
   }
 
   @Builder
@@ -224,7 +308,7 @@ struct DuoWaitPage {
         this.buildParticipantRow(this.getInitiatorName(), '已发起契约', true)
         this.buildParticipantRow(
           this.getPartnerName(),
-          this.session?.partner ? '已加入，准备开始' : '等待加入',
+          this.getPartnerStatus(),
           this.session?.partner !== null && this.session?.partner !== undefined
         )
       }
@@ -264,14 +348,14 @@ struct DuoWaitPage {
   private buildPageBody(): void {
     Column({ space: 18 }) {
       Column({ space: 8 }) {
-        Text(this.remainLabel())
+        Text(this.getHeaderValue())
           .fontSize(40)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .width('100%')
           .textAlign(TextAlign.Center)
 
-        Text('等待搭子加入')
+        Text(this.getHeaderTitle())
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
@@ -279,7 +363,7 @@ struct DuoWaitPage {
       }
       .width('100%')
 
-      Text('把下方口令发给搭子，对方加入后双方将同时开始锁机。')
+      Text(this.getHintText())
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
@@ -287,19 +371,33 @@ struct DuoWaitPage {
       this.buildRitualCard()
       this.buildInviteCard()
 
-      Button('复制口令')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Capsule)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
-        .onClick(() => {
-          void this.copyInvite();
-        })
+      if (!this.partnerReady) {
+        Button('复制口令')
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Capsule)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .backgroundColor(AppTheme.colors.primary)
+          .fontColor('#FFFFFF')
+          .onClick(() => {
+            void this.copyInvite();
+          })
+      } else {
+        Button('返回计划')
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Capsule)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .backgroundColor(AppTheme.colors.primary)
+          .fontColor('#FFFFFF')
+          .onClick(() => {
+            this.finishScheduledInvite();
+          })
+      }
 
-      Button('取消邀请')
+      Button(this.isScheduled ? '取消契约' : '取消邀请')
         .width('100%')
         .height(52)
         .type(ButtonType.Capsule)
@@ -317,7 +415,7 @@ struct DuoWaitPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '等待搭子',
+        title: this.isScheduled ? '邀请搭子' : '等待搭子',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

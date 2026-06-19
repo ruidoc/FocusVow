@@ -20,4 +20,15 @@ export class StoreKeys {
   static readonly AppForegroundAt: string = 'app.foregroundAt';
   static readonly AppIsForeground: string = 'app.isForeground';
   static readonly InAppMessage: string = 'app.inAppMessage';
+  static readonly MainTabTarget: string = 'main.tab.target';
+  static readonly DuoWaitSessionId: string = 'duo.wait.session_id';
+  static readonly DuoWaitTitle: string = 'duo.wait.title';
+  static readonly DuoWaitInviteText: string = 'duo.wait.invite_text';
+  static readonly DuoWaitIsScheduled: string = 'duo.wait.is_scheduled';
+  static readonly DuoWaitScheduleLabel: string = 'duo.wait.schedule_label';
+  static readonly DuoWaitDurationMin: string = 'duo.wait.duration_min';
+  static readonly ScheduledSessionCurrentId: string = 'scheduled.session.currentId';
+  static readonly ScheduledListAll: string = 'scheduled.list.all';
+  static readonly ScheduledListFilter: string = 'scheduled.list.filter';
+  static readonly ScheduledListDirty: string = 'scheduled.list.dirty';
 }

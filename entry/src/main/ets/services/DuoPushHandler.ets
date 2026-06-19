@@ -1,13 +1,19 @@
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { ActiveLockState, isLocked, QuickFocusOptions } from '../models/ActiveLockModel';
+import { ActiveLockState, isLocked, QuickFocusOptions, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
 import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody } from '../models/DuoModel';
 import { PageRoutes, replaceRoute } from '../router/PageRoutes';
 import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
-import { applyScreenRestriction, releaseScreenRestriction } from './ScreenTimeService';
+import { applyScreenRestriction, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { DuoApiService } from './DuoApiService';
 import { InAppMessageService } from './InAppMessageService';
+import {
+  clearScheduledActivationTracking,
+  markScheduledListStale,
+  removeGuardForSession
+} from './ScheduledCovenantService';
+import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { readStoredString, removeStoredKey, writeStoredString } from './PreferencesService';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
@@ -109,18 +115,21 @@ export class DuoPushHandler {
 
   /**
    * 用户未点通知、直接打开 App 时，用一次远端状态补齐撕毁解除。
-   * 仅在本地仍有双人专注锁时查询，不是定时轮询。
+   * 仅在本地仍有搭子互督专注锁时查询，不是定时轮询。
    */
   static async syncActiveDuoBreachIfNeeded(
     context: common.UIAbilityContext,
     options?: PushDispatchOptions
   ): Promise<void> {
     const state = DuoPushHandler.resolveActiveLockState(context);
-    if (state.kind !== 'quick_focus' || state.participationMode !== 'duo') {
+    if (state.participationMode !== 'duo') {
+      return;
+    }
+    if (state.kind !== 'quick_focus' && state.kind !== 'covenant') {
       return;
     }
 
-    const sessionId = state.duoSessionId;
+    const sessionId = resolveDuoSessionIdFromLock(state);
     if (sessionId.length === 0 || handledBreachSessionIds.has(sessionId)) {
       return;
     }
@@ -170,6 +179,10 @@ export class DuoPushHandler {
         return DuoPushHandler.handleDuoBreach;
       case 'duo_scheduled_joined':
         return DuoPushHandler.handleDuoScheduledJoined;
+      case 'duo_partner_left':
+        return DuoPushHandler.handleDuoPartnerLeft;
+      case 'duo_scheduled_cancelled':
+        return DuoPushHandler.handleDuoScheduledCancelled;
       default:
         return null;
     }
@@ -267,6 +280,7 @@ export class DuoPushHandler {
     payload: DuoPushPayload,
     options?: PushDispatchOptions
   ): Promise<void> {
+    ScheduledListStore.markDirty();
     if (!options?.isForeground) {
       return;
     }
@@ -275,7 +289,41 @@ export class DuoPushHandler {
       ? payload.partner_name
       : '搭子';
     const title = options.title && options.title.length > 0 ? options.title : '搭子加入';
-    InAppMessageService.show(title, `${partnerName} 加入了你的定时连坐`, payload.type);
+    InAppMessageService.show(title, `${partnerName} 加入了你的定时搭子互督`, payload.type);
+  }
+
+  private static async handleDuoPartnerLeft(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    ScheduledListStore.markDirty();
+    if (options?.isForeground) {
+      const title = options.title && options.title.length > 0 ? options.title : '搭子退出';
+      const message = payload.message && payload.message.length > 0
+        ? payload.message
+        : '你的搭子已退出定时互督';
+      InAppMessageService.show(title, message, payload.type);
+    }
+  }
+
+  private static async handleDuoScheduledCancelled(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    ScheduledListStore.markDirty();
+    const sessionId = payload.session_id ?? '';
+    if (sessionId.length > 0) {
+      await removeGuardForSession(context, sessionId);
+    }
+    if (options?.isForeground) {
+      const title = options.title && options.title.length > 0 ? options.title : '契约已作废';
+      const message = payload.message && payload.message.length > 0
+        ? payload.message
+        : '发起人已作废定时契约';
+      InAppMessageService.show(title, message, payload.type);
+    }
   }
 
   private static async handleDuoStart(
@@ -302,6 +350,9 @@ export class DuoPushHandler {
     const response = await DuoApiService.getSession(sessionId);
     const session = DuoApiService.parseSession(response);
     if (!session || session.status !== 'active') {
+      return;
+    }
+    if (session.type === 'scheduled') {
       return;
     }
 
@@ -336,7 +387,8 @@ export class DuoPushHandler {
 
     DuoPushHandler.persistPendingBreach(context, payload);
     const state = DuoPushHandler.resolveActiveLockState(context);
-    if (state.duoSessionId.length === 0 || state.duoSessionId !== sessionId) {
+    const activeSessionId = resolveDuoSessionIdFromLock(state);
+    if (activeSessionId.length === 0 || activeSessionId !== sessionId) {
       return;
     }
 
@@ -347,11 +399,17 @@ export class DuoPushHandler {
       : '由于你的搭子撕毁了契约，本次专注已中止';
     SettingsStore.hydrate(context);
 
-    if (isLocked(state) && state.kind === 'quick_focus') {
-      await releaseScreenRestriction(state.selectedTokens, state.mode);
+    if (isLocked(state)) {
+      if (state.kind === 'quick_focus') {
+        await releaseScreenRestriction(state.selectedTokens, state.mode);
+      } else if (state.kind === 'covenant') {
+        await stopPlanGuardStrategyForWindow(state.planId);
+      }
     }
 
     LockStore.clear(context);
+    markScheduledListStale(context);
+    clearScheduledActivationTracking(sessionId);
     SettingsStore.updateStatusMessage(context, message);
     DuoPushHandler.clearPendingBreach(context);
 

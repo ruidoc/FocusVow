@@ -1,10 +1,14 @@
+import { common } from '@kit.AbilityKit';
 import {
   DuoScheduledCreatePayload,
+  DuoScheduledListResult,
+  DuoScheduledUpdatePayload,
   DuoSessionView,
   DuoStatsShame,
   DuoStatsSummary,
   DuoStatsTimeline,
   parseDuoSessionView,
+  parseDuoScheduledList,
   parseDuoStatsShame,
   parseDuoStatsSummary,
   parseDuoStatsTimeline
@@ -71,15 +75,114 @@ export class DuoApiService {
       'end_min': payload.end_min,
       'repeat': payload.repeat
     };
+    if (payload.participation_mode && payload.participation_mode.length > 0) {
+      body['participation_mode'] = payload.participation_mode;
+    }
+    if (payload.initiator_apps && payload.initiator_apps.length > 0) {
+      body['initiator_apps'] = payload.initiator_apps;
+    }
+    if (payload.mode && payload.mode.length > 0) {
+      body['mode'] = payload.mode;
+    }
     return HttpService.post('/duo/scheduled/create', body);
   }
 
-  static async scheduledJoin(token: string, appCount: number): Promise<ApiEnvelope> {
+  static async getScheduledList(role?: 'initiated' | 'joined'): Promise<ApiEnvelope> {
+    if (role === undefined) {
+      return HttpService.get('/duo/scheduled/list');
+    }
+    const query: Record<string, string> = {
+      'role': role
+    };
+    return HttpService.getWithQuery('/duo/scheduled/list', query);
+  }
+
+  static async scheduledJoin(token: string, partnerApps: string[]): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {
       'token': token,
-      'app_count': appCount
+      'partner_apps': partnerApps
     };
     return HttpService.post('/duo/scheduled/join', body);
+  }
+
+  static async scheduledUpdate(
+    sessionId: string,
+    payload: DuoScheduledUpdatePayload
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {};
+    if (payload.title !== undefined) {
+      body['title'] = payload.title;
+    }
+    if (payload.start !== undefined) {
+      body['start'] = payload.start;
+    }
+    if (payload.start_min !== undefined) {
+      body['start_min'] = payload.start_min;
+    }
+    if (payload.end !== undefined) {
+      body['end'] = payload.end;
+    }
+    if (payload.end_min !== undefined) {
+      body['end_min'] = payload.end_min;
+    }
+    if (payload.repeat !== undefined) {
+      body['repeat'] = payload.repeat;
+    }
+    if (payload.mode !== undefined) {
+      body['mode'] = payload.mode;
+    }
+    if (payload.initiator_apps !== undefined) {
+      body['initiator_apps'] = payload.initiator_apps;
+    }
+    if (payload.partner_apps !== undefined) {
+      body['partner_apps'] = payload.partner_apps;
+    }
+    return HttpService.post(`/duo/scheduled/${encodeURIComponent(sessionId)}/update`, body);
+  }
+
+  static async scheduledLeave(sessionId: string): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {};
+    return HttpService.post(`/duo/scheduled/${encodeURIComponent(sessionId)}/leave`, body);
+  }
+
+  static async scheduledCancel(sessionId: string): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {};
+    return HttpService.post(`/duo/scheduled/${encodeURIComponent(sessionId)}/cancel`, body);
+  }
+
+  static parseScheduledList(envelope: ApiEnvelope): DuoScheduledListResult {
+    if (envelope.statusCode !== 200 || !envelope.data) {
+      return { items: [] };
+    }
+    return parseDuoScheduledList(envelope.data as Record<string, Object>);
+  }
+
+  static async activateScheduledSession(
+    sessionId: string,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {};
+    return HttpService.post(
+      `/duo/scheduled/${encodeURIComponent(sessionId)}/activate`,
+      body,
+      true,
+      true,
+      context
+    );
+  }
+
+  static async completeScheduledWindow(
+    sessionId: string,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {};
+    return HttpService.post(
+      `/duo/scheduled/${encodeURIComponent(sessionId)}/complete-window`,
+      body,
+      true,
+      true,
+      context
+    );
   }
 
   static async getStatsSummary(period: string): Promise<ApiEnvelope> {

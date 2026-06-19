@@ -113,6 +113,10 @@ struct QuickStartPage {
       this.toastError('请先选择至少 1 个应用');
       return;
     }
+    if (this.title.trim().length === 0) {
+      this.toastError('请先填写本次契约要做什么');
+      return;
+    }
 
     if (!this.hasAuthorized) {
       await this.authorize();
@@ -127,7 +131,7 @@ struct QuickStartPage {
       return;
     }
 
-    const taskTitle = this.title.trim().length > 0 ? this.title.trim() : '单人修炼';
+    const taskTitle = this.title.trim();
     const focusOptions: QuickFocusOptions = {
       title: taskTitle,
       duoSessionId: '',
@@ -292,7 +296,7 @@ struct QuickStartPage {
       this.buildAppCard()
       this.buildDurationCard()
 
-      Button('开始单人修炼')
+      Button('开始单练')
         .width('100%')
         .height(52)
         .type(ButtonType.Capsule)
@@ -312,7 +316,7 @@ struct QuickStartPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '单人修炼',
+        title: '单练',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

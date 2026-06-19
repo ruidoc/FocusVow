@@ -5,10 +5,13 @@ bootstrapStores();
 
 @Component
 export struct ContractTabPage {
+  @Prop isPageActive: boolean = true;
+
   build() {
     PlanCollectionPage({
-      title: '契约',
-      showBack: false
+      title: '定时契约',
+      showBack: false,
+      isPageActive: this.isPageActive
     })
   }
 }

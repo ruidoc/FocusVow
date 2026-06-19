@@ -4,24 +4,90 @@ import {
   ActiveLockState,
   createCovenantLockState,
   createIdleLockState,
+  QuickFocusParticipationMode,
   RestrictionMode
 } from '../models/ActiveLockModel';
-import { FocusPlan } from '../models/PlanModel';
 import { createDefaultSettingsState, SettingsState } from '../models/PermissionModel';
 import {
   loadPersistedActiveLockState,
   savePersistedActiveLockState
 } from './ActiveLockPersistenceService';
+import { DuoApiService } from './DuoApiService';
 import { restartCycleGuardIfEnabled } from './CycleGuardService';
+import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { getPlanWindow } from './PlanWindowService';
+import { FocusPlan } from '../models/PlanModel';
+import { DuoSessionView } from '../models/DuoModel';
 import { loadPersistedPlans } from './PlanPersistenceService';
 import { loadPersistedSettings, savePersistedSettings } from './SettingsPersistenceService';
+import {
+  loadScheduledGuardSnapshot,
+  ScheduledGuardSnapshot
+} from './ScheduledSessionPersistenceService';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'PlanGuardRuntime';
 
+interface ScheduledActivationMeta {
+  duoSessionId: string;
+  recordId: string;
+  participationMode: QuickFocusParticipationMode;
+}
+
+function createEmptyActivationMeta(): ScheduledActivationMeta {
+  const empty: ScheduledActivationMeta = {
+    duoSessionId: '',
+    recordId: '',
+    participationMode: ''
+  };
+  return empty;
+}
+
+function buildActivationMetaFromSession(session: DuoSessionView): ScheduledActivationMeta {
+  const participationMode: QuickFocusParticipationMode =
+    session.participation_mode === 'duo' ? 'duo' : 'solo';
+  const meta: ScheduledActivationMeta = {
+    duoSessionId: session.session_id,
+    recordId: session.my_record_id || session.record_id || '',
+    participationMode
+  };
+  return meta;
+}
+
+async function resolveScheduledActivationMeta(
+  context: common.Context,
+  sessionId: string
+): Promise<ScheduledActivationMeta> {
+  if (sessionId.length === 0) {
+    return createEmptyActivationMeta();
+  }
+
+  const response = await DuoApiService.activateScheduledSession(sessionId, context);
+  const session = DuoApiService.parseSession(response);
+  if (!session) {
+    hilog.warn(
+      DOMAIN,
+      TAG,
+      'activate scheduled failed session=%{public}s message=%{public}s',
+      sessionId,
+      response.message ?? 'unknown'
+    );
+    return createEmptyActivationMeta();
+  }
+
+  return buildActivationMetaFromSession(session);
+}
+
 function isPlanStrategyName(strategyName: string): boolean {
   return strategyName.startsWith('plan_');
+}
+
+function isSessionStrategyName(strategyName: string): boolean {
+  return strategyName.startsWith('session_');
+}
+
+function sessionIdFromStrategy(strategyName: string): string {
+  return strategyName.replace('session_', '');
 }
 
 function updateSettingsStatusMessage(context: common.Context, statusMessage: string): void {
@@ -50,7 +116,43 @@ function findPlanByStrategyName(context: common.Context, strategyName: string): 
   return null;
 }
 
-function buildCovenantLockFromPlan(plan: FocusPlan): ActiveLockState {
+function buildCovenantLockFromSnapshot(
+  snapshot: ScheduledGuardSnapshot,
+  activationMeta: ScheduledActivationMeta
+): ActiveLockState {
+  const pseudoPlan: FocusPlan = {
+    id: `session_${snapshot.sessionId}`,
+    name: snapshot.title,
+    startTime: snapshot.startTime,
+    endTime: snapshot.endTime,
+    repeatDays: snapshot.repeatDays,
+    selectedTokens: snapshot.selectedTokens,
+    selectedCount: snapshot.selectedTokens.length,
+    mode: snapshot.mode,
+    enabled: true,
+    duoSessionId: snapshot.sessionId,
+    createdAt: 0,
+    updatedAt: 0
+  };
+  const planWindow = getPlanWindow(pseudoPlan, new Date());
+  return createCovenantLockState(
+    pseudoPlan.id,
+    pseudoPlan.name,
+    pseudoPlan.selectedTokens,
+    pseudoPlan.mode as RestrictionMode,
+    planWindow.startAt,
+    planWindow.endAt,
+    Date.now(),
+    activationMeta.duoSessionId || snapshot.sessionId,
+    activationMeta.recordId,
+    activationMeta.participationMode
+  );
+}
+
+function buildCovenantLockFromPlan(
+  plan: FocusPlan,
+  activationMeta: ScheduledActivationMeta
+): ActiveLockState {
   const planWindow = getPlanWindow(plan, new Date());
   return createCovenantLockState(
     plan.id,
@@ -58,7 +160,11 @@ function buildCovenantLockFromPlan(plan: FocusPlan): ActiveLockState {
     plan.selectedTokens,
     plan.mode as RestrictionMode,
     planWindow.startAt,
-    planWindow.endAt
+    planWindow.endAt,
+    Date.now(),
+    activationMeta.duoSessionId || plan.duoSessionId,
+    activationMeta.recordId,
+    activationMeta.participationMode
   );
 }
 
@@ -89,16 +195,66 @@ function saveCovenantLockState(
   hilog.info(
     DOMAIN,
     TAG,
-    'onStart lock saved=%{public}s planId=%{public}s kind=%{public}s',
+    'onStart lock saved=%{public}s planId=%{public}s kind=%{public}s duo=%{public}s',
     String(saved),
     nextState.planId,
-    nextState.kind
+    nextState.kind,
+    nextState.participationMode
   );
   updateSettingsStatusMessage(context, statusMessage);
   return saved;
 }
 
-export function handlePlanStrategyStart(context: common.Context, strategyName: string): void {
+function buildScheduledLockStatusMessage(
+  title: string,
+  participationMode: QuickFocusParticipationMode
+): string {
+  const duoHint = participationMode === 'duo' ? '（搭子互督）' : '';
+  return `契约「${title}」正在系统锁定中${duoHint}`;
+}
+
+async function finalizeScheduledCovenantStart(
+  context: common.Context,
+  sessionId: string,
+  snapshot: ScheduledGuardSnapshot,
+  initialState: ActiveLockState
+): Promise<void> {
+  ScheduledListStore.markNeedsRefreshPersisted(context);
+  const activationMeta = await resolveScheduledActivationMeta(context, sessionId);
+  if (activationMeta.duoSessionId.length === 0) {
+    return;
+  }
+
+  const enrichedState = buildCovenantLockFromSnapshot(snapshot, activationMeta);
+  saveCovenantLockState(
+    context,
+    enrichedState,
+    buildScheduledLockStatusMessage(snapshot.title, activationMeta.participationMode)
+  );
+  if (initialState.recordId.length === 0 && enrichedState.recordId.length > 0) {
+    hilog.info(DOMAIN, TAG, 'scheduled activate enriched recordId=%{public}s', enrichedState.recordId);
+  }
+}
+
+export async function handlePlanStrategyStart(context: common.Context, strategyName: string): Promise<void> {
+  if (isSessionStrategyName(strategyName)) {
+    const sessionId = sessionIdFromStrategy(strategyName);
+    const snapshot = loadScheduledGuardSnapshot(context, sessionId);
+    if (!snapshot) {
+      hilog.warn(DOMAIN, TAG, 'onStart missing snapshot %{public}s', strategyName);
+      return;
+    }
+
+    const initialState = buildCovenantLockFromSnapshot(snapshot, createEmptyActivationMeta());
+    saveCovenantLockState(
+      context,
+      initialState,
+      buildScheduledLockStatusMessage(snapshot.title, '')
+    );
+    await finalizeScheduledCovenantStart(context, sessionId, snapshot, initialState);
+    return;
+  }
+
   if (!isPlanStrategyName(strategyName)) {
     return;
   }
@@ -108,12 +264,25 @@ export function handlePlanStrategyStart(context: common.Context, strategyName: s
 
   const plan = findPlanByStrategyName(context, strategyName);
   if (plan) {
-    const nextState = buildCovenantLockFromPlan(plan);
+    const initialState = buildCovenantLockFromPlan(plan, createEmptyActivationMeta());
     saveCovenantLockState(
       context,
-      nextState,
+      initialState,
       `契约「${plan.name}」正在系统锁定中`
     );
+    if (plan.duoSessionId.length > 0) {
+      const snapshot = loadScheduledGuardSnapshot(context, plan.duoSessionId);
+      if (snapshot) {
+        await finalizeScheduledCovenantStart(context, plan.duoSessionId, snapshot, initialState);
+      } else {
+        ScheduledListStore.markNeedsRefreshPersisted(context);
+        const activationMeta = await resolveScheduledActivationMeta(context, plan.duoSessionId);
+        if (activationMeta.duoSessionId.length > 0) {
+          const enrichedState = buildCovenantLockFromPlan(plan, activationMeta);
+          saveCovenantLockState(context, enrichedState, `契约「${plan.name}」正在系统锁定中`);
+        }
+      }
+    }
     return;
   }
 
@@ -130,6 +299,16 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
   const nowMs = Date.now();
   const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
 
+  if (isSessionStrategyName(strategyName)) {
+    const sessionId = sessionIdFromStrategy(strategyName);
+    await DuoApiService.completeScheduledWindow(sessionId, context);
+  } else {
+    const plan = findPlanByStrategyName(context, strategyName);
+    if (plan?.duoSessionId && plan.duoSessionId.length > 0) {
+      await DuoApiService.completeScheduledWindow(plan.duoSessionId, context);
+    }
+  }
+
   if (isCovenantLockStillActive(currentLock, strategyName, nowMs)) {
     hilog.warn(
       DOMAIN,
@@ -143,6 +322,7 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
 
   if (currentLock.kind === 'covenant' && currentLock.planId === strategyName) {
     savePersistedActiveLockState(context, createIdleLockState());
+    ScheduledListStore.markNeedsRefreshPersisted(context);
     hilog.info(DOMAIN, TAG, 'onStop cleared covenant lock %{public}s', strategyName);
   }
 

@@ -21,7 +21,7 @@ export default class TimeGuardExtAbility extends TimeGuardExtensionAbility {
       await handleCycleStrategyStart(appContext, strategyName);
       return;
     }
-    handlePlanStrategyStart(appContext, strategyName);
+    await handlePlanStrategyStart(appContext, strategyName);
     const lockState = loadPersistedActiveLockState(appContext);
     hilog.info(
       DOMAIN,

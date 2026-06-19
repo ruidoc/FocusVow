@@ -1,4 +1,5 @@
 import { http } from '@kit.NetworkKit';
+import { common } from '@kit.AbilityKit';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { ApiConfig } from '../config/ApiConfig';
 import { ApiEnvelope } from '../models/UserModel';
@@ -10,34 +11,41 @@ type HttpVerb = 'GET' | 'POST';
 const LOG_TAG: string = 'HttpService';
 
 export class HttpService {
-  static async get(path: string, requiresAuth: boolean = true, skipPendingFlush: boolean = false): Promise<ApiEnvelope> {
-    return HttpService.request('GET', path, undefined, requiresAuth, skipPendingFlush);
+  static async get(
+    path: string,
+    requiresAuth: boolean = true,
+    skipPendingFlush: boolean = false,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    return HttpService.request('GET', path, undefined, requiresAuth, skipPendingFlush, context);
   }
 
   static async getWithQuery(
     path: string,
     query: Record<string, string>,
     requiresAuth: boolean = true,
-    skipPendingFlush: boolean = false
+    skipPendingFlush: boolean = false,
+    context?: common.Context
   ): Promise<ApiEnvelope> {
     const queryString = Object.keys(query)
       .filter((key: string) => query[key].length > 0)
       .map((key: string) => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
       .join('&');
     const urlPath = queryString.length > 0 ? `${path}?${queryString}` : path;
-    return HttpService.get(urlPath, requiresAuth, skipPendingFlush);
+    return HttpService.get(urlPath, requiresAuth, skipPendingFlush, context);
   }
 
   static async post(
     path: string,
     body: Record<string, Object>,
     requiresAuth: boolean = true,
-    skipPendingFlush: boolean = false
+    skipPendingFlush: boolean = false,
+    context?: common.Context
   ): Promise<ApiEnvelope> {
-    return HttpService.request('POST', path, body, requiresAuth, skipPendingFlush);
+    return HttpService.request('POST', path, body, requiresAuth, skipPendingFlush, context);
   }
 
-  private static buildHeaders(requiresAuth: boolean): Record<string, string> {
+  private static buildHeaders(requiresAuth: boolean, context?: common.Context): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'project-tag': ApiConfig.PROJECT_TAG,
@@ -45,8 +53,8 @@ export class HttpService {
     };
 
     if (requiresAuth) {
-      const context = AppContextHolder.get();
-      const token = context ? loadAccessToken(context) : '';
+      const authContext = context ?? AppContextHolder.get();
+      const token = authContext ? loadAccessToken(authContext) : '';
       if (token.length > 0) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -74,12 +82,13 @@ export class HttpService {
     path: string,
     body: Record<string, Object> | undefined,
     requiresAuth: boolean,
-    skipPendingFlush: boolean = false
+    skipPendingFlush: boolean = false,
+    context?: common.Context
   ): Promise<ApiEnvelope> {
     if (requiresAuth && !skipPendingFlush && !path.startsWith('/focus/sync')) {
-      const context = AppContextHolder.get();
-      if (context) {
-        await FocusSyncService.flushPending(context);
+      const flushContext = context ?? AppContextHolder.get();
+      if (flushContext) {
+        await FocusSyncService.flushPending(flushContext);
       }
     }
 
@@ -89,7 +98,7 @@ export class HttpService {
     try {
       const requestOptions: http.HttpRequestOptions = {
         method: verb === 'GET' ? http.RequestMethod.GET : http.RequestMethod.POST,
-        header: HttpService.buildHeaders(requiresAuth),
+        header: HttpService.buildHeaders(requiresAuth, context),
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: ApiConfig.CONNECT_TIMEOUT_MS,
         readTimeout: ApiConfig.READ_TIMEOUT_MS

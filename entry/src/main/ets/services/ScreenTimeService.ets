@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FocusPlan } from '../models/PlanModel';
+import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
 
 export interface GuardResult<T> {
   ok: boolean;
@@ -79,6 +80,55 @@ function createPlanGuardStrategy(plan: FocusPlan): guardService.GuardStrategy {
     },
     appRestrictionType: getRestrictionType(plan.mode)
   };
+}
+
+function createScheduledGuardStrategy(snapshot: ScheduledGuardSnapshot): guardService.GuardStrategy {
+  return {
+    name: `session_${snapshot.sessionId}`,
+    timeStrategy: {
+      type: guardService.TimeStrategyType.START_END_TIME_TYPE,
+      startTime: snapshot.startTime,
+      endTime: snapshot.endTime,
+      repeat: [...snapshot.repeatDays]
+    },
+    appInfo: {
+      appTokens: [...snapshot.selectedTokens]
+    },
+    appRestrictionType: getRestrictionType(snapshot.mode)
+  };
+}
+
+async function addOrUpdateScheduledGuardStrategy(
+  snapshot: ScheduledGuardSnapshot,
+  existingNames?: Set<string>
+): Promise<void> {
+  const strategyName = `session_${snapshot.sessionId}`;
+  const strategy = createScheduledGuardStrategy(snapshot);
+  const hasExistingStrategy = existingNames?.has(strategyName) ?? false;
+
+  if (hasExistingStrategy) {
+    try {
+      await guardService.updateGuardStrategy(strategyName, strategy);
+    } catch (error) {
+      throw guardOperationError(`updateGuardStrategy(${strategyName})`, error as Object);
+    }
+    return;
+  }
+
+  try {
+    await guardService.addGuardStrategy(strategy);
+  } catch (error) {
+    const guardError = error as GuardErrorLike;
+    if (isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.STRATEGY_NAME_ALREADY_EXIST)) {
+      try {
+        await guardService.updateGuardStrategy(strategyName, strategy);
+      } catch (updateError) {
+        throw guardOperationError(`updateGuardStrategy(${strategyName})`, updateError as Object);
+      }
+      return;
+    }
+    throw guardOperationError(`addGuardStrategy(${strategyName})`, error as Object);
+  }
 }
 
 async function addOrUpdatePlanGuardStrategy(
@@ -232,6 +282,46 @@ export async function releaseScreenRestriction(
       ok: false,
       data: false,
       message: toBusinessMessage('解除应用限制失败')
+    };
+  }
+}
+
+export async function syncScheduledSessionGuardStrategy(
+  snapshot: ScheduledGuardSnapshot
+): Promise<GuardResult<boolean>> {
+  const strategyName = `session_${snapshot.sessionId}`;
+  if (snapshot.selectedTokens.length === 0) {
+    await stopPlanGuardStrategy(strategyName);
+    await removePlanGuardStrategyInternal(strategyName);
+    return { ok: true, data: true, message: '未选择应用，已移除屏时策略' };
+  }
+
+  try {
+    await addOrUpdateScheduledGuardStrategy(snapshot);
+    await startPlanGuardStrategy(strategyName);
+    return { ok: true, data: true, message: '屏时策略已注册' };
+  } catch (error) {
+    logGuardError(`syncScheduledSessionGuardStrategy(${strategyName})`, error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('注册屏时策略失败')
+    };
+  }
+}
+
+export async function removeScheduledSessionGuardStrategy(sessionId: string): Promise<GuardResult<boolean>> {
+  const strategyName = `session_${sessionId}`;
+  try {
+    await stopPlanGuardStrategy(strategyName);
+    await removePlanGuardStrategyInternal(strategyName);
+    return { ok: true, data: true, message: '屏时策略已移除' };
+  } catch (error) {
+    logGuardError(`removeScheduledSessionGuardStrategy(${strategyName})`, error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('移除屏时策略失败')
     };
   }
 }
