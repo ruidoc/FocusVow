@@ -12,6 +12,7 @@ import {
   reconcileScheduledCovenantActivation
 } from './ScheduledCovenantService';
 import { restartCycleGuardIfEnabled } from './CycleGuardService';
+import { queueHonorCertificate } from './CertificatePendingService';
 import { FocusSyncService } from './FocusSyncService';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
@@ -40,9 +41,11 @@ export async function reconcileCovenantNaturalCompletion(
 
   covenantCompletionInFlight = true;
   try {
+    const endedAt = Date.now();
     await syncScheduledCovenantTerminal(context, lock, 'SUCCESS');
     await releaseCovenantGuard(lock);
     const sessionId = resolveDuoSessionIdFromLock(lock);
+    queueHonorCertificate(lock, endedAt);
     LockStore.clear(context);
     markScheduledListStale(context);
     clearScheduledActivationTracking(sessionId);

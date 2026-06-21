@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
+import { backRoute, pushPrivacyPolicy, pushUserAgreement } from '../../router/PageRoutes';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
@@ -23,6 +23,26 @@ struct SettingsPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.logout(hostContext);
     showToast('已退出登录', this.getUIContext());
+  }
+
+  private confirmLogout(): void {
+    this.getUIContext().showAlertDialog({
+      title: '退出登录',
+      message: '退出后本机将不再同步当前账号数据，确认退出吗？',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认退出',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          this.logout();
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
   }
 
   private getFooterMessage(): string {
@@ -78,10 +98,10 @@ struct SettingsPage {
     Column({ space: 16 }) {
       Column({ space: 0 }) {
         this.buildMenuRow('隐私政策', $r('sys.symbol.person'), true, () => {
-          pushRoute(PageRoutes.PrivacyPolicy);
+          pushPrivacyPolicy();
         })
         this.buildMenuRow('用户协议', $r('sys.symbol.doc_plaintext'), false, () => {
-          pushRoute(PageRoutes.UserAgreement);
+          pushUserAgreement();
         })
       }
       .width('100%')
@@ -93,21 +113,15 @@ struct SettingsPage {
       if (this.isLoggedIn) {
         Button('退出登录')
           .width('100%')
-          .height(52)
+          .height(48)
           .type(ButtonType.Capsule)
           .backgroundColor(AppTheme.colors.dangerSoft)
           .fontColor(AppTheme.colors.danger)
-          .border({ width: 1, color: AppTheme.colors.danger })
           .onClick(() => {
-            this.logout();
+            this.confirmLogout();
           })
       }
 
-      Text(this.getFooterMessage())
-        .fontSize(13)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-        .textAlign(TextAlign.Center)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

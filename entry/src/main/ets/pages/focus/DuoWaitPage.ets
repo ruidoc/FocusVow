@@ -248,6 +248,28 @@ struct DuoWaitPage {
     this.exitToPlansOrFocus();
   }
 
+  private confirmCancelInvite(): void {
+    this.getUIContext().showAlertDialog({
+      title: this.isScheduled ? '取消契约' : '取消邀请',
+      message: this.isScheduled
+        ? '取消后这条定时契约将被作废，确认取消吗？'
+        : '取消后邀请口令将失效，确认取消吗？',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认取消',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.cancelInvite();
+        }
+      },
+      secondaryButton: {
+        value: '暂不取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
   private finishScheduledInvite(): void {
     this.clearTimers();
     clearDuoWaitContext();
@@ -405,7 +427,7 @@ struct DuoWaitPage {
         .fontColor(AppTheme.colors.textPrimary)
         .border({ width: 1, color: AppTheme.colors.border })
         .onClick(() => {
-          void this.cancelInvite();
+          this.confirmCancelInvite();
         })
     }
     .width('100%')

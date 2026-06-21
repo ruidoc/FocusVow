@@ -281,7 +281,7 @@ struct DuoJoinPage {
   @Builder
   private buildPageBody(): void {
     Column({ space: 18 }) {
-      Text('粘贴或输入搭子的口令，先确认契约信息，再选择要放行的应用。')
+      Text('粘贴或输入搭子的口令，确认契约信息后加入')
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')

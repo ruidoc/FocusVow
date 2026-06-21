@@ -6,7 +6,8 @@ import {
   ActiveLockState,
   createIdleLockState,
   isDuoCovenantLock,
-  isLocked
+  isLocked,
+  normalizeActiveLockState
 } from '../../models/ActiveLockModel';
 import { FocusPlan } from '../../models/PlanModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
@@ -16,6 +17,7 @@ import {
   tearQuickFocus
 } from '../../services/ActiveLockLifecycleService';
 import { DuoApiService } from '../../services/DuoApiService';
+import { queueShameCertificate, tryPresentCertificateGuide } from '../../services/CertificatePendingService';
 import { clearDuoWaitContext, openDuoWaitPage } from '../../services/DuoWaitContextService';
 import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
@@ -195,11 +197,17 @@ export struct FocusHomePage {
     if (this.isEndingLock) {
       return;
     }
+    const lockSnapshot = normalizeActiveLockState(this.activeLock);
+    const endedAt = Date.now();
     if (this.activeLock.kind === 'quick_focus') {
       this.isEndingLock = true;
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      await tearQuickFocus(hostContext, this.activeLock);
+      const ok = await tearQuickFocus(hostContext, lockSnapshot);
+      if (ok) {
+        queueShameCertificate(lockSnapshot, endedAt, 'violator', 'tear');
+        tryPresentCertificateGuide(this.getUIContext());
+      }
       this.remainingLabel = LockStore.getRemainingLabel();
       this.isEndingLock = false;
       this.startTimer();
@@ -209,7 +217,11 @@ export struct FocusHomePage {
       this.isEndingLock = true;
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      await tearCovenantWindow(hostContext, this.activeLock);
+      const ok = await tearCovenantWindow(hostContext, lockSnapshot);
+      if (ok) {
+        queueShameCertificate(lockSnapshot, endedAt, 'violator', 'tear');
+        tryPresentCertificateGuide(this.getUIContext());
+      }
       this.remainingLabel = LockStore.getRemainingLabel();
       this.isEndingLock = false;
       this.startTimer();

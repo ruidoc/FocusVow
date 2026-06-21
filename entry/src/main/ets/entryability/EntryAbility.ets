@@ -1,4 +1,5 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { MsgContent, PushAgent } from '@umeng/push';
@@ -21,6 +22,7 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, TAG, '%{public}s', 'Failed to set colorMode.');
     }
     AppContextHolder.bind(this.context);
+    webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
     warmUpPreferencesStore(this.context);
     this.setupPushAgent();

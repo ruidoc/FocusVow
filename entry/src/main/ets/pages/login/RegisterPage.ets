@@ -1,9 +1,10 @@
 import { common } from '@kit.AbilityKit';
+import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute, PageRoutes, pushRoute, replaceRoute } from '../../router/PageRoutes';
+import { backRoute, PageRoutes, replaceRoute } from '../../router/PageRoutes';
 import { UserStore } from '../../stores/UserStore';
 
 const EMAIL_PATTERN: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -143,13 +144,15 @@ struct RegisterPage {
         }
       })
 
+      AgreementConsentRow()
+
       Button('已有账号？去登录')
         .type(ButtonType.Normal)
         .backgroundColor(Color.Transparent)
         .fontColor(AppTheme.colors.primary)
         .fontSize(15)
         .onClick(() => {
-          pushRoute(PageRoutes.Login);
+          replaceRoute(PageRoutes.Login);
         })
     }
     .width('100%')

@@ -9,11 +9,13 @@
     "pages/plans/PlanAddPage",
     "pages/plans/PlanDetailPage",
     "pages/stats/StatsDetailPage",
+    "pages/certificate/CertificatePreviewPage",
     "pages/settings/SettingsPage",
     "pages/settings/PermissionPage",
     "pages/settings/CycleGuardPage",
     "pages/settings/PrivacyPolicyPage",
     "pages/settings/UserAgreementPage",
+    "pages/settings/WebViewPage",
     "pages/settings/AboutPage",
     "pages/login/LoginPage",
     "pages/login/RegisterPage"

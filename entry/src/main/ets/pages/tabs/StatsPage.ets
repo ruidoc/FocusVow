@@ -1,5 +1,12 @@
-import { showErrorToast, showToast } from '../../common/Toast';
+import { showErrorToast } from '../../common/Toast';
+import { buildHonorCertificateData, buildShameCertificateData } from '../../services/CertificateCopyService';
+import {
+  openHonorCertificatePreview,
+  openShameCertificatePreview
+} from '../../services/CertificateNavigationService';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import { HonorRecordListSection } from '../../components/stats/HonorRecordListSection';
+import { ShameRecordListSection } from '../../components/stats/ShameRecordListSection';
 import { AppTheme } from '../../constants/Theme';
 import {
   DuoShameDay,
@@ -10,24 +17,24 @@ import {
 } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
+import {
+  flattenShameDays,
+  flattenTimelineDays,
+  getStatsPeriodLabel,
+  HONOR_SECTION_BORDER_COLOR,
+  HonorRecordItem,
+  SHAME_SECTION_BORDER_COLOR,
+  ShameRecordItem,
+  STATS_RECORD_SECTION_BG_COLOR,
+  StatsPeriod
+} from '../../services/StatsRecordUtil';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
 
-type StatsPeriod = 'today' | 'week' | 'month';
 type StatsDetailSection = 'timeline' | 'shame';
-
-interface TimelinePreviewItem {
-  day: string;
-  record: DuoTimelineRecord;
-}
-
-interface ShamePreviewItem {
-  day: string;
-  record: DuoShameRecord;
-}
 
 @Component
 export struct StatsPage {
@@ -41,16 +48,6 @@ export struct StatsPage {
 
   aboutToAppear(): void {
     void this.reload();
-  }
-
-  private getPeriodLabel(period: StatsPeriod): string {
-    if (period === 'week') {
-      return '本周';
-    }
-    if (period === 'month') {
-      return '本月';
-    }
-    return '今日';
   }
 
   private async reload(): Promise<void> {
@@ -153,102 +150,16 @@ export struct StatsPage {
     return count;
   }
 
-  private getTimelinePreviewItems(limit: number = 5): TimelinePreviewItem[] {
-    const items: TimelinePreviewItem[] = [];
-    for (let i = 0; i < this.timeline.length; i++) {
-      const day = this.timeline[i];
-      for (let j = 0; j < day.records.length; j++) {
-        items.push({ day: day.date, record: day.records[j] });
-        if (items.length >= limit) {
-          return items;
-        }
-      }
-    }
-    return items;
+  private getTimelinePreviewItems(limit: number = 5): HonorRecordItem[] {
+    return flattenTimelineDays(this.timeline).slice(0, limit);
   }
 
-  private getShamePreviewItems(limit: number = 5): ShamePreviewItem[] {
-    const items: ShamePreviewItem[] = [];
-    for (let i = 0; i < this.shame.length; i++) {
-      const day = this.shame[i];
-      for (let j = 0; j < day.records.length; j++) {
-        items.push({ day: day.date, record: day.records[j] });
-        if (items.length >= limit) {
-          return items;
-        }
-      }
-    }
-    return items;
-  }
-
-  private getTimelineRecordTime(record: DuoTimelineRecord, fallbackDate: string): string {
-    const raw = record.completed_at ?? fallbackDate;
-    return this.formatDateTimeLabel(raw, fallbackDate);
-  }
-
-  private getShameRecordTime(record: DuoShameRecord, fallbackDate: string): string {
-    const raw = record.completed_at ?? fallbackDate;
-    return this.formatDateTimeLabel(raw, fallbackDate);
-  }
-
-  private formatDateTimeLabel(raw: string, fallbackDate: string): string {
-    if (raw.length === 0) {
-      return fallbackDate;
-    }
-    const normalized = raw.replace('T', ' ');
-    const parts = normalized.split(' ');
-    const datePart = parts.length > 0 ? parts[0] : fallbackDate;
-    if (parts.length < 2) {
-      return datePart;
-    }
-    const timePart = parts[1];
-    const trimmedTime = timePart.length >= 5 ? timePart.substring(0, 5) : timePart;
-    return `${datePart} ${trimmedTime}`;
-  }
-
-  private getTimelineModeLabel(record: DuoTimelineRecord): string {
-    if (record.participation_mode === 'duo') {
-      return '1v1 连坐模式';
-    }
-    return '单人闭关模式';
-  }
-
-  private getShameModeLabel(record: DuoShameRecord): string {
-    if (record.participation_mode === 'duo') {
-      if (record.breach_role === 'violator') {
-        return '导致连坐炸房，搭子被无罪释放';
-      }
-      return '被搭子连坐波及，本局判定失败';
-    }
-    if (record.breach_role === 'violator') {
-      return '主动撕毁契约，清白记录已作废';
-    }
-    return '本局未成功履约';
-  }
-
-  private getShameReasonLabel(record: DuoShameRecord): string {
-    const reason = record.failed_reason.trim().toLowerCase();
-    if (reason.length === 0) {
-      return record.breach_role === 'violator' ? '强杀断开' : '连带失败';
-    }
-    if (reason === 'tear' || reason === 'breach' || reason === 'manual_stop') {
-      return '强杀断开';
-    }
-    if (reason === 'partner_breach') {
-      return '被搭子连坐';
-    }
-    if (reason === 'timeout') {
-      return '超时失守';
-    }
-    return record.failed_reason;
-  }
-
-  private getShameDurationLabel(record: DuoShameRecord): string {
-    return `坚持 ${record.actual_min}/${record.total_min} 分钟`;
+  private getShamePreviewItems(limit: number = 5): ShameRecordItem[] {
+    return flattenShameDays(this.shame).slice(0, limit);
   }
 
   private getLeaderboardHint(): string {
-    return `按${this.getPeriodLabel(this.currentPeriod)}数据更新`;
+    return `按${getStatsPeriodLabel(this.currentPeriod)}数据更新`;
   }
 
   private openStatsDetail(section: StatsDetailSection): void {
@@ -258,34 +169,23 @@ export struct StatsPage {
   }
 
   private openShameRecord(record: DuoShameRecord, fallbackDate: string): void {
-    const timeLabel = this.getShameRecordTime(record, fallbackDate);
-    const message =
-      `${timeLabel}\n` +
-      `「${record.title}」\n` +
-      `${this.getShameReasonLabel(record)} · ${this.getShameDurationLabel(record)}\n` +
-      `${this.getShameModeLabel(record)}`;
-    this.getUIContext().showAlertDialog({
-      title: '社死耻辱证',
-      message,
-      autoCancel: true,
-      primaryButton: {
-        value: '生成海报',
-        fontColor: AppTheme.colors.danger,
-        action: () => {
-          showToast('社死耻辱证生成功能下一版接入', this.getUIContext());
-        }
-      },
-      secondaryButton: {
-        value: '取消',
-        action: () => {
-        }
-      }
-    });
+    const data = buildShameCertificateData(record, fallbackDate, UserStore.getUserInfo());
+    openShameCertificatePreview(data);
+  }
+
+  private openHonorRecord(record: DuoTimelineRecord, fallbackDate: string): void {
+    const data = buildHonorCertificateData(
+      record,
+      fallbackDate,
+      UserStore.getUserInfo(),
+      this.summary?.success_rate
+    );
+    openHonorCertificatePreview(data);
   }
 
   @Builder
   private buildPeriodButton(period: StatsPeriod): void {
-    Text(this.getPeriodLabel(period))
+    Text(getStatsPeriodLabel(period))
       .layoutWeight(1)
       .fontSize(15)
       .fontWeight(this.currentPeriod === period ? FontWeight.Medium : FontWeight.Regular)
@@ -306,11 +206,12 @@ export struct StatsPage {
   @Builder
   private buildStatusNotice(): void {
     if (this.isLoading) {
-      Text(`正在加载${this.getPeriodLabel(this.currentPeriod)}战报...`)
+      Text(`正在加载${getStatsPeriodLabel(this.currentPeriod)}战报...`)
         .fontSize(13)
         .fontColor(AppTheme.colors.textMuted)
         .width('100%')
         .textAlign(TextAlign.Center)
+        .margin({ top: 16 })
     } else if (this.errorMessage.length > 0) {
       Text(this.errorMessage)
         .fontSize(13)
@@ -374,8 +275,8 @@ export struct StatsPage {
       }
       .width('100%')
 
-      this.buildLoadingCard(132, 'rgba(31,157,85,0.08)', 'rgba(31,157,85,0.18)')
-      this.buildLoadingCard(132, '#FFF0F0', '#F3D6D6')
+      this.buildLoadingCard(132, STATS_RECORD_SECTION_BG_COLOR, HONOR_SECTION_BORDER_COLOR)
+      this.buildLoadingCard(132, STATS_RECORD_SECTION_BG_COLOR, SHAME_SECTION_BORDER_COLOR)
     }
     .width('100%')
   }
@@ -383,7 +284,7 @@ export struct StatsPage {
   @Builder
   private buildSuccessCard(): void {
     Column({ space: 10 }) {
-      Text(`${this.getPeriodLabel(this.currentPeriod)}成功专注`)
+      Text(`${getStatsPeriodLabel(this.currentPeriod)}成功专注`)
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
       Text(this.getSuccessDurationLabel())
@@ -552,105 +453,53 @@ export struct StatsPage {
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
+    .margin({ top: 10 })
   }
 
   @Builder
-  private buildTimelinePreviewList(items: TimelinePreviewItem[]): void {
-    Column({ space: 0 }) {
-      ForEach(items, (item: TimelinePreviewItem) => {
-        Column({ space: 0 }) {
-          Column({ space: 6 }) {
-            Text(`${this.getTimelineRecordTime(item.record, item.day)} · 成功通关 ${item.record.actual_min} 分钟`)
-              .fontSize(14)
-              .fontColor(AppTheme.colors.textPrimary)
-              .width('100%')
-              .lineHeight(20)
-            Text(`「${item.record.title}」· ${this.getTimelineModeLabel(item.record)}`)
-              .fontSize(13)
-              .fontColor(AppTheme.colors.textSecondary)
-              .width('100%')
-              .lineHeight(20)
-          }
-          .width('100%')
-          .padding({ top: 16, bottom: 16 })
-
-          Divider()
-            .color(AppTheme.colors.border)
-            .strokeWidth(1)
-            .width('100%')
-        }
-        .width('100%')
-      }, (item: TimelinePreviewItem) => `${item.day}-${item.record.id}`)
-    }
-    .width('100%')
+  private buildTimelinePreviewList(items: HonorRecordItem[]): void {
+    HonorRecordListSection({
+      items: items,
+      onItemPress: (item: HonorRecordItem) => {
+        this.openHonorRecord(item.record, item.day);
+      }
+    })
   }
 
   @Builder
-  private buildShamePreviewList(items: ShamePreviewItem[]): void {
-    Column({ space: 0 }) {
-      ForEach(items, (item: ShamePreviewItem) => {
-        Column({ space: 0 }) {
-          Column({ space: 6 }) {
-            Text(`${this.getShameRecordTime(item.record, item.day)} · ${this.getShameReasonLabel(item.record)}（${this.getShameDurationLabel(item.record)}）`)
-              .fontSize(14)
-              .fontColor('#5A2020')
-              .width('100%')
-              .lineHeight(20)
-            Text(`「${item.record.title}」· ${this.getShameModeLabel(item.record)}`)
-              .fontSize(13)
-              .fontColor('#9A5A5A')
-              .width('100%')
-              .lineHeight(20)
-          }
-          .width('100%')
-          .padding({ left: 18, right: 18, top: 16, bottom: 16 })
-          .backgroundColor('#FFF7F7')
-          .onClick(() => {
-            this.openShameRecord(item.record, item.day);
-          })
-
-          Divider()
-            .color('#EECFCF')
-            .strokeWidth(1)
-            .width('100%')
-        }
-        .width('100%')
-      }, (item: ShamePreviewItem) => `${item.day}-${item.record.id}`)
-    }
-    .width('100%')
+  private buildShamePreviewList(items: ShameRecordItem[]): void {
+    ShameRecordListSection({
+      items: items,
+      onItemPress: (item: ShameRecordItem) => {
+        this.openShameRecord(item.record, item.day);
+      }
+    })
   }
 
   @Builder
   private buildTimelineSection(): void {
-    Column({ space: 10 }) {
+    Column({ space: 12 }) {
       this.buildSectionHeader('🏆 履约荣誉墙', this.getTimelineCount(), () => {
         this.openStatsDetail('timeline');
       })
 
       if (this.timeline.length === 0) {
         Column({ space: 8 }) {
-          Text('今天还没有留下上岸记录。')
+          Text('今天还没有荣誉记录')
             .fontSize(14)
             .fontColor(AppTheme.colors.textSecondary)
-          Text('先完成一局专注，这里会开始积累你的清白档案。')
+          Text('先完成一局专注，开始积累你的荣誉档案')
             .fontSize(12)
             .fontColor(AppTheme.colors.textMuted)
         }
         .width('100%')
         .padding(18)
-        .backgroundColor('rgba(31,157,85,0.08)')
+        .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
         .borderRadius(AppTheme.radius.lg)
-        .border({ width: 1, color: 'rgba(31,157,85,0.18)' })
+        .border({ width: 1, color: HONOR_SECTION_BORDER_COLOR })
         .alignItems(HorizontalAlign.Start)
       } else {
-        Column({ space: 0 }) {
-          this.buildTimelinePreviewList(this.getTimelinePreviewItems())
-        }
-        .width('100%')
-        .padding({ left: 18, right: 18 })
-        .backgroundColor('rgba(31,157,85,0.08)')
-        .borderRadius(AppTheme.radius.lg)
-        .border({ width: 1, color: 'rgba(31,157,85,0.18)' })
+        this.buildTimelinePreviewList(this.getTimelinePreviewItems())
       }
     }
     .width('100%')
@@ -658,48 +507,31 @@ export struct StatsPage {
 
   @Builder
   private buildShameSection(): void {
-    Column({ space: 16 }) {
+    Column({ space: 12 }) {
       this.buildSectionHeader('💀 违约耻辱柱', this.getShameCount(), () => {
         this.openStatsDetail('shame');
       })
 
-      Column({ space: 0 }) {
-        Text('点击任一记录，直接生成「社死耻辱证」海报')
-          .fontSize(13)
-          .fontColor('#9A5A5A')
-          .width('100%')
-          .padding({ top: 16, bottom: 16, left: 18, right: 18 })
-
-        if (this.shame.length === 0) {
-          Column({ space: 10 }) {
-            Text('耻辱柱目前是一片空白。')
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#5A2020')
-              .width('100%')
-            Text('很好，看来你对手机的渴望还没战胜你的自律决心。')
-              .fontSize(13)
-              .fontColor('#9A5A5A')
-              .width('100%')
-              .lineHeight(20)
-          }
-          .width('100%')
-          .padding(18)
-          .alignItems(HorizontalAlign.Start)
-        } else {
-          Divider()
-            .color('#EECFCF')
-            .strokeWidth(1)
+      if (this.shame.length === 0) {
+        Column({ space: 8 }) {
+          Text('耻辱柱目前一片空白')
+            .fontSize(14)
+            .fontColor(AppTheme.colors.textSecondary)
+          Text('很好，你的自律决心战胜了对手机的渴望')
+            .fontSize(12)
+            .fontColor(AppTheme.colors.textMuted)
             .width('100%')
-
-          this.buildShamePreviewList(this.getShamePreviewItems())
+            .lineHeight(18)
         }
+        .width('100%')
+        .padding(18)
+        .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+        .borderRadius(AppTheme.radius.lg)
+        .border({ width: 1, color: SHAME_SECTION_BORDER_COLOR })
+        .alignItems(HorizontalAlign.Start)
+      } else {
+        this.buildShamePreviewList(this.getShamePreviewItems())
       }
-      .width('100%')
-      .backgroundColor('#FFF0F0')
-      .borderRadius(AppTheme.radius.lg)
-      .border({ width: 1, color: '#F3D6D6' })
-      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
   }

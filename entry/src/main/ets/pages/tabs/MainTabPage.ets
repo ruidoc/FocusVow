@@ -1,8 +1,9 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
-import { ActiveLockState, createIdleLockState } from '../../models/ActiveLockModel';
+import { ActiveLockState, createIdleLockState, normalizeActiveLockState } from '../../models/ActiveLockModel';
 import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
+import { queueHonorCertificate, tryPresentCertificateGuide } from '../../services/CertificatePendingService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { FocusSyncService } from '../../services/FocusSyncService';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
@@ -16,7 +17,7 @@ import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
-import { PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, pushRoute, pushPrivacyPolicy } from '../../router/PageRoutes';
 import { ContractTabPage } from './ContractTabPage';
 import { FocusHomePage } from './FocusHomePage';
 import { ProfilePage } from './ProfilePage';
@@ -140,7 +141,7 @@ struct MainTabPage {
       secondaryButton: {
         value: '查看隐私政策',
         action: () => {
-          pushRoute(PageRoutes.PrivacyPolicy);
+          pushPrivacyPolicy();
         }
       }
     });
@@ -154,9 +155,10 @@ struct MainTabPage {
     LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     void reconcileLockLifecycle(hostContext);
+    tryPresentCertificateGuide(this.getUIContext());
 
     if (this.activeLock.kind === 'quick_focus' && LockStore.shouldAutoFinish()) {
-      this.finishQuickFocus();
+      void this.finishQuickFocus();
     }
   }
 
@@ -166,13 +168,19 @@ struct MainTabPage {
     }
 
     this.isEndingLock = true;
+    const lockSnapshot = normalizeActiveLockState(this.activeLock);
+    const endedAt = Date.now();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    await endQuickFocus(
+    const ok = await endQuickFocus(
       hostContext,
-      this.activeLock,
+      lockSnapshot,
       '契约已履行，恭喜上岸',
       '专注已结束，但解除限制失败'
     );
+    if (ok) {
+      queueHonorCertificate(lockSnapshot, endedAt);
+      tryPresentCertificateGuide(this.getUIContext());
+    }
     this.isEndingLock = false;
   }
 

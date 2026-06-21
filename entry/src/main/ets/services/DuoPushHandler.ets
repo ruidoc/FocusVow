@@ -1,5 +1,4 @@
 import { common } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { ActiveLockState, isLocked, QuickFocusOptions, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
 import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody } from '../models/DuoModel';
@@ -17,6 +16,7 @@ import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { readStoredString, removeStoredKey, writeStoredString } from './PreferencesService';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
+import { queueShameCertificate } from './CertificatePendingService';
 import { bootstrapStores } from '../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -407,6 +407,7 @@ export class DuoPushHandler {
       }
     }
 
+    queueShameCertificate(state, Date.now(), 'victim', 'partner_breach');
     LockStore.clear(context);
     markScheduledListStale(context);
     clearScheduledActivationTracking(sessionId);
@@ -415,15 +416,6 @@ export class DuoPushHandler {
 
     if (options?.isForeground) {
       InAppMessageService.dismiss();
-      try {
-        await promptAction.showDialog({
-          title: '契约被撕毁',
-          message,
-          buttons: [{ text: '知道了', color: '#DC2626' }]
-        });
-      } catch (error) {
-        console.error(`show breach dialog failed: ${String(error)}`);
-      }
     }
   }
 }

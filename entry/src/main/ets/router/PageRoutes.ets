@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { LegalUrls } from '../constants/LegalUrls';
 import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
 
@@ -17,12 +18,14 @@ export class PageRoutes {
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
   static readonly StatsDetail: string = 'pages/stats/StatsDetailPage';
+  static readonly CertificatePreview: string = 'pages/certificate/CertificatePreviewPage';
   static readonly Settings: string = 'pages/settings/SettingsPage';
   static readonly Permission: string = 'pages/settings/PermissionPage';
   static readonly CycleGuard: string = 'pages/settings/CycleGuardPage';
   static readonly CycleGuardEdit: string = 'pages/settings/CycleGuardPage';
   static readonly PrivacyPolicy: string = 'pages/settings/PrivacyPolicyPage';
   static readonly UserAgreement: string = 'pages/settings/UserAgreementPage';
+  static readonly WebView: string = 'pages/settings/WebViewPage';
   static readonly About: string = 'pages/settings/AboutPage';
   static readonly Login: string = 'pages/login/LoginPage';
   static readonly Register: string = 'pages/login/RegisterPage';
@@ -36,6 +39,26 @@ export function pushRoute(url: string): void {
   router.pushUrl({ url }).catch((error: BusinessError) => {
     logRouteError('pushRoute', error);
   });
+}
+
+export function pushWebView(url: string, title: string): void {
+  router.pushUrl({
+    url: PageRoutes.WebView,
+    params: {
+      url: url,
+      title: title
+    }
+  }).catch((error: BusinessError) => {
+    logRouteError('pushWebView', error);
+  });
+}
+
+export function pushPrivacyPolicy(): void {
+  pushWebView(LegalUrls.PRIVACY, '隐私政策');
+}
+
+export function pushUserAgreement(): void {
+  pushWebView(LegalUrls.USER_AGREEMENT, '用户协议');
 }
 
 export function replaceRoute(url: string): void {

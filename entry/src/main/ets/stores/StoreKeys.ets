@@ -33,4 +33,8 @@ export class StoreKeys {
   static readonly ScheduledListDirty: string = 'scheduled.list.dirty';
   static readonly StatsDetailPeriod: string = 'stats.detail.period';
   static readonly StatsDetailSection: string = 'stats.detail.section';
+  static readonly CertificateKind: string = 'certificate.kind';
+  static readonly CertificateHonor: string = 'certificate.honor';
+  static readonly CertificateShame: string = 'certificate.shame';
+  static readonly CertificatePending: string = 'certificate.pending';
 }
