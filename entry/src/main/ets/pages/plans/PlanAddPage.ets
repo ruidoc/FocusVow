@@ -13,7 +13,7 @@ import {
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { setScheduledDuoWait } from '../../services/DuoWaitContextService';
-import { syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
@@ -201,7 +201,14 @@ struct PlanAddPage {
     }
 
     const guardResult = await syncGuardForSession(hostContext, session);
-    SettingsStore.updateStatusMessage(hostContext, guardResult.message);
+    if (!guardResult.ok) {
+      const warningMessage = '契约已创建，但本机屏时策略注册失败，请到计划页重试';
+      markGuardSyncIssue(hostContext, session, warningMessage);
+      SettingsStore.updateStatusMessage(hostContext, warningMessage);
+      showErrorToast(warningMessage, uiContext);
+    } else {
+      SettingsStore.updateStatusMessage(hostContext, guardResult.message);
+    }
 
     if (session.token.length > 0) {
       DuoInviteClipboardService.dismissToken(session.token);
@@ -213,13 +220,17 @@ struct PlanAddPage {
     if (this.participationMode === 'duo') {
       const scheduleLabel = `${this.startTime} - ${this.endTime}`;
       setScheduledDuoWait(session, scheduleLabel);
-      showToast('创建成功，请邀请搭子加入', uiContext);
+      if (guardResult.ok) {
+        showToast('创建成功，请邀请搭子加入', uiContext);
+      }
       this.isSaving = false;
       replaceRoute(PageRoutes.DuoWait);
       return;
     }
 
-    showToast('创建成功', uiContext);
+    if (guardResult.ok) {
+      showToast('创建成功', uiContext);
+    }
     this.isSaving = false;
     backRoute();
   }
@@ -234,7 +245,7 @@ struct PlanAddPage {
         .width('100%')
 
       Row({ space: 0 }) {
-        Text('单练')
+        Text('单人专注')
           .layoutWeight(1)
           .fontSize(15)
           .fontColor(this.participationMode === 'solo' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)

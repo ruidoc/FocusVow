@@ -19,6 +19,7 @@ export struct SystemNavPage {
   @Prop showAction: boolean = false;
   @Prop actionLabel: string = '操作';
   @Prop actionIcon: Resource = $r('sys.symbol.plus');
+  @Prop showActionIcon: boolean = true;
   @Prop usePageScroll: boolean = true;
   @Prop bindScrollers: Scroller[] = [];
   @Prop horizontalPadding: number = 16;
@@ -193,7 +194,7 @@ export struct SystemNavPage {
             value: [{
               content: {
                 label: this.actionLabel,
-                icon: this.actionIcon,
+                icon: this.showActionIcon ? this.actionIcon : undefined,
                 isEnabled: true,
                 action: () => {
                   this.onAction?.();

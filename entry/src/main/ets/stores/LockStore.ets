@@ -140,7 +140,7 @@ export class LockStore {
       durationMinutes,
       mode,
       Date.now(),
-      options?.title ?? '即时契约',
+      options?.title ?? '单人专注',
       options?.duoSessionId ?? '',
       options?.recordId ?? '',
       options?.participationMode ?? ''

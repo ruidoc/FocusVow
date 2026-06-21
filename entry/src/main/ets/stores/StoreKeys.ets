@@ -31,4 +31,6 @@ export class StoreKeys {
   static readonly ScheduledListAll: string = 'scheduled.list.all';
   static readonly ScheduledListFilter: string = 'scheduled.list.filter';
   static readonly ScheduledListDirty: string = 'scheduled.list.dirty';
+  static readonly StatsDetailPeriod: string = 'stats.detail.period';
+  static readonly StatsDetailSection: string = 'stats.detail.section';
 }

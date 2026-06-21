@@ -14,7 +14,11 @@ import {
 import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, summarizeRepeatDays } from '../../models/PlanModel';
 import { PageRoutes, backRoute, navigateToMainTab } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
-import { removeGuardForSession, syncGuardForSession } from '../../services/ScheduledCovenantService';
+import {
+  getGuardSyncIssue,
+  removeGuardForSession,
+  syncGuardForSession
+} from '../../services/ScheduledCovenantService';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import {
   chooseRestrictedApps,
@@ -88,6 +92,9 @@ struct PlanDetailPage {
     }
     this.session = nextSession;
     this.fillFormFromSession(nextSession);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const guardIssue = getGuardSyncIssue(hostContext, nextSession.session_id);
+    this.statusMessage = guardIssue?.message ?? '';
     this.isLoading = false;
   }
 
@@ -139,7 +146,7 @@ struct PlanDetailPage {
     if (this.session?.expects_duo) {
       return '搭子互督';
     }
-    return '单练';
+    return '单人专注';
   }
 
   private getModeLabel(): string {
@@ -341,6 +348,14 @@ struct PlanDetailPage {
 
     this.isSaving = true;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      showErrorToast('未完成系统授权，无法同步本机屏时策略', this.getUIContext());
+      this.isSaving = false;
+      return;
+    }
+
     const payload: DuoScheduledUpdatePayload = this.isInitiator()
       ? {
         title: this.planName,
@@ -364,19 +379,19 @@ struct PlanDetailPage {
       return;
     }
 
-    const authResult = await ensureScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (authResult.ok) {
-      const guardResult = await syncGuardForSession(hostContext, nextSession);
-      this.statusMessage = guardResult.message;
-    }
+    const guardResult = await syncGuardForSession(hostContext, nextSession);
+    this.statusMessage = guardResult.ok ? '' : '已保存，但本机屏时策略未同步，请稍后重试';
 
     this.session = nextSession;
     this.fillFormFromSession(nextSession);
     this.isEditing = false;
     this.isSaving = false;
     ScheduledListStore.markDirty();
-    showToast('已保存', this.getUIContext());
+    if (guardResult.ok) {
+      showToast('已保存', this.getUIContext());
+    } else {
+      showErrorToast(this.statusMessage, this.getUIContext());
+    }
   }
 
   private async leaveSession(): Promise<void> {
@@ -460,6 +475,13 @@ struct PlanDetailPage {
           }
         }
         .width('100%')
+
+        if (this.statusMessage.length > 0) {
+          Text(this.statusMessage)
+            .fontSize(12)
+            .fontColor(AppTheme.colors.warning)
+            .width('100%')
+        }
       }
       .width('100%')
       .padding(20)

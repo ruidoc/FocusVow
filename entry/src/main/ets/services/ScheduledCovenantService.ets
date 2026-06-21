@@ -10,13 +10,25 @@ import {
   syncScheduledSessionGuardStrategy
 } from './ScreenTimeService';
 import {
+  loadScheduledGuardIssueIndex,
+  loadScheduledGuardSnapshot,
+  loadScheduledGuardSyncIssue,
+  removeScheduledGuardSyncIssue,
   removeScheduledGuardSnapshot,
   saveScheduledGuardSnapshot,
-  ScheduledGuardSnapshot
+  saveScheduledGuardSyncIssue,
+  ScheduledGuardSnapshot,
+  ScheduledGuardSyncIssue
 } from './ScheduledSessionPersistenceService';
 
 export function scheduledSessionStrategyName(sessionId: string): string {
   return `session_${sessionId}`;
+}
+
+export const LOCAL_GUARD_SYNC_WARNING_PREFIX: string = '本机屏时策略未同步';
+
+function normalizeGuardIssueMessage(message: string): string {
+  return message.length > 0 ? message : `${LOCAL_GUARD_SYNC_WARNING_PREFIX}，请稍后重试`;
 }
 
 export function buildGuardSnapshotFromSession(session: DuoSessionView): ScheduledGuardSnapshot | null {
@@ -60,7 +72,19 @@ export async function syncGuardForSession(
   }
 
   saveScheduledGuardSnapshot(context, snapshot);
-  return syncScheduledSessionGuardStrategy(snapshot);
+  const result = await syncScheduledSessionGuardStrategy(snapshot);
+  if (result.ok) {
+    removeScheduledGuardSyncIssue(context, session.session_id);
+    return result;
+  }
+
+  saveScheduledGuardSyncIssue(context, {
+    sessionId: session.session_id,
+    title: session.title,
+    message: normalizeGuardIssueMessage(result.message),
+    updatedAt: Date.now()
+  });
+  return result;
 }
 
 export async function removeGuardForSession(
@@ -68,7 +92,33 @@ export async function removeGuardForSession(
   sessionId: string
 ): Promise<GuardResult<boolean>> {
   removeScheduledGuardSnapshot(context, sessionId);
+  removeScheduledGuardSyncIssue(context, sessionId);
   return removeScheduledSessionGuardStrategy(sessionId);
+}
+
+export function markGuardSyncIssue(
+  context: common.Context,
+  session: DuoSessionView,
+  message: string
+): void {
+  const snapshot = buildGuardSnapshotFromSession(session);
+  if (snapshot) {
+    saveScheduledGuardSnapshot(context, snapshot);
+  }
+  saveScheduledGuardSyncIssue(context, {
+    sessionId: session.session_id,
+    title: session.title,
+    message: normalizeGuardIssueMessage(message),
+    updatedAt: Date.now()
+  });
+}
+
+export function getGuardSyncIssue(context: common.Context, sessionId: string): ScheduledGuardSyncIssue | null {
+  return loadScheduledGuardSyncIssue(context, sessionId);
+}
+
+export function getGuardSyncIssueCount(context: common.Context): number {
+  return loadScheduledGuardIssueIndex(context).length;
 }
 
 const activatedSessionIds: Set<string> = new Set();

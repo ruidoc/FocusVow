@@ -3,7 +3,7 @@ import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { showErrorToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute, replaceRoute, PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { backRoute, replaceRoute, PageRoutes } from '../../router/PageRoutes';
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
@@ -11,7 +11,6 @@ import {
 } from '../../services/ScreenTimeService';
 import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
-import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 
@@ -35,10 +34,6 @@ struct QuickStartPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
-    if (!UserStore.isLoggedIn()) {
-      pushRoute(PageRoutes.Login);
-      return;
-    }
     const rawDuration = LockStore.getQuickFocusDurationMinutes();
     const normalized = this.normalizeDurationMinutes(rawDuration);
     this.durationMinutes = normalized;
@@ -281,7 +276,7 @@ struct QuickStartPage {
   @Builder
   buildQuickBody(): void {
     Column({ space: 18 }) {
-      Text('新手推荐 15 分钟，先跑通一次完整上岸。')
+      Text('先自己履约一次，新手推荐从 15 分钟开始。')
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
@@ -296,7 +291,7 @@ struct QuickStartPage {
       this.buildAppCard()
       this.buildDurationCard()
 
-      Button('开始单练')
+      Button('开始单人专注')
         .width('100%')
         .height(52)
         .type(ButtonType.Capsule)
@@ -316,7 +311,7 @@ struct QuickStartPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '单练',
+        title: '单人专注',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

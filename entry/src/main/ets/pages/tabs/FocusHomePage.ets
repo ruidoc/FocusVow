@@ -371,7 +371,7 @@ export struct FocusHomePage {
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
 
-        Text('第一次建议先用 15 分钟单练；熟悉后再和搭子互督。')
+        Text('先尝试单人专注，熟悉后再和搭子互督。')
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)
@@ -380,13 +380,20 @@ export struct FocusHomePage {
       .alignItems(HorizontalAlign.Center)
 
       AppActionButton({
-        label: '单练',
+        label: '单人专注',
         onPress: () => {
-          this.ensureLoginThen(PageRoutes.QuickStart);
+          pushRoute(PageRoutes.QuickStart);
         }
       })
 
-      Row({ space: 12 }) {
+      Column({ space: 10 }) {
+        Text('搭子互督：一人毁约，两人都记为失败。')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textMuted)
+          .textAlign(TextAlign.Center)
+          .width('100%')
+        
+        Row({ space: 12 }) {
         Button('发起互督')
           .layoutWeight(1)
           .height(52)
@@ -412,12 +419,8 @@ export struct FocusHomePage {
           })
       }
       .width('100%')
+      }
 
-      Text('搭子互督：一人撕毁，两人都记为失败。')
-        .fontSize(13)
-        .fontColor(AppTheme.colors.textMuted)
-        .textAlign(TextAlign.Center)
-        .width('100%')
     }
     .width('100%')
     .padding({ left: 12, right: 12 })
@@ -538,7 +541,7 @@ export struct FocusHomePage {
 
       this.buildModeEntry(
         '计划模式',
-        this.planCollection.length > 0 ? `${this.planCollection.length} 条` : '去创建',
+        '',
         '按固定时间自动生效，适合每日学习节奏',
         $r('sys.symbol.doc_plaintext'),
         () => {

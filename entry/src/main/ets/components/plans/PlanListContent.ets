@@ -1,8 +1,10 @@
+import { common } from '@kit.AbilityKit';
 import { ScheduledSessionCard } from './ScheduledSessionCard';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
+import { getGuardSyncIssueCount } from '../../services/ScheduledCovenantService';
 import { ScheduledListFilter, ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
@@ -106,6 +108,11 @@ export struct PlanListContent {
       this.statusMessage = response.message;
     } else {
       ScheduledListStore.clearDirty();
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const guardIssueCount = getGuardSyncIssueCount(hostContext);
+      if (guardIssueCount > 0) {
+        this.statusMessage = `有 ${guardIssueCount} 条契约待完成本机屏时配置`;
+      }
     }
     this.isLoading = false;
     this.isRefreshing = false;

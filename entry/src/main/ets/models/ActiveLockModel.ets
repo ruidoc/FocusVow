@@ -124,7 +124,7 @@ export function createQuickFocusLockState(
   durationMinutes: number,
   mode: RestrictionMode,
   nowAt: number = Date.now(),
-  title: string = '即时契约',
+  title: string = '单人专注',
   duoSessionId: string = '',
   recordId: string = '',
   participationMode: 'solo' | 'duo' | '' = ''

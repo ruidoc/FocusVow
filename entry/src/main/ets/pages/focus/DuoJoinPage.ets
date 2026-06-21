@@ -14,7 +14,7 @@ import {
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
-import { syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
@@ -123,6 +123,23 @@ struct DuoJoinPage {
       return;
     }
 
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (this.preview.type === 'scheduled') {
+      const auth = await ensureScreenTimeAuthorization(hostContext);
+      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
+      if (!auth.ok) {
+        this.toastError(auth.message);
+        return;
+      }
+    } else if (!this.hasAuthorized) {
+      const auth = await requestScreenTimeAuthorization(hostContext);
+      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
+      if (!auth.ok) {
+        this.toastError(auth.message);
+        return;
+      }
+    }
+
     this.isSubmitting = true;
     const token = extractDuoInviteToken(this.tokenInput);
     const response = this.preview.type === 'scheduled'
@@ -136,18 +153,18 @@ struct DuoJoinPage {
     }
 
     if (session.type === 'scheduled') {
-      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      const auth = await ensureScreenTimeAuthorization(hostContext);
-      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
-      if (!auth.ok) {
-        this.toastError(auth.message);
-        this.isSubmitting = false;
-        return;
-      }
       const guardResult = await syncGuardForSession(hostContext, session);
       if (!guardResult.ok) {
-        this.toastError(guardResult.message);
+        const warningMessage = '已加入定时契约，但本机屏时策略注册失败，请到计划页重试';
+        markGuardSyncIssue(hostContext, session, warningMessage);
+        SettingsStore.updateStatusMessage(hostContext, warningMessage);
+        DuoInviteClipboardService.dismissToken(token);
+        void DuoInviteClipboardService.clearInviteClipboard();
+        ScheduledListStore.markDirty();
+        ScheduledListStore.setFilter('joined');
+        this.toastError(warningMessage);
         this.isSubmitting = false;
+        navigateToMainTab('plans');
         return;
       }
       DuoInviteClipboardService.dismissToken(token);
@@ -160,20 +177,10 @@ struct DuoJoinPage {
       return;
     }
 
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!this.hasAuthorized) {
-      const auth = await requestScreenTimeAuthorization(hostContext);
-      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
-      if (!auth.ok) {
-        this.toastError(auth.message);
-        this.isSubmitting = false;
-        return;
-      }
-    }
-
     const lockResult = await applyScreenRestriction(this.selectedTokens, 'allow');
     if (!lockResult.ok) {
-      this.toastError(lockResult.message);
+      SettingsStore.updateStatusMessage(hostContext, '已加入互督，但本机限制未成功开启，请返回首页重试');
+      this.toastError('已加入互督，但本机限制未成功开启，请返回首页重试');
       this.isSubmitting = false;
       return;
     }

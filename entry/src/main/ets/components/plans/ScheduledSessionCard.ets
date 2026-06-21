@@ -107,7 +107,7 @@ export struct ScheduledSessionCard {
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
 
-      Text(`${this.getRepeatLabel()} · ${this.getAppCount()} 个应用 · ${this.session.expects_duo ? '搭子互督' : '单练'}`)
+      Text(`${this.getRepeatLabel()} · ${this.getAppCount()} 个应用 · ${this.session.expects_duo ? '搭子互督' : '单人专注'}`)
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')

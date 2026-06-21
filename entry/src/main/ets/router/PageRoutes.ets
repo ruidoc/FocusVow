@@ -16,6 +16,7 @@ export class PageRoutes {
   static readonly PlanList: string = 'pages/plans/PlanListPage';
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
+  static readonly StatsDetail: string = 'pages/stats/StatsDetailPage';
   static readonly Settings: string = 'pages/settings/SettingsPage';
   static readonly Permission: string = 'pages/settings/PermissionPage';
   static readonly CycleGuard: string = 'pages/settings/CycleGuardPage';

@@ -8,6 +8,7 @@
     "pages/plans/PlanListPage",
     "pages/plans/PlanAddPage",
     "pages/plans/PlanDetailPage",
+    "pages/stats/StatsDetailPage",
     "pages/settings/SettingsPage",
     "pages/settings/PermissionPage",
     "pages/settings/CycleGuardPage",

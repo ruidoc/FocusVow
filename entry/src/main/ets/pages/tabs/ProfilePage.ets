@@ -1,12 +1,9 @@
 import { SystemNavPage } from '../../components/common/SystemNavPage';
-import { showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
 import { common } from '@kit.AbilityKit';
-import { FocusPlan } from '../../models/PlanModel';
 import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
-import { PageRoutes, pushRoute, openMainTab } from '../../router/PageRoutes';
+import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
-import { PlanStore } from '../../stores/PlanStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -18,7 +15,6 @@ bootstrapStores();
 export struct ProfilePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
-  @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleSelectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
@@ -28,7 +24,6 @@ export struct ProfilePage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.hydrate(hostContext);
     SettingsStore.hydrate(hostContext);
-    PlanStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     void UserStore.syncRemoteIfLoggedIn(hostContext);
   }
@@ -55,12 +50,6 @@ export struct ProfilePage {
       return;
     }
     pushRoute(PageRoutes.Login);
-  }
-
-  private logout(): void {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    UserStore.logout(hostContext);
-    showToast('已退出登录', this.getUIContext());
   }
 
   private getPermissionLabel(): string {
@@ -175,48 +164,17 @@ export struct ProfilePage {
       this.buildProfileCard()
 
       Column({ space: 0 }) {
-        this.buildMenuRow('权限与应用', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {
-          pushRoute(PageRoutes.Permission);
-        })
-        this.buildMenuRow('契约管理', $r('sys.symbol.doc_plaintext'), `${this.planCollection.length} 条`, true, () => {
-          openMainTab('plans');
-        })
         this.buildMenuRow('娱乐限额', $r('sys.symbol.bolt'), this.getCycleStatusLabel(), true, () => {
           pushRoute(PageRoutes.CycleGuardEdit);
         })
-        this.buildMenuRow('快速专注', $r('sys.symbol.timer'), '', false, () => {
-          pushRoute(PageRoutes.QuickStart);
+        this.buildMenuRow('权限与应用', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {
+          pushRoute(PageRoutes.Permission);
         })
-      }
-      .width('100%')
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: '#F1F3F8' })
-      .borderRadius(24)
-      .clip(true)
-
-      Column({ space: 0 }) {
-        this.buildMenuRow('设置', $r('sys.symbol.gearshape'), '', true, () => {
-          pushRoute(PageRoutes.Settings);
-        })
-        if (this.isLoggedIn) {
-          this.buildMenuRow('退出登录', $r('sys.symbol.lock'), '', false, () => {
-            this.logout();
-          })
-        } else {
-          this.buildMenuRow('登录 / 注册', $r('sys.symbol.person'), '', false, () => {
-            pushRoute(PageRoutes.Login);
-          })
-        }
-      }
-      .width('100%')
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: '#F1F3F8' })
-      .borderRadius(24)
-      .clip(true)
-
-      Column({ space: 0 }) {
-        this.buildMenuRow('帮助与反馈', $r('sys.symbol.questionmark_circle'), '', false, () => {
+        this.buildMenuRow('关于我们', $r('sys.symbol.square_grid_2x2'), '', true, () => {
           pushRoute(PageRoutes.About);
+        })
+        this.buildMenuRow('设置', $r('sys.symbol.gearshape'), '', false, () => {
+          pushRoute(PageRoutes.Settings);
         })
       }
       .width('100%')
@@ -233,11 +191,8 @@ export struct ProfilePage {
     SystemNavPage({
       title: '我的',
       showAction: true,
-      actionLabel: '帮助',
-      actionIcon: $r('sys.symbol.questionmark_circle'),
-      onAction: () => {
-        pushRoute(PageRoutes.About);
-      },
+      actionLabel: '消息',
+      actionIcon: $r('sys.symbol.bell'),
       horizontalPadding: 14,
       contentSpace: 18,
       content: (): void => {
