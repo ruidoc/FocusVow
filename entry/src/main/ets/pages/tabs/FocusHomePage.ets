@@ -1,6 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { AppActionButton } from '../../components/common/AppActionButton';
+import { InputConfirmSheet } from '../../components/common/InputConfirmSheet';
 import { AppTheme } from '../../constants/Theme';
+import { TEAR_CONFIRM_REQUIRED_TEXT } from '../../constants/TearConfirm';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import {
   ActiveLockState,
@@ -39,6 +41,7 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.DuoWaitIsScheduled) duoWaitIsScheduled: boolean = false;
   @StorageLink(StoreKeys.DuoWaitScheduleLabel) duoWaitScheduleLabel: string = '';
   @State remainingLabel: string = LockStore.getRemainingLabel();
+  @State showTearConfirm: boolean = false;
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
@@ -126,18 +129,11 @@ export struct FocusHomePage {
     return isLocked(this.activeLock);
   }
 
-  private getTearFirstMessage(): string {
+  private getTearConfirmMessage(): string {
     if (this.activeLock.participationMode === 'duo') {
-      return '撕毁后本次专注立即失败，搭子也会被连带。';
+      return '撕毁后本次专注立即失败，搭子也会被连带。撕毁契约后无法撤销，你与搭子都将记为失败。';
     }
-    return '撕毁后本次专注记为违约，会进入耻辱柱。';
-  }
-
-  private getTearSecondMessage(): string {
-    if (this.activeLock.participationMode === 'duo') {
-      return '再次确认：撕毁契约后无法撤销，你与搭子都将记为失败。';
-    }
-    return '再次确认：撕毁契约后无法撤销，本次将记入耻辱柱。';
+    return '撕毁后本次专注记为违约，会生成耻辱证。撕毁契约后无法撤销，本次将记入耻辱柱。';
   }
 
   private async endCurrentLock(): Promise<void> {
@@ -146,51 +142,11 @@ export struct FocusHomePage {
     }
 
     if (this.activeLock.kind === 'quick_focus' || this.activeLock.kind === 'covenant') {
-      this.openFirstTearConfirm();
+      this.showTearConfirm = true;
       return;
     }
 
     await this.performEndLock();
-  }
-
-  private openFirstTearConfirm(): void {
-    this.getUIContext().showAlertDialog({
-      title: '撕毁契约',
-      message: `${this.getTearFirstMessage()}这是第一次确认，请想清楚。`,
-      autoCancel: true,
-      primaryButton: {
-        value: '继续',
-        fontColor: AppTheme.colors.danger,
-        action: () => {
-          this.openSecondTearConfirm();
-        }
-      },
-      secondaryButton: {
-        value: '取消',
-        action: () => {
-        }
-      }
-    });
-  }
-
-  private openSecondTearConfirm(): void {
-    this.getUIContext().showAlertDialog({
-      title: '撕毁契约',
-      message: `${this.getTearSecondMessage()}这是第二次确认，请再次想清楚。`,
-      autoCancel: true,
-      primaryButton: {
-        value: '确认撕毁',
-        fontColor: AppTheme.colors.danger,
-        action: () => {
-          void this.performTearLock();
-        }
-      },
-      secondaryButton: {
-        value: '取消',
-        action: () => {
-        }
-      }
-    });
   }
 
   private async performTearLock(): Promise<void> {
@@ -601,13 +557,32 @@ export struct FocusHomePage {
   }
 
   build() {
-    SystemNavPage({
-      title: '专注',
-      showTitleBar: false,
-      usePageScroll: !this.isActiveLocked(),
-      content: (): void => {
-        this.buildHomeContent();
-      }
-    })
+    Stack({ alignContent: Alignment.Bottom }) {
+      SystemNavPage({
+        title: '专注',
+        showTitleBar: false,
+        usePageScroll: !this.isActiveLocked(),
+        content: (): void => {
+          this.buildHomeContent();
+        }
+      })
+
+      InputConfirmSheet({
+        visible: $showTearConfirm,
+        title: '撕毁契约',
+        message: this.getTearConfirmMessage(),
+        requiredText: TEAR_CONFIRM_REQUIRED_TEXT,
+        confirmText: '确认撕毁',
+        cancelText: '继续专注',
+        inputHint: '确定要撕毁？请输入以下文字：',
+        onConfirm: () => {
+          void this.performTearLock();
+        },
+        onCancel: () => {
+        }
+      })
+    }
+    .width('100%')
+    .height('100%')
   }
 }

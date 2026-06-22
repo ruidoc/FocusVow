@@ -107,7 +107,15 @@ export class DuoInviteClipboardService {
       const session = DuoApiService.parseSession(response);
       if (!session) {
         const message = response.message ?? '';
-        if (message.includes('自己发起') || message.includes('不能加入')) {
+        if (
+          message.includes('自己发起') ||
+          message.includes('不能加入') ||
+          message.includes('已有其他搭子') ||
+          message.includes('邀请已过期') ||
+          message.includes('邀请已取消') ||
+          message.includes('不可加入') ||
+          message.includes('无法加入')
+        ) {
           DuoInviteClipboardService.dismissToken(token);
           await DuoInviteClipboardService.clearInviteClipboard();
         }
@@ -116,6 +124,15 @@ export class DuoInviteClipboardService {
 
       const myUserId = UserStore.getUserInfo().id;
       if (DuoInviteClipboardService.isOwnInvite(session, myUserId)) {
+        DuoInviteClipboardService.dismissToken(token);
+        await DuoInviteClipboardService.clearInviteClipboard();
+        return;
+      }
+
+      if (
+        session.viewer_role === 'partner' ||
+        session.status === 'active'
+      ) {
         DuoInviteClipboardService.dismissToken(token);
         await DuoInviteClipboardService.clearInviteClipboard();
         return;

@@ -336,6 +336,23 @@ export class DuoPushHandler {
       return;
     }
 
+    const response = await DuoApiService.getSession(sessionId);
+    const session = DuoApiService.parseSession(response);
+    if (!session || session.status !== 'active') {
+      return;
+    }
+    if (session.type === 'scheduled') {
+      ScheduledListStore.markDirty();
+      if (_options?.isForeground) {
+        const title = _options.title && _options.title.length > 0 ? _options.title : '定时互督开始';
+        const message = payload.message && payload.message.length > 0
+          ? payload.message
+          : '定时搭子互督已开始，请立即锁机专注';
+        InAppMessageService.show(title, message, payload.type);
+      }
+      return;
+    }
+
     LockStore.hydrate(context);
     if (LockStore.isLocked()) {
       return;
@@ -344,15 +361,6 @@ export class DuoPushHandler {
     SettingsStore.hydrate(context);
     const tokens = SettingsStore.getState().selectedTokens;
     if (tokens.length === 0) {
-      return;
-    }
-
-    const response = await DuoApiService.getSession(sessionId);
-    const session = DuoApiService.parseSession(response);
-    if (!session || session.status !== 'active') {
-      return;
-    }
-    if (session.type === 'scheduled') {
       return;
     }
 
