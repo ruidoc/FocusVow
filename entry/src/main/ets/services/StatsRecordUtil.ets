@@ -82,3 +82,60 @@ export function flattenShameDays(days: DuoShameDay[]): ShameRecordItem[] {
   }
   return items;
 }
+
+export function countDuoBlast(shame: DuoShameDay[]): number {
+  let count = 0;
+  for (let i = 0; i < shame.length; i++) {
+    const day = shame[i];
+    for (let j = 0; j < day.records.length; j++) {
+      const record = day.records[j];
+      if (record.participation_mode === 'duo' && record.breach_role === 'violator') {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+export function getDuoBlastReputationHint(count: number): string {
+  if (count <= 0) {
+    return '信誉良好';
+  }
+  if (count === 1) {
+    return '首犯可谅';
+  }
+  if (count === 2) {
+    return '偶有失手';
+  }
+  if (count <= 4) {
+    return '搭子请当心';
+  }
+  return '信誉堪忧';
+}
+
+export function getContractWinRateHint(
+  successRate: number,
+  completedCount: number,
+  failedCount: number
+): string {
+  const total = completedCount + failedCount;
+  if (total <= 0) {
+    return '暂无履约记录';
+  }
+  if (successRate >= 100) {
+    return '全胜纪录';
+  }
+  if (successRate >= 85) {
+    return '守约可靠';
+  }
+  if (successRate >= 65) {
+    return '基本稳得住';
+  }
+  if (successRate >= 45) {
+    return '胜负参半';
+  }
+  if (successRate >= 25) {
+    return '失守偏多';
+  }
+  return '亟需调整';
+}

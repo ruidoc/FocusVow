@@ -28,34 +28,39 @@ export struct CertificateQrFooter {
     }
   }
 
+  @Builder
+  private buildQrCode(): void {
+    if (this.qrPixelMap) {
+      Image(this.qrPixelMap)
+        .width(56)
+        .height(56)
+        .backgroundColor('#FFFFFF')
+        .padding(4)
+        .borderRadius(6)
+    } else {
+      Column() {
+        Text('QR')
+          .fontSize(10)
+          .fontColor(this.darkTheme ? '#D8A0A0' : '#7A6A4A')
+      }
+      .width(56)
+      .height(56)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(this.darkTheme ? '#2A1414' : '#FFFFFF')
+      .border({ width: 1, color: this.darkTheme ? '#6A3030' : '#D8C8A0' })
+      .borderRadius(6)
+    }
+  }
+
   build() {
     Row({ space: 12 }) {
+      this.buildQrCode()
+
       Text(this.footerSlogan)
         .fontSize(11)
         .fontColor(this.darkTheme ? '#D8A0A0' : '#7A6A4A')
         .lineHeight(18)
         .layoutWeight(1)
-
-      if (this.qrPixelMap) {
-        Image(this.qrPixelMap)
-          .width(56)
-          .height(56)
-          .backgroundColor('#FFFFFF')
-          .padding(4)
-          .borderRadius(6)
-      } else {
-        Column() {
-          Text('QR')
-            .fontSize(10)
-            .fontColor(this.darkTheme ? '#D8A0A0' : '#7A6A4A')
-        }
-        .width(56)
-        .height(56)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(this.darkTheme ? '#2A1414' : '#FFFFFF')
-        .border({ width: 1, color: this.darkTheme ? '#6A3030' : '#D8C8A0' })
-        .borderRadius(6)
-      }
     }
     .width('100%')
     .padding({ top: 14, bottom: 4 })

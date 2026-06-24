@@ -2,41 +2,17 @@ import { ShameCertificateData, createEmptyShameCertificateData } from '../../mod
 import { CERTIFICATE_SNAPSHOT_ID } from '../../services/CertificateImageService';
 import { CertificateQrFooter } from './CertificateQrFooter';
 
+const WARNING_ASPECT_RATIO: number = 1086 / 1448;
+const SEAL_SIZE: number = 126;
+
 @Component
 export struct ShameCertificateCard {
   @Prop data: ShameCertificateData = createEmptyShameCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
 
   @Builder
-  private buildBorderLine(): void {
-    Text('❌ ─────────────────────────────────────────────── ❌')
-      .fontSize(11)
-      .fontColor('#8B3030')
-      .width('100%')
-      .textAlign(TextAlign.Center)
-  }
-
-  @Builder
-  private buildStamp(): void {
-    Column() {
-      Text('耻辱作废印')
-        .fontSize(10)
-        .fontColor('#D64545')
-        .fontWeight(FontWeight.Medium)
-    }
-    .width(88)
-    .height(88)
-    .justifyContent(FlexAlign.Center)
-    .border({ width: 2, color: '#D64545' })
-    .borderRadius(44)
-    .rotate({ angle: 10 })
-    .opacity(0.82)
-  }
-
-  build() {
-    Column({ space: 14 }) {
-      this.buildBorderLine()
-
+  private buildBody(): void {
+    Column({ space: 12 }) {
       Text('违  约  耻  辱  证')
         .fontSize(22)
         .fontWeight(FontWeight.Bold)
@@ -100,31 +76,49 @@ export struct ShameCertificateCard {
           .fontColor('#F2D0D0')
           .width('100%')
           .textAlign(TextAlign.End)
-        Row() {
-          Blank()
-          this.buildStamp()
-        }
-        .width('100%')
+          .padding({ right: SEAL_SIZE + 8 })
       }
       .width('100%')
-
-      Text('────────────────────────────────')
-        .fontSize(11)
-        .fontColor('#6A3030')
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      CertificateQrFooter({
-        qrContent: this.data.qrContent,
-        footerSlogan: this.data.footerSlogan,
-        darkTheme: true
-      })
     }
     .width('100%')
-    .padding(18)
-    .backgroundColor('#1A0A0A')
-    .border({ width: 2, color: '#8B3030' })
+    .layoutWeight(1)
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Image($r('app.media.temp_warning'))
+        .width('100%')
+        .aspectRatio(WARNING_ASPECT_RATIO)
+        .objectFit(ImageFit.Cover)
+
+      Column() {
+        this.buildBody()
+
+        CertificateQrFooter({
+          qrContent: this.data.qrContent,
+          footerSlogan: this.data.footerSlogan,
+          darkTheme: true
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: 28, right: 28, top: 72, bottom: 44 })
+
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Image($r('app.media.seal_fail'))
+          .width(SEAL_SIZE)
+          .height(SEAL_SIZE)
+          .objectFit(ImageFit.Contain)
+          .margin({ right: 20, bottom: 30 })
+      }
+      .width('100%')
+      .height('100%')
+      .hitTestBehavior(HitTestMode.Transparent)
+    }
+    .width('100%')
+    .aspectRatio(WARNING_ASPECT_RATIO)
     .borderRadius(12)
+    .clip(true)
     .id(this.snapshotId)
   }
 }

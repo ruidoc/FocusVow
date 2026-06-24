@@ -177,7 +177,34 @@ export function getScheduledSessionStatusLabel(session: DuoSessionView): string 
   if (session.status === 'cancelled') {
     return '已作废';
   }
+  if (session.status === 'completed') {
+    return '已完成';
+  }
+  if (session.status === 'failed') {
+    return '已失败';
+  }
+  if (session.status === 'breached') {
+    return '已撕毁';
+  }
+  if (session.status === 'expired') {
+    return '已过期';
+  }
   return session.status;
+}
+
+export function isDuoWaitPartnerJoined(
+  session: DuoSessionView,
+  isScheduled: boolean
+): boolean {
+  const partnerReady =
+    session.participation_mode === 'duo' &&
+    session.partner !== null &&
+    session.partner !== undefined;
+  if (isScheduled) {
+    return partnerReady;
+  }
+  return partnerReady ||
+    (session.status === 'active' && session.type !== 'scheduled');
 }
 
 export function parseDuoSessionView(raw: Record<string, Object> | undefined): DuoSessionView | null {

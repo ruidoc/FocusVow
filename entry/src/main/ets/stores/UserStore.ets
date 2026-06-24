@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { createEmptyUserInfo, parseUserInfo, UserInfo } from '../models/UserModel';
 import { AuthApiService } from '../services/AuthApiService';
+import { ExtendApiService } from '../services/ExtendApiService';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { UmengSdkService } from '../services/UmengSdkService';
 import {
@@ -68,10 +69,18 @@ export class UserStore {
     context: common.UIAbilityContext,
     email: string,
     username: string,
-    password: string
+    password: string,
+    verifyCode: string
   ): Promise<string | null> {
+    const trimmedEmail = email.trim();
+    const trimmedCode = verifyCode.trim();
+    const verifyResponse = await ExtendApiService.verifyEmailCode(trimmedEmail, trimmedCode);
+    if (verifyResponse.statusCode !== 200) {
+      return verifyResponse.message ?? '验证码错误或已过期';
+    }
+
     const registerResponse = await AuthApiService.registerWithEmail(
-      email.trim(),
+      trimmedEmail,
       username.trim(),
       password
     );
@@ -79,7 +88,7 @@ export class UserStore {
       return registerResponse.message ?? '注册失败';
     }
 
-    return UserStore.loginWithEmail(context, email.trim(), password);
+    return UserStore.loginWithEmail(context, trimmedEmail, password);
   }
 
   static async refreshUserInfo(context: common.UIAbilityContext): Promise<string | null> {

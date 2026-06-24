@@ -2,41 +2,17 @@ import { HonorCertificateData, createEmptyHonorCertificateData } from '../../mod
 import { CERTIFICATE_SNAPSHOT_ID } from '../../services/CertificateImageService';
 import { CertificateQrFooter } from './CertificateQrFooter';
 
+const HONOR_ASPECT_RATIO: number = 1086 / 1448;
+const SEAL_SIZE: number = 126;
+
 @Component
 export struct HonorCertificateCard {
   @Prop data: HonorCertificateData = createEmptyHonorCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
 
   @Builder
-  private buildBorderLine(): void {
-    Text('★ ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ★')
-      .fontSize(11)
-      .fontColor('#B8943F')
-      .width('100%')
-      .textAlign(TextAlign.Center)
-  }
-
-  @Builder
-  private buildStamp(): void {
-    Column() {
-      Text('获准上岸印')
-        .fontSize(10)
-        .fontColor('#B42318')
-        .fontWeight(FontWeight.Medium)
-    }
-    .width(88)
-    .height(88)
-    .justifyContent(FlexAlign.Center)
-    .border({ width: 2, color: '#B42318' })
-    .borderRadius(44)
-    .rotate({ angle: -12 })
-    .opacity(0.82)
-  }
-
-  build() {
-    Column({ space: 14 }) {
-      this.buildBorderLine()
-
+  private buildBody(): void {
+    Column({ space: 12 }) {
       Text('履  约  荣  誉  证')
         .fontSize(22)
         .fontWeight(FontWeight.Bold)
@@ -96,27 +72,49 @@ export struct HonorCertificateCard {
           .fontColor('#7A6A4A')
           .width('100%')
           .textAlign(TextAlign.End)
-        Row() {
-          Blank()
-          this.buildStamp()
-        }
-        .width('100%')
+          .padding({ right: SEAL_SIZE + 8 })
       }
       .width('100%')
-
-      this.buildBorderLine()
-
-      CertificateQrFooter({
-        qrContent: this.data.qrContent,
-        footerSlogan: this.data.footerSlogan,
-        darkTheme: false
-      })
     }
     .width('100%')
-    .padding(18)
-    .backgroundColor('#FFFBF4')
-    .border({ width: 2, color: '#C9A84C' })
+    .layoutWeight(1)
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Image($r('app.media.temp_honor'))
+        .width('100%')
+        .aspectRatio(HONOR_ASPECT_RATIO)
+        .objectFit(ImageFit.Cover)
+
+      Column() {
+        this.buildBody()
+
+        CertificateQrFooter({
+          qrContent: this.data.qrContent,
+          footerSlogan: this.data.footerSlogan,
+          darkTheme: false
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: 28, right: 28, top: 72, bottom: 44 })
+
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Image($r('app.media.seal_fulfill'))
+          .width(SEAL_SIZE)
+          .height(SEAL_SIZE)
+          .objectFit(ImageFit.Contain)
+          .margin({ right: 20, bottom: 30 })
+      }
+      .width('100%')
+      .height('100%')
+      .hitTestBehavior(HitTestMode.Transparent)
+    }
+    .width('100%')
+    .aspectRatio(HONOR_ASPECT_RATIO)
     .borderRadius(12)
+    .clip(true)
     .id(this.snapshotId)
   }
 }

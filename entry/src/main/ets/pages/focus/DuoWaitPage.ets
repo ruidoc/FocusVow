@@ -4,7 +4,7 @@ import { showErrorToast, showToast } from '../../common/Toast';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { DuoSessionView } from '../../models/DuoModel';
+import { DuoSessionView, isDuoWaitPartnerJoined } from '../../models/DuoModel';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { PageRoutes, backRoute, replaceRoute, navigateToMainTab } from '../../router/PageRoutes';
 import { applyScreenRestriction } from '../../services/ScreenTimeService';
@@ -186,9 +186,10 @@ struct DuoWaitPage {
 
     if (this.isScheduled) {
       const wasReady = this.partnerReady;
-      this.partnerReady = next.participation_mode === 'duo' && next.partner !== null && next.partner !== undefined;
+      this.partnerReady = isDuoWaitPartnerJoined(next, true);
       if (!wasReady && this.partnerReady) {
         ScheduledListStore.markDirty();
+        clearDuoWaitContext();
       }
       return;
     }

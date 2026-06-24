@@ -17,6 +17,7 @@
     "pages/settings/UserAgreementPage",
     "pages/settings/WebViewPage",
     "pages/settings/AboutPage",
+    "pages/settings/FeedbackPage",
     "pages/login/LoginPage",
     "pages/login/RegisterPage"
   ]

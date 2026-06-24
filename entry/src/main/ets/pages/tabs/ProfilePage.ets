@@ -11,6 +11,9 @@ import { UserStore } from '../../stores/UserStore';
 
 bootstrapStores();
 
+/** 娱乐限额入口暂时隐藏，恢复时改为 true */
+const SHOW_CYCLE_GUARD_MENU: boolean = false;
+
 @Component
 export struct ProfilePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
@@ -164,11 +167,16 @@ export struct ProfilePage {
       this.buildProfileCard()
 
       Column({ space: 0 }) {
-        this.buildMenuRow('娱乐限额', $r('sys.symbol.bolt'), this.getCycleStatusLabel(), true, () => {
-          pushRoute(PageRoutes.CycleGuardEdit);
-        })
+        if (SHOW_CYCLE_GUARD_MENU) {
+          this.buildMenuRow('娱乐限额', $r('sys.symbol.bolt'), this.getCycleStatusLabel(), true, () => {
+            pushRoute(PageRoutes.CycleGuardEdit);
+          })
+        }
         this.buildMenuRow('权限与应用', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {
           pushRoute(PageRoutes.Permission);
+        })
+        this.buildMenuRow('意见反馈', $r('sys.symbol.ellipsis_message'), '', true, () => {
+          pushRoute(PageRoutes.Feedback);
         })
         this.buildMenuRow('关于我们', $r('sys.symbol.square_grid_2x2'), '', true, () => {
           pushRoute(PageRoutes.About);

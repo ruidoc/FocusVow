@@ -12,6 +12,9 @@ class ThemeColors {
   textMuted: string = '#98A2B3';
   success: string = '#1F9D55';
   successSoft: string = '#E8F7EE';
+  accentBlue: string = '#3B82F6';
+  accentOrange: string = '#F97316';
+  accentGreen: string = '#10B981';
   warning: string = '#C98512';
   danger: string = '#D64545';
   dangerSoft: string = '#FDECEC';

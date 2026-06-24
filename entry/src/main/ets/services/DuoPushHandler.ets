@@ -6,6 +6,7 @@ import { PageRoutes, replaceRoute } from '../router/PageRoutes';
 import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
 import { applyScreenRestriction, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { DuoApiService } from './DuoApiService';
+import { clearDuoWaitContext } from './DuoWaitContextService';
 import { InAppMessageService } from './InAppMessageService';
 import {
   clearScheduledActivationTracking,
@@ -13,6 +14,7 @@ import {
   removeGuardForSession
 } from './ScheduledCovenantService';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
+import { StoreKeys } from '../stores/StoreKeys';
 import { readStoredString, removeStoredKey, writeStoredString } from './PreferencesService';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
@@ -281,6 +283,16 @@ export class DuoPushHandler {
     options?: PushDispatchOptions
   ): Promise<void> {
     ScheduledListStore.markDirty();
+
+    const waitSessionId = AppStorage.get<string>(StoreKeys.DuoWaitSessionId) ?? '';
+    if (
+      waitSessionId.length > 0 &&
+      payload.session_id &&
+      waitSessionId === payload.session_id
+    ) {
+      clearDuoWaitContext();
+    }
+
     if (!options?.isForeground) {
       return;
     }

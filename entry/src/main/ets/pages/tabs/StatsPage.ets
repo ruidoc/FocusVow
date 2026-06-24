@@ -18,8 +18,11 @@ import {
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
+  countDuoBlast,
   flattenShameDays,
   flattenTimelineDays,
+  getContractWinRateHint,
+  getDuoBlastReputationHint,
   getStatsPeriodLabel,
   HONOR_SECTION_BORDER_COLOR,
   HonorRecordItem,
@@ -121,17 +124,7 @@ export struct StatsPage {
   }
 
   private getDuoBlastCount(): number {
-    let count = 0;
-    for (let i = 0; i < this.shame.length; i++) {
-      const day = this.shame[i];
-      for (let j = 0; j < day.records.length; j++) {
-        const record = day.records[j];
-        if (record.participation_mode === 'duo' && record.breach_role === 'violator') {
-          count += 1;
-        }
-      }
-    }
-    return count;
+    return countDuoBlast(this.shame);
   }
 
   private getTimelineCount(): number {
@@ -158,8 +151,12 @@ export struct StatsPage {
     return flattenShameDays(this.shame).slice(0, limit);
   }
 
-  private getLeaderboardHint(): string {
-    return `按${getStatsPeriodLabel(this.currentPeriod)}数据更新`;
+  private getContractWinRateHint(): string {
+    return getContractWinRateHint(
+      this.summary?.success_rate ?? 0,
+      this.summary?.completed_count ?? 0,
+      this.summary?.failed_count ?? 0
+    );
   }
 
   private openStatsDetail(section: StatsDetailSection): void {
@@ -375,7 +372,7 @@ export struct StatsPage {
       Row({ space: 12 }) {
         Column() {
           this.buildCompactMetricCard(
-            '连续上岸',
+            '连续专注',
             `${this.summary?.streak_days ?? 0} 天`,
             `历史最长 ${this.summary?.best_streak_days ?? 0} 天`,
             AppTheme.colors.surface,
@@ -389,7 +386,7 @@ export struct StatsPage {
           this.buildCompactMetricCard(
             '契约总胜率',
             `${this.getContractWinRate()}%`,
-            this.getLeaderboardHint(),
+            this.getContractWinRateHint(),
             AppTheme.colors.surface,
             AppTheme.colors.border,
             AppTheme.colors.textPrimary
@@ -401,7 +398,7 @@ export struct StatsPage {
           this.buildCompactMetricCard(
             '连累搭子',
             `${this.getDuoBlastCount()} 次`,
-            '信誉良好',
+            getDuoBlastReputationHint(this.getDuoBlastCount()),
             AppTheme.colors.surface,
             AppTheme.colors.border,
             AppTheme.colors.textPrimary,

@@ -27,6 +27,7 @@ export class PageRoutes {
   static readonly UserAgreement: string = 'pages/settings/UserAgreementPage';
   static readonly WebView: string = 'pages/settings/WebViewPage';
   static readonly About: string = 'pages/settings/AboutPage';
+  static readonly Feedback: string = 'pages/settings/FeedbackPage';
   static readonly Login: string = 'pages/login/LoginPage';
   static readonly Register: string = 'pages/login/RegisterPage';
 }
