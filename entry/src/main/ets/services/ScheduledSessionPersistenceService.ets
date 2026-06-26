@@ -129,3 +129,14 @@ export function removeScheduledGuardSyncIssue(context: common.Context, sessionId
   const index = loadScheduledGuardIssueIndex(context).filter((id: string) => id !== sessionId);
   saveScheduledGuardIssueIndex(context, index);
 }
+
+export function clearAllScheduledGuardPersistence(context: common.Context): void {
+  for (const sessionId of loadScheduledGuardIndex(context)) {
+    writeStoredString(context, guardKey(sessionId), '');
+  }
+  for (const sessionId of loadScheduledGuardIssueIndex(context)) {
+    writeStoredString(context, guardIssueKey(sessionId), '');
+  }
+  saveScheduledGuardIndex(context, []);
+  saveScheduledGuardIssueIndex(context, []);
+}

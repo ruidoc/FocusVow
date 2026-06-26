@@ -381,6 +381,75 @@ export async function removePlanGuardStrategy(planId: string): Promise<GuardResu
   }
 }
 
+function isSessionStrategyName(strategyName: string): boolean {
+  return strategyName.startsWith('session_');
+}
+
+export async function removeAllSessionGuardStrategies(): Promise<GuardResult<boolean>> {
+  try {
+    const existingStrategies = await guardService.queryGuardStrategies();
+    for (const strategy of existingStrategies) {
+      if (!isSessionStrategyName(strategy.name)) {
+        continue;
+      }
+      await stopPlanGuardStrategy(strategy.name);
+      await removePlanGuardStrategyInternal(strategy.name);
+    }
+    return { ok: true, data: true, message: '已移除全部定时契约屏时策略' };
+  } catch (error) {
+    logGuardError('removeAllSessionGuardStrategies', error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('移除定时契约屏时策略失败')
+    };
+  }
+}
+
+/** 退出登录 / 卸载前：移除本应用注册的全部屏时策略（含 plan_、session_、周期守护等） */
+export async function removeAllGuardStrategies(): Promise<GuardResult<boolean>> {
+  try {
+    const existingStrategies = await guardService.queryGuardStrategies();
+    for (const strategy of existingStrategies) {
+      await stopPlanGuardStrategy(strategy.name);
+      await removePlanGuardStrategyInternal(strategy.name);
+    }
+    return { ok: true, data: true, message: '已移除全部屏时策略' };
+  } catch (error) {
+    logGuardError('removeAllGuardStrategies', error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('移除全部屏时策略失败')
+    };
+  }
+}
+
+export async function pruneSessionGuardStrategies(activeSessionIds: Set<string>): Promise<GuardResult<boolean>> {
+  try {
+    const existingStrategies = await guardService.queryGuardStrategies();
+    for (const strategy of existingStrategies) {
+      if (!isSessionStrategyName(strategy.name)) {
+        continue;
+      }
+      const sessionId = strategy.name.replace('session_', '');
+      if (activeSessionIds.has(sessionId)) {
+        continue;
+      }
+      await stopPlanGuardStrategy(strategy.name);
+      await removePlanGuardStrategyInternal(strategy.name);
+    }
+    return { ok: true, data: true, message: '已清理过期定时契约屏时策略' };
+  } catch (error) {
+    logGuardError('pruneSessionGuardStrategies', error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('清理过期定时契约屏时策略失败')
+    };
+  }
+}
+
 export async function syncAllPlanGuardStrategies(plans: FocusPlan[]): Promise<GuardResult<boolean>> {
   if (!(await getUserAuthGranted())) {
     return { ok: false, data: false, message: '未完成系统授权，跳过系统契约策略同步' };

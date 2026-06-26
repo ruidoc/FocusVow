@@ -209,13 +209,16 @@ export struct FocusHomePage {
 
   private getLockSubtitle(): string {
     const count = this.activeLock.selectedCount;
+    const duoHint = this.activeLock.participationMode === 'duo' && this.activeLock.partnerNickname.length > 0
+      ? `与 ${this.activeLock.partnerNickname} 互督 · `
+      : '';
     if (this.activeLock.kind === 'covenant') {
-      return `已限制 ${count} 个应用，当前由契约自动锁定`;
+      return `${duoHint}已限制 ${count} 个应用，当前由契约自动锁定`;
     }
     if (this.activeLock.kind === 'cycle_guard') {
       return `娱乐限额已用完，当前已限制 ${count} 个应用`;
     }
-    return `已限制 ${count} 个应用，计时结束后自动上岸`;
+    return `${duoHint}已限制 ${count} 个应用，计时结束后自动上岸`;
   }
 
   private getEndLockButtonLabel(): string {
@@ -239,6 +242,9 @@ export struct FocusHomePage {
       return '提前结束视为撕毁契约，自然跑满才算上岸';
     }
     if (this.activeLock.kind === 'quick_focus') {
+      if (this.activeLock.participationMode === 'duo') {
+        return '提前结束视为撕毁契约，搭子也会被连带';
+      }
       return '提前结束视为撕毁契约，自然跑满才算上岸';
     }
     return '';
@@ -261,12 +267,12 @@ export struct FocusHomePage {
         .width(72)
         .height(72)
         .borderRadius(36)
-        .backgroundColor(AppTheme.colors.surface)
-        .opacity(0.82)
+        .backgroundColor(AppTheme.colors.primarySoft)
+        .opacity(1)
 
       SymbolGlyph(isLockedState ? $r('sys.symbol.lock_fill') : $r('sys.symbol.timer'))
         .fontSize(40)
-        .fontColor([AppTheme.colors.accentGreen])
+        .fontColor([AppTheme.colors.primary])
         .fontWeight(500)
     }
     .width(120)

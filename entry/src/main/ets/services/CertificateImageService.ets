@@ -6,6 +6,30 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 
 export const CERTIFICATE_SNAPSHOT_ID: string = 'certificateSnapshotRoot';
 
+export interface ComponentSnapshotOptions {
+  scale?: number;
+  waitUntilRenderFinished?: boolean;
+}
+
+export function captureComponentSnapshot(
+  uiContext: UIContext,
+  componentId: string,
+  options?: ComponentSnapshotOptions
+): Promise<image.PixelMap> {
+  return new Promise<image.PixelMap>((resolve, reject) => {
+    uiContext.getComponentSnapshot().get(componentId, (error: Error, pixmap: image.PixelMap) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(pixmap);
+    }, {
+      scale: options?.scale ?? 1,
+      waitUntilRenderFinished: options?.waitUntilRenderFinished ?? false
+    });
+  });
+}
+
 export async function saveCertificateSnapshot(
   uiContext: UIContext,
   context: common.UIAbilityContext,
@@ -26,18 +50,6 @@ export async function saveCertificateSnapshot(
   } finally {
     await fileIo.close(file.fd);
   }
-}
-
-function captureComponentSnapshot(uiContext: UIContext, componentId: string): Promise<image.PixelMap> {
-  return new Promise<image.PixelMap>((resolve, reject) => {
-    uiContext.getComponentSnapshot().get(componentId, (error: Error, pixmap: image.PixelMap) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(pixmap);
-    });
-  });
 }
 
 export function formatSaveError(error: BusinessError): string {

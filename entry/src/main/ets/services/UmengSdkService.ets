@@ -6,12 +6,10 @@ import { PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { DuoPushHandler } from './DuoPushHandler';
 import { UmengConfig } from '../config/UmengConfig';
-import { readStoredString, writeStoredString } from './PreferencesService';
 import { StoreKeys } from '../stores/StoreKeys';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'UmengSdk';
-const PRIVACY_AGREED_KEY: string = 'umeng.privacyAgreed';
 
 let sdkInitialized: boolean = false;
 let lastUmengDeviceToken: string = '';
@@ -25,16 +23,8 @@ interface PushMessageParts {
 }
 
 export class UmengSdkService {
-  static isPrivacyAgreed(context: common.Context): boolean {
-    return readStoredString(context, PRIVACY_AGREED_KEY, '0') === '1';
-  }
-
-  static markPrivacyAgreed(context: common.Context): void {
-    writeStoredString(context, PRIVACY_AGREED_KEY, '1');
-  }
-
   static ensureInitialized(context: common.Context): void {
-    if (sdkInitialized || !UmengSdkService.isPrivacyAgreed(context)) {
+    if (sdkInitialized) {
       return;
     }
     if (UmengConfig.APP_MESSAGE_SECRET.length === 0) {

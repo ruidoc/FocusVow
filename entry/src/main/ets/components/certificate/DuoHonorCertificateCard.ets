@@ -1,66 +1,66 @@
-import { ShameCertificateData, createEmptyShameCertificateData } from '../../models/CertificateModel';
+import { HonorCertificateData, createEmptyHonorCertificateData } from '../../models/CertificateModel';
 import { CERTIFICATE_SNAPSHOT_ID } from '../../services/CertificateImageService';
 import { CertificateFooter } from './CertificateFooter';
 import { CertificateInfoSection } from './CertificateInfoSection';
 
-const WARNING_ASPECT_RATIO: number = 1086 / 1448;
+const HONOR_ASPECT_RATIO: number = 1086 / 1448;
 const SEAL_SIZE: number = 126;
 const CARD_PADDING_H: number = 28;
-const CARD_PADDING_TOP: number = 44;
+const CARD_PADDING_TOP: number = 64;
 const CARD_PADDING_BOTTOM: number = 44;
 
 @Component
-export struct ShameCertificateCard {
-  @Prop data: ShameCertificateData = createEmptyShameCertificateData();
+export struct DuoHonorCertificateCard {
+  @Prop data: HonorCertificateData = createEmptyHonorCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
 
   @Builder
   private buildBody(): void {
-    Column({ space: 10 }) {
+    Column({ space: 14 }) {
       Text(this.data.modeLabel)
         .fontSize(11)
-        .fontColor('#B07A7A')
+        .fontColor('#9A8458')
         .width('100%')
         .textAlign(TextAlign.Center)
 
       Text(this.data.cardTitle)
         .fontSize(22)
         .fontWeight(FontWeight.Bold)
-        .fontColor('#F2D0D0')
+        .fontColor('#4A3B1F')
         .letterSpacing(4)
         .width('100%')
         .textAlign(TextAlign.Center)
 
       CertificateInfoSection({
         userName: this.data.userName,
-        partnerName: '',
+        partnerName: this.data.partnerName,
         datetimeLabel: this.data.footerDatetime,
-        darkTheme: true
+        darkTheme: false
       })
 
       Column({ space: 4 }) {
-        Text(`实际 ${this.data.actualMinutes} / 计划 ${this.data.totalMinutes} 分钟`)
+        Text(`${this.data.durationMinutes} 分钟`)
           .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#F2D0D0')
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#6B4F1F')
           .width('100%')
           .textAlign(TextAlign.Center)
         Text(this.data.contractTitle)
           .fontSize(13)
-          .fontColor('#E8CACA')
+          .fontColor('#4A3B1F')
           .width('100%')
           .textAlign(TextAlign.Center)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
-      .padding(12)
-      .border({ width: 1, color: '#6A3030' })
+      .padding({ top: 10, bottom: 10 })
+      .border({ width: 1, color: '#D8C8A0' })
       .borderRadius(8)
 
       Text(this.data.resultNarrative)
         .fontSize(13)
-        .fontColor('#E8CACA')
+        .fontColor('#3D3424')
         .lineHeight(22)
         .width('100%')
     }
@@ -69,9 +69,9 @@ export struct ShameCertificateCard {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Image($r('app.media.temp_warning'))
+      Image($r('app.media.temp_honor'))
         .width('100%')
-        .aspectRatio(WARNING_ASPECT_RATIO)
+        .aspectRatio(HONOR_ASPECT_RATIO)
         .objectFit(ImageFit.Cover)
 
       Column() {
@@ -92,7 +92,7 @@ export struct ShameCertificateCard {
           footerBrand: this.data.footerBrand,
           footerDatetime: this.data.footerDatetime,
           adSlogan: this.data.adSlogan,
-          darkTheme: true
+          darkTheme: false
         })
           .margin({ left: CARD_PADDING_H, bottom: CARD_PADDING_BOTTOM })
       }
@@ -101,7 +101,7 @@ export struct ShameCertificateCard {
       .zIndex(5)
 
       Stack({ alignContent: Alignment.BottomEnd }) {
-        Image($r('app.media.seal_fail'))
+        Image($r('app.media.seal_fulfill'))
           .width(SEAL_SIZE)
           .height(SEAL_SIZE)
           .objectFit(ImageFit.Contain)
@@ -113,7 +113,7 @@ export struct ShameCertificateCard {
       .hitTestBehavior(HitTestMode.Transparent)
     }
     .width('100%')
-    .aspectRatio(WARNING_ASPECT_RATIO)
+    .aspectRatio(HONOR_ASPECT_RATIO)
     .borderRadius(12)
     .clip(true)
     .id(this.snapshotId)

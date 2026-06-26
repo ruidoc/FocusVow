@@ -17,7 +17,7 @@ import { restartCycleGuardIfEnabled } from './CycleGuardService';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { getPlanWindow } from './PlanWindowService';
 import { FocusPlan } from '../models/PlanModel';
-import { DuoSessionView } from '../models/DuoModel';
+import { DuoSessionView, resolveDuoCounterpartName } from '../models/DuoModel';
 import { loadPersistedPlans } from './PlanPersistenceService';
 import { loadPersistedSettings, savePersistedSettings } from './SettingsPersistenceService';
 import {
@@ -32,13 +32,15 @@ interface ScheduledActivationMeta {
   duoSessionId: string;
   recordId: string;
   participationMode: QuickFocusParticipationMode;
+  partnerNickname: string;
 }
 
 function createEmptyActivationMeta(): ScheduledActivationMeta {
   const empty: ScheduledActivationMeta = {
     duoSessionId: '',
     recordId: '',
-    participationMode: ''
+    participationMode: '',
+    partnerNickname: ''
   };
   return empty;
 }
@@ -49,7 +51,8 @@ function buildActivationMetaFromSession(session: DuoSessionView): ScheduledActiv
   const meta: ScheduledActivationMeta = {
     duoSessionId: session.session_id,
     recordId: session.my_record_id || session.record_id || '',
-    participationMode
+    participationMode,
+    partnerNickname: participationMode === 'duo' ? resolveDuoCounterpartName(session) : ''
   };
   return meta;
 }
@@ -145,7 +148,8 @@ function buildCovenantLockFromSnapshot(
     Date.now(),
     activationMeta.duoSessionId || snapshot.sessionId,
     activationMeta.recordId,
-    activationMeta.participationMode
+    activationMeta.participationMode,
+    activationMeta.partnerNickname
   );
 }
 
@@ -164,7 +168,8 @@ function buildCovenantLockFromPlan(
     Date.now(),
     activationMeta.duoSessionId || plan.duoSessionId,
     activationMeta.recordId,
-    activationMeta.participationMode
+    activationMeta.participationMode,
+    activationMeta.partnerNickname
   );
 }
 

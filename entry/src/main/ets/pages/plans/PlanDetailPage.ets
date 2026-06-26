@@ -31,9 +31,10 @@ import { StoreKeys } from '../../stores/StoreKeys';
 
 bootstrapStores();
 
-interface PlanTimePickerAcceptValue {
-  hour?: number;
-  minute?: number;
+/** 与 TimePicker.onChange 入参结构对齐 */
+interface PlanTimePickerResult {
+  hour: number;
+  minute: number;
 }
 
 @Entry
@@ -53,6 +54,9 @@ struct PlanDetailPage {
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'allow';
+  @State timePickerVisible: boolean = false;
+  @State timePickerTarget: 'start' | 'end' = 'start';
+  @State timePickerDraft: Date = new Date();
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
 
@@ -255,35 +259,41 @@ struct PlanDetailPage {
     return value.toString().padStart(2, '0');
   }
 
+  private formatTime(date: Date): string {
+    return `${this.padTimePart(date.getHours())}:${this.padTimePart(date.getMinutes())}`;
+  }
+
   private timeStringToDate(time: string): Date {
+    const normalized = time.trim();
     const result = new Date();
-    const parts = time.split(':');
-    result.setHours(Math.floor(Number(parts[0]) || 0), Math.floor(Number(parts[1]) || 0), 0, 0);
+    if (!normalized.includes(':')) {
+      return result;
+    }
+    const parts = normalized.split(':');
+    const hour = Math.min(23, Math.max(0, Math.floor(Number(parts[0]) || 0)));
+    const minute = Math.min(59, Math.max(0, Math.floor(Number(parts[1]) || 0)));
+    result.setHours(hour, minute, 0, 0);
     return result;
   }
 
-  private showStartTimePicker(): void {
-    this.getUIContext().showTimePickerDialog({
-      selected: this.timeStringToDate(this.startTime),
-      useMilitaryTime: true,
-      onAccept: (value: PlanTimePickerAcceptValue) => {
-        if (value.hour !== undefined && value.minute !== undefined) {
-          this.startTime = `${this.padTimePart(value.hour)}:${this.padTimePart(value.minute)}`;
-        }
-      }
-    });
+  private openTimePicker(target: 'start' | 'end'): void {
+    this.timePickerTarget = target;
+    this.timePickerDraft = this.timeStringToDate(target === 'start' ? this.startTime : this.endTime);
+    this.timePickerVisible = true;
   }
 
-  private showEndTimePicker(): void {
-    this.getUIContext().showTimePickerDialog({
-      selected: this.timeStringToDate(this.endTime),
-      useMilitaryTime: true,
-      onAccept: (value: PlanTimePickerAcceptValue) => {
-        if (value.hour !== undefined && value.minute !== undefined) {
-          this.endTime = `${this.padTimePart(value.hour)}:${this.padTimePart(value.minute)}`;
-        }
-      }
-    });
+  private confirmTimePicker(): void {
+    const nextTime = this.formatTime(this.timePickerDraft);
+    if (this.timePickerTarget === 'start') {
+      this.startTime = nextTime;
+    } else {
+      this.endTime = nextTime;
+    }
+    this.timePickerVisible = false;
+  }
+
+  private cancelTimePicker(): void {
+    this.timePickerVisible = false;
   }
 
   private toggleRepeatDay(day: number): void {
@@ -664,11 +674,15 @@ struct PlanDetailPage {
         .width('100%')
 
       Row({ space: 8 }) {
-        Row() {
+        Row({ space: 6 }) {
           Text(this.startTime)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
+
+          SymbolGlyph($r('sys.symbol.clock'))
+            .fontSize(14)
+            .fontColor([AppTheme.colors.textMuted])
         }
         .layoutWeight(1)
         .height(44)
@@ -677,18 +691,22 @@ struct PlanDetailPage {
         .border({ width: 1, color: AppTheme.colors.border })
         .borderRadius(12)
         .onClick(() => {
-          this.showStartTimePicker();
+          this.openTimePicker('start');
         })
 
         Text('至')
           .fontSize(14)
           .fontColor(AppTheme.colors.textMuted)
 
-        Row() {
+        Row({ space: 6 }) {
           Text(this.endTime)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
+
+          SymbolGlyph($r('sys.symbol.clock'))
+            .fontSize(14)
+            .fontColor([AppTheme.colors.textMuted])
         }
         .layoutWeight(1)
         .height(44)
@@ -697,7 +715,7 @@ struct PlanDetailPage {
         .border({ width: 1, color: AppTheme.colors.border })
         .borderRadius(12)
         .onClick(() => {
-          this.showEndTimePicker();
+          this.openTimePicker('end');
         })
       }
       .width('100%')
@@ -832,6 +850,63 @@ struct PlanDetailPage {
   }
 
   @Builder
+  private buildTimePickerSheet(): void {
+    Column({ space: 18 }) {
+      Text(this.timePickerTarget === 'start' ? '选择开始时间' : '选择结束时间')
+        .fontSize(18)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .width('100%')
+        .textAlign(TextAlign.Center)
+
+      TimePicker({
+        selected: this.timePickerDraft,
+        format: TimePickerFormat.HOUR_MINUTE
+      })
+        .width('100%')
+        .useMilitaryTime(true)
+        .onChange((value: PlanTimePickerResult) => {
+          const next = new Date(this.timePickerDraft);
+          next.setHours(value.hour, value.minute, 0, 0);
+          this.timePickerDraft = next;
+        })
+
+      Row({ space: 12 }) {
+        Button('取消')
+          .layoutWeight(1)
+          .height(48)
+          .type(ButtonType.Capsule)
+          .fontSize(16)
+          .fontColor(AppTheme.colors.textSecondary)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .onClick(() => {
+            this.cancelTimePicker();
+          })
+
+        Button('确定')
+          .layoutWeight(1)
+          .height(48)
+          .type(ButtonType.Capsule)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#FFFFFF')
+          .backgroundColor(AppTheme.colors.primary)
+          .onClick(() => {
+            this.confirmTimePicker();
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({
+      left: 20,
+      right: 20,
+      top: 20,
+      bottom: 28
+    })
+  }
+
+  @Builder
   private buildBody(): void {
     if (this.isLoading) {
       Text('加载中...')
@@ -880,6 +955,17 @@ struct PlanDetailPage {
         .height('100%')
         .hitTestBehavior(HitTestMode.Transparent)
       }
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.timePickerVisible, this.buildTimePickerSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          preferType: SheetType.BOTTOM,
+          showClose: false,
+          dragBar: true,
+          backgroundColor: AppTheme.colors.backgroundSoft
+        })
     }
     .width('100%')
     .height('100%')

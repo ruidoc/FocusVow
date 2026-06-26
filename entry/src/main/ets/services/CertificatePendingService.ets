@@ -1,4 +1,4 @@
-import { CertificateKind } from '../models/CertificateModel';
+import { CertificateKind, HonorCertificateData, ShameCertificateData } from '../models/CertificateModel';
 import { ActiveLockState, normalizeActiveLockState } from '../models/ActiveLockModel';
 import { AppTheme } from '../constants/Theme';
 import {
@@ -74,6 +74,23 @@ export function getPendingCertificate(): CertificatePendingSnapshot | null {
   return pending;
 }
 
+function buildHonorDialogMessage(data: HonorCertificateData): string {
+  if (data.partnerName.length > 0) {
+    return `你和 ${data.partnerName} 已完成「${data.contractTitle}」，${data.cardTitle}已生成。可保存到相册或转发给搭子。`;
+  }
+  return `「${data.contractTitle}」已履约完成，${data.cardTitle}已生成。可保存到相册。`;
+}
+
+function buildShameDialogMessage(data: ShameCertificateData): string {
+  if (data.shameVariant === 'victim') {
+    return `「${data.contractTitle}」因 ${data.counterpartName} 退出而中止，${data.cardTitle}已生成。可保存到相册。`;
+  }
+  if (data.shameVariant === 'violator' && data.counterpartName.length > 0) {
+    return `「${data.contractTitle}」本次未守完全程，连带影响了 ${data.counterpartName}。${data.cardTitle}已生成。`;
+  }
+  return `「${data.contractTitle}」本次未守完全程，${data.cardTitle}已生成。可保存到相册。`;
+}
+
 export function tryPresentCertificateGuide(uiContext: UIContext): void {
   const pending = getPendingCertificate();
   if (!pending) {
@@ -89,12 +106,13 @@ export function tryPresentCertificateGuide(uiContext: UIContext): void {
   const user = UserStore.getUserInfo();
   if (pending.kind === 'honor') {
     const data = buildHonorCertificateFromLock(pending.lock, user, pending.endedAt);
+    const isDuo = data.partnerName.length > 0;
     uiContext.showAlertDialog({
-      title: '恭喜上岸',
-      message: `「${data.contractTitle}」已履约完成，荣誉证已生成。可保存到相册或转发给搭子。`,
+      title: isDuo ? '双人契约达成' : '恭喜上岸',
+      message: buildHonorDialogMessage(data),
       autoCancel: false,
       primaryButton: {
-        value: '查看荣誉证',
+        value: isDuo ? '查看双人履约证' : '查看荣誉证',
         fontColor: AppTheme.colors.primary,
         action: () => {
           clearPendingCertificate();
@@ -118,12 +136,15 @@ export function tryPresentCertificateGuide(uiContext: UIContext): void {
     pending.breachRole,
     pending.failedReason
   );
+  const dialogTitle = data.shameVariant === 'victim'
+    ? '契约被炸 · 无罪释放'
+    : '违约耻辱证已生成';
   uiContext.showAlertDialog({
-    title: '违约耻辱证已生成',
-    message: `「${data.contractTitle}」本次未守完全程，耻辱证已归档。可保存留证或转发自省。`,
+    title: dialogTitle,
+    message: buildShameDialogMessage(data),
     autoCancel: false,
     primaryButton: {
-      value: '查看耻辱证',
+      value: data.shameVariant === 'victim' ? '查看被炸证' : '查看耻辱证',
       fontColor: AppTheme.colors.danger,
       action: () => {
         clearPendingCertificate();

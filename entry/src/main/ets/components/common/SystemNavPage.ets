@@ -7,6 +7,8 @@ import {
   ScrollEffectType
 } from '@kit.UIDesignKit';
 import { AppTheme } from '../../constants/Theme';
+import { FLOATING_TAB_EXTRA_BOTTOM_VP } from '../../pages/tabs/MainTabUtil';
+import { StoreKeys } from '../../stores/StoreKeys';
 
 @Builder
 function EmptyBuilder(): void {
@@ -29,6 +31,7 @@ export struct SystemNavPage {
   @Prop hiddenTitleTopPadding: number = 12;
   @Prop contentSpace: number = 16;
   @Prop bottomSpacerHeight: number = 24;
+  @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
   onBack?: () => void;
   onAction?: () => void;
 
@@ -75,6 +78,11 @@ export struct SystemNavPage {
     return this.bindScrollers;
   }
 
+  private getEffectiveBottomSpacerHeight(): number {
+    const floatingExtra = this.floatingTabBar ? FLOATING_TAB_EXTRA_BOTTOM_VP : 0;
+    return this.bottomSpacerHeight + floatingExtra;
+  }
+
   @Builder
   private buildScrollContent(): void {
     Scroll(this.scroller) {
@@ -92,7 +100,7 @@ export struct SystemNavPage {
 
         Blank()
           .width('100%')
-          .height(this.bottomSpacerHeight)
+          .height(this.getEffectiveBottomSpacerHeight())
       }
       .width('100%')
       .constraintSize({ minHeight: '100%' })
@@ -122,7 +130,7 @@ export struct SystemNavPage {
       .padding({
         left: this.horizontalPadding,
         right: this.horizontalPadding,
-        bottom: this.bottomSpacerHeight
+        bottom: this.getEffectiveBottomSpacerHeight()
       })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Start)

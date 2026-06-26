@@ -6,6 +6,7 @@ import { image } from '@kit.ImageKit';
 export struct CertificateQrFooter {
   @Prop qrContent: string = 'FocusVow';
   @Prop footerSlogan: string = '';
+  @Prop footerTag: string = '';
   @Prop darkTheme: boolean = false;
   @State private qrPixelMap: image.PixelMap | undefined = undefined;
 
@@ -61,6 +62,14 @@ export struct CertificateQrFooter {
         .fontColor(this.darkTheme ? '#D8A0A0' : '#7A6A4A')
         .lineHeight(18)
         .layoutWeight(1)
+
+      if (this.footerTag.length > 0) {
+        Text(this.footerTag)
+          .fontSize(10)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.darkTheme ? '#E8B4B4' : '#9A8458')
+          .letterSpacing(1)
+      }
     }
     .width('100%')
     .padding({ top: 14, bottom: 4 })

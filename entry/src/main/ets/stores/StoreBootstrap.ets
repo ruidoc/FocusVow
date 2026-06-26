@@ -37,6 +37,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.ScheduledListFilter, 'all');
   AppStorage.setOrCreate(StoreKeys.ScheduledListDirty, true);
   AppStorage.setOrCreate(StoreKeys.MainTabTarget, '');
+  AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
   AppStorage.setOrCreate(StoreKeys.DuoWaitSessionId, '');
   AppStorage.setOrCreate(StoreKeys.DuoWaitTitle, '');
   AppStorage.setOrCreate(StoreKeys.DuoWaitInviteText, '');

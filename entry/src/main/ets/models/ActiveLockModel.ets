@@ -9,6 +9,7 @@ export interface QuickFocusOptions {
   duoSessionId?: string;
   recordId?: string;
   participationMode?: QuickFocusParticipationMode;
+  partnerNickname?: string;
 }
 
 export const CYCLE_GUARD_STRATEGY_NAME: string = 'cycle_quota_strategy';
@@ -27,6 +28,7 @@ export interface ActiveLockState {
   duoSessionId: string;
   recordId: string;
   participationMode: 'solo' | 'duo' | '';
+  partnerNickname: string;
 }
 
 export function createIdleLockState(): ActiveLockState {
@@ -43,7 +45,8 @@ export function createIdleLockState(): ActiveLockState {
     updatedAt: Date.now(),
     duoSessionId: '',
     recordId: '',
-    participationMode: ''
+    participationMode: '',
+    partnerNickname: ''
   };
 }
 
@@ -66,8 +69,31 @@ export function normalizeActiveLockState(state?: Partial<ActiveLockState> | null
     updatedAt: state.updatedAt ?? idle.updatedAt,
     duoSessionId: state.duoSessionId ?? idle.duoSessionId,
     recordId: state.recordId ?? idle.recordId,
-    participationMode: state.participationMode ?? idle.participationMode
+    participationMode: state.participationMode ?? idle.participationMode,
+    partnerNickname: state.partnerNickname ?? idle.partnerNickname
   };
+}
+
+export function withLockPartnerNickname(state: ActiveLockState, partnerNickname: string): ActiveLockState {
+  if (state.partnerNickname.trim().length > 0) {
+    return state;
+  }
+  return normalizeActiveLockState({
+    kind: state.kind,
+    strategyName: state.strategyName,
+    title: state.title,
+    planId: state.planId,
+    selectedTokens: state.selectedTokens,
+    selectedCount: state.selectedCount,
+    mode: state.mode,
+    startedAt: state.startedAt,
+    endAt: state.endAt,
+    updatedAt: state.updatedAt,
+    duoSessionId: state.duoSessionId,
+    recordId: state.recordId,
+    participationMode: state.participationMode,
+    partnerNickname: partnerNickname.trim().length > 0 ? partnerNickname.trim() : '搭子'
+  });
 }
 
 export function isLocked(state: ActiveLockState): boolean {
@@ -127,7 +153,8 @@ export function createQuickFocusLockState(
   title: string = '单人专注',
   duoSessionId: string = '',
   recordId: string = '',
-  participationMode: 'solo' | 'duo' | '' = ''
+  participationMode: 'solo' | 'duo' | '' = '',
+  partnerNickname: string = ''
 ): ActiveLockState {
   const safeDuration = durationMinutes > 0 ? durationMinutes : 25;
 
@@ -144,7 +171,8 @@ export function createQuickFocusLockState(
     updatedAt: nowAt,
     duoSessionId,
     recordId,
-    participationMode
+    participationMode,
+    partnerNickname
   };
 }
 
@@ -158,7 +186,8 @@ export function createCovenantLockState(
   nowAt: number = Date.now(),
   duoSessionId: string = '',
   recordId: string = '',
-  participationMode: QuickFocusParticipationMode = ''
+  participationMode: QuickFocusParticipationMode = '',
+  partnerNickname: string = ''
 ): ActiveLockState {
   return {
     kind: 'covenant',
@@ -173,7 +202,8 @@ export function createCovenantLockState(
     updatedAt: nowAt,
     duoSessionId,
     recordId,
-    participationMode
+    participationMode,
+    partnerNickname
   };
 }
 
@@ -195,6 +225,7 @@ export function createCycleGuardLockState(
     updatedAt: nowAt,
     duoSessionId: '',
     recordId: '',
-    participationMode: ''
+    participationMode: '',
+    partnerNickname: ''
   };
 }

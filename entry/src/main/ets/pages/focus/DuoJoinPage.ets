@@ -3,7 +3,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { DuoSessionView } from '../../models/DuoModel';
+import { DuoSessionView, resolveDuoCounterpartName } from '../../models/DuoModel';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { PageRoutes, backRoute, pushRoute, replaceRoute, navigateToMainTab } from '../../router/PageRoutes';
 import {
@@ -189,7 +189,8 @@ struct DuoJoinPage {
       title: session.title,
       duoSessionId: session.session_id,
       recordId: session.record_id || session.my_record_id || '',
-      participationMode: 'duo'
+      participationMode: 'duo',
+      partnerNickname: resolveDuoCounterpartName(session)
     };
     LockStore.startQuickFocus(hostContext, this.selectedTokens, session.duration_min, 'allow', focusOptions);
     DuoInviteClipboardService.dismissToken(token);

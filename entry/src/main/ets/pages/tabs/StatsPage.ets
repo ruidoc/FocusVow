@@ -1,4 +1,4 @@
-import { showErrorToast } from '../../common/Toast';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { buildHonorCertificateData, buildShameCertificateData } from '../../services/CertificateCopyService';
 import {
   openHonorCertificatePreview,
@@ -34,10 +34,24 @@ import {
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { common } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { image } from '@kit.ImageKit';
+import {
+  buildStatsShareCachePath,
+  captureStatsShareSnapshot,
+  formatShareError,
+  shareStatsImageFile,
+  STATS_SNAPSHOT_ID,
+  writePixelMapToFile
+} from '../../services/StatsShareService';
 
 bootstrapStores();
 
 type StatsDetailSection = 'timeline' | 'shame';
+
+const STATS_SHARE_HORIZONTAL_PADDING: number = 14;
+const STATS_SHARE_BOTTOM_PADDING: number = 24;
 
 @Component
 export struct StatsPage {
@@ -48,6 +62,7 @@ export struct StatsPage {
   @State isLoading: boolean = false;
   @State errorMessage: string = '';
   private reloadVersion: number = 0;
+  private isSharing: boolean = false;
 
   aboutToAppear(): void {
     void this.reload();
@@ -59,7 +74,7 @@ export struct StatsPage {
     this.errorMessage = '';
 
     if (!UserStore.isLoggedIn()) {
-      this.errorMessage = '登录后可查看上岸时光轴与耻辱柱';
+      this.errorMessage = '登录后可查看履约荣誉墙与耻辱柱';
       this.summary = null;
       this.timeline = [];
       this.shame = [];
@@ -180,17 +195,55 @@ export struct StatsPage {
     openHonorCertificatePreview(data);
   }
 
+  private async handleSharePress(): Promise<void> {
+    if (this.isSharing) {
+      return;
+    }
+    if (this.isLoading) {
+      showToast('战报加载中，请稍候', this.getUIContext());
+      return;
+    }
+    if (!UserStore.isLoggedIn()) {
+      showToast('登录后可分享战报', this.getUIContext());
+      return;
+    }
+
+    this.isSharing = true;
+    let pixelMap: image.PixelMap | null = null;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const periodLabel = getStatsPeriodLabel(this.currentPeriod);
+
+    try {
+      pixelMap = await captureStatsShareSnapshot(this.getUIContext());
+      const cachePath = buildStatsShareCachePath(hostContext);
+      await writePixelMapToFile(pixelMap, cachePath);
+      await shareStatsImageFile(
+        hostContext,
+        cachePath,
+        `${periodLabel}专注战报`,
+        'FocusPact 专注统计'
+      );
+    } catch (error) {
+      showErrorToast(formatShareError(error as BusinessError), this.getUIContext());
+    } finally {
+      pixelMap?.release();
+      this.isSharing = false;
+    }
+  }
+
   @Builder
   private buildPeriodButton(period: StatsPeriod): void {
     Text(getStatsPeriodLabel(period))
-      .layoutWeight(1)
-      .fontSize(15)
+      .fontSize(13)
       .fontWeight(this.currentPeriod === period ? FontWeight.Medium : FontWeight.Regular)
       .fontColor(this.currentPeriod === period ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
-      .textAlign(TextAlign.Center)
-      .padding({ top: 10, bottom: 10 })
-      .borderRadius(20)
-      .backgroundColor(this.currentPeriod === period ? AppTheme.colors.primarySoft : Color.Transparent)
+      .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+      .backgroundColor(this.currentPeriod === period ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
+      .borderRadius(AppTheme.radius.pill)
+      .border({
+        width: 1,
+        color: this.currentPeriod === period ? AppTheme.colors.primary : AppTheme.colors.border
+      })
       .onClick(() => {
         if (this.currentPeriod === period) {
           return;
@@ -534,18 +587,14 @@ export struct StatsPage {
   }
 
   @Builder
-  private buildStatsBody(): void {
+  private buildStatsContent(): void {
     Column({ space: 18 }) {
-      Row({ space: 8 }) {
+      Row({ space: 10 }) {
         this.buildPeriodButton('today');
         this.buildPeriodButton('week');
         this.buildPeriodButton('month');
       }
       .width('100%')
-      .padding(4)
-      .backgroundColor(AppTheme.colors.surface)
-      .borderRadius(AppTheme.radius.lg)
-      .border({ width: 1, color: AppTheme.colors.border })
 
       this.buildStatusNotice()
       if (this.isLoading) {
@@ -561,13 +610,35 @@ export struct StatsPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  @Builder
+  private buildStatsBody(): void {
+    Column() {
+      this.buildStatsContent()
+    }
+    .width('100%')
+    .padding({
+      left: STATS_SHARE_HORIZONTAL_PADDING,
+      right: STATS_SHARE_HORIZONTAL_PADDING,
+      bottom: STATS_SHARE_BOTTOM_PADDING
+    })
+    .backgroundColor(AppTheme.colors.background)
+    .alignItems(HorizontalAlign.Start)
+    .id(STATS_SNAPSHOT_ID)
+  }
+
   build() {
     SystemNavPage({
       title: '统计',
       showBack: false,
-      horizontalPadding: 14,
+      showAction: true,
+      actionLabel: '分享',
+      actionIcon: $r('sys.symbol.share'),
+      horizontalPadding: 0,
       contentSpace: 18,
       bottomSpacerHeight: 0,
+      onAction: () => {
+        void this.handleSharePress();
+      },
       content: (): void => {
         this.buildStatsBody();
       }

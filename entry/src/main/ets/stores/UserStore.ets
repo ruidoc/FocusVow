@@ -3,6 +3,10 @@ import { createEmptyUserInfo, parseUserInfo, UserInfo } from '../models/UserMode
 import { AuthApiService } from '../services/AuthApiService';
 import { ExtendApiService } from '../services/ExtendApiService';
 import { FocusSyncService } from '../services/FocusSyncService';
+import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
+import { clearAllScheduledGuardOnLogout, syncAllScheduledGuardOnLogin } from '../services/ScheduledCovenantService';
+import { PlanStore } from './PlanStore';
+import { CycleGuardStore } from './CycleGuardStore';
 import { UmengSdkService } from '../services/UmengSdkService';
 import {
   clearUserSession,
@@ -94,7 +98,7 @@ export class UserStore {
   static async refreshUserInfo(context: common.UIAbilityContext): Promise<string | null> {
     const response = await AuthApiService.fetchSelfInfo();
     if (response.statusCode === 401) {
-      UserStore.logout(context);
+      await UserStore.logout(context);
       return response.message ?? '请重新登录';
     }
     if (response.statusCode !== 200) {
@@ -110,6 +114,7 @@ export class UserStore {
     syncAppStorageValue(StoreKeys.UserInfo, userInfo);
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, true);
     UmengSdkService.ensureInitialized(context);
+    UmengSdkService.enablePushNotification(context);
     UmengSdkService.bindUserAlias(userInfo.id);
     return null;
   }
@@ -124,13 +129,19 @@ export class UserStore {
     }
   }
 
-  static logout(context: common.UIAbilityContext): void {
+  static async logout(context: common.UIAbilityContext): Promise<string | null> {
     bootstrapStores();
+    const guardResult = await clearAllScheduledGuardOnLogout(context);
+    CycleGuardStore.hydrate(context);
     UmengSdkService.clearUserAlias();
     clearUserSession(context);
     syncAppStorageValue(StoreKeys.UserAccessToken, '');
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, false);
     syncAppStorageValue(StoreKeys.UserInfo, createEmptyUserInfo());
+    if (!guardResult.ok) {
+      return guardResult.message;
+    }
+    return null;
   }
 
   private static async applySessionToken(
@@ -143,10 +154,23 @@ export class UserStore {
 
     const refreshError = await UserStore.refreshUserInfo(context);
     if (refreshError) {
-      UserStore.logout(context);
+      await UserStore.logout(context);
       return refreshError;
     }
     void FocusSyncService.flushPending(context);
+    void UserStore.syncGuardsOnLogin(context);
     return null;
+  }
+
+  static async syncGuardsOnLogin(context: common.UIAbilityContext): Promise<void> {
+    PlanStore.hydrate(context);
+    const scheduledResult = await syncAllScheduledGuardOnLogin(context);
+    if (!scheduledResult.ok) {
+      console.warn(`Scheduled guard sync on login skipped: ${scheduledResult.message}`);
+    }
+    const planResult = await syncAllPlanGuardStrategies(PlanStore.getPlans());
+    if (!planResult.ok) {
+      console.warn(`Plan guard sync on login skipped: ${planResult.message}`);
+    }
   }
 }

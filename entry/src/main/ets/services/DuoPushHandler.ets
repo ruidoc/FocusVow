@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { ActiveLockState, isLocked, QuickFocusOptions, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
-import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody } from '../models/DuoModel';
+import { ActiveLockState, isLocked, QuickFocusOptions, resolveDuoSessionIdFromLock, withLockPartnerNickname } from '../models/ActiveLockModel';
+import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody, resolveDuoCounterpartName } from '../models/DuoModel';
 import { PageRoutes, replaceRoute } from '../router/PageRoutes';
 import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
 import { applyScreenRestriction, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
@@ -388,7 +388,8 @@ export class DuoPushHandler {
       title: session.title,
       duoSessionId: session.session_id,
       recordId: session.my_record_id || session.record_id || '',
-      participationMode: 'duo'
+      participationMode: 'duo',
+      partnerNickname: resolveDuoCounterpartName(session)
     };
     LockStore.startQuickFocus(context, tokens, durationMin, 'allow', focusOptions);
     replaceRoute(PageRoutes.FocusHome);
@@ -419,6 +420,11 @@ export class DuoPushHandler {
       : '由于你的搭子撕毁了契约，本次专注已中止';
     SettingsStore.hydrate(context);
 
+    const violatorName = payload.violator_name && payload.violator_name.length > 0
+      ? payload.violator_name
+      : (state.partnerNickname.length > 0 ? state.partnerNickname : '搭子');
+    const lockSnapshot = withLockPartnerNickname(state, violatorName);
+
     if (isLocked(state)) {
       if (state.kind === 'quick_focus') {
         await releaseScreenRestriction(state.selectedTokens, state.mode);
@@ -427,7 +433,7 @@ export class DuoPushHandler {
       }
     }
 
-    queueShameCertificate(state, Date.now(), 'victim', 'partner_breach');
+    queueShameCertificate(lockSnapshot, Date.now(), 'victim', 'partner_breach');
     LockStore.clear(context);
     markScheduledListStale(context);
     clearScheduledActivationTracking(sessionId);

@@ -142,6 +142,22 @@ export interface UmengPushMessageBody {
   custom?: string;
 }
 
+export function getDuoPartnerDisplayName(partner?: DuoPartnerBrief | null): string {
+  const nickname = partner?.nickname?.trim() ?? '';
+  return nickname.length > 0 ? nickname : '搭子';
+}
+
+/** 当前用户视角下的双人契约对方昵称 */
+export function resolveDuoCounterpartName(session: DuoSessionView): string {
+  if (session.viewer_role === 'partner') {
+    return getDuoPartnerDisplayName(session.initiator);
+  }
+  if (session.partner) {
+    return getDuoPartnerDisplayName(session.partner);
+  }
+  return getDuoPartnerDisplayName(session.initiator);
+}
+
 export function parseStringArray(raw: Object | undefined): string[] {
   if (!raw || !Array.isArray(raw)) {
     return [];

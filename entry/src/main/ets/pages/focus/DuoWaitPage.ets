@@ -4,7 +4,7 @@ import { showErrorToast, showToast } from '../../common/Toast';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { DuoSessionView, isDuoWaitPartnerJoined } from '../../models/DuoModel';
+import { DuoSessionView, isDuoWaitPartnerJoined, resolveDuoCounterpartName } from '../../models/DuoModel';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { PageRoutes, backRoute, replaceRoute, navigateToMainTab } from '../../router/PageRoutes';
 import { applyScreenRestriction } from '../../services/ScreenTimeService';
@@ -220,7 +220,8 @@ struct DuoWaitPage {
       title,
       duoSessionId: session.session_id,
       recordId: session.my_record_id || session.record_id || '',
-      participationMode: 'duo'
+      participationMode: 'duo',
+      partnerNickname: resolveDuoCounterpartName(session)
     };
     LockStore.startQuickFocus(hostContext, this.selectedTokens, durationMin, 'allow', focusOptions);
     clearDuoWaitContext();

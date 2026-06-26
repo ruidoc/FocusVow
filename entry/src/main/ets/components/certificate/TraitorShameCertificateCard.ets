@@ -10,7 +10,7 @@ const CARD_PADDING_TOP: number = 44;
 const CARD_PADDING_BOTTOM: number = 44;
 
 @Component
-export struct ShameCertificateCard {
+export struct TraitorShameCertificateCard {
   @Prop data: ShameCertificateData = createEmptyShameCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
 
@@ -31,9 +31,17 @@ export struct ShameCertificateCard {
         .width('100%')
         .textAlign(TextAlign.Center)
 
+      if (this.data.roleLabel.length > 0) {
+        Text(`（${this.data.roleLabel}）`)
+          .fontSize(12)
+          .fontColor('#B07A7A')
+          .width('100%')
+          .textAlign(TextAlign.Center)
+      }
+
       CertificateInfoSection({
         userName: this.data.userName,
-        partnerName: '',
+        partnerName: this.data.counterpartName,
         datetimeLabel: this.data.footerDatetime,
         darkTheme: true
       })

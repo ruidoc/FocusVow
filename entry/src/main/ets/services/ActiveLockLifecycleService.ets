@@ -39,7 +39,8 @@ function saveQuickFocusPending(
       updatedAt: state.updatedAt,
       duoSessionId: sessionId,
       recordId: state.recordId,
-      participationMode: state.participationMode
+      participationMode: state.participationMode,
+      partnerNickname: state.partnerNickname
     };
     FocusSyncService.saveSessionTerminalPending(context, enriched, result, endedAt);
     return;

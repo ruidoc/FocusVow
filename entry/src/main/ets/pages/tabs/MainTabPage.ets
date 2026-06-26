@@ -1,38 +1,33 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { AppTheme } from '../../constants/Theme';
 import { ActiveLockState, createIdleLockState, normalizeActiveLockState } from '../../models/ActiveLockModel';
+import { MainTabKey } from '../../router/PageRoutes';
 import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
 import { queueHonorCertificate, tryPresentCertificateGuide } from '../../services/CertificatePendingService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { FocusSyncService } from '../../services/FocusSyncService';
-import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { warmUpPreferencesStore } from '../../services/PreferencesService';
-import { syncAllPlanGuardStrategies } from '../../services/ScreenTimeService';
 import { reconcileLockLifecycle } from '../../services/LockReconcileService';
-import { UmengSdkService } from '../../services/UmengSdkService';
+import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { LockStore } from '../../stores/LockStore';
 import { PlanStore } from '../../stores/PlanStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
-import { PageRoutes, pushRoute, pushPrivacyPolicy } from '../../router/PageRoutes';
-import { ContractTabPage } from './ContractTabPage';
-import { FocusHomePage } from './FocusHomePage';
-import { ProfilePage } from './ProfilePage';
-import { StatsPage } from './StatsPage';
 import { InAppMessageBanner } from '../../components/common/InAppMessageBanner';
+import { MainTabImmersiveLayout } from './MainTabImmersiveLayout';
+import { MainTabLegacyLayout } from './MainTabLegacyLayout';
+import { supportsImmersiveTab } from './MainTabUtil';
 
 bootstrapStores();
-
-export type MainTabKey = 'focus' | 'plans' | 'stats' | 'profile';
 
 @Entry
 @Component
 struct MainTabPage {
   @State currentTab: MainTabKey = 'focus';
   @State private bottomGestureInsetVp: number = 0;
+  @State private useImmersiveTab: boolean = false;
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
   @StorageLink(StoreKeys.MainTabTarget) @Watch('onMainTabTargetChanged') pendingTab: string = '';
@@ -44,6 +39,8 @@ struct MainTabPage {
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const ui = this.getUIContext();
+    this.useImmersiveTab = supportsImmersiveTab();
+    AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
     warmUpPreferencesStore(hostContext);
     UserStore.hydrate(hostContext);
     SettingsStore.hydrate(hostContext);
@@ -53,10 +50,9 @@ struct MainTabPage {
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
       void FocusSyncService.flushPending(hostContext);
+      void UserStore.syncGuardsOnLogin(hostContext);
     }
-    void syncAllPlanGuardStrategies(PlanStore.getPlans());
     this.startTimer();
-    this.bootstrapUmengSdk(hostContext);
     void this.probeClipboardInvite(hostContext);
     this.consumePendingTab();
 
@@ -71,6 +67,7 @@ struct MainTabPage {
 
   aboutToDisappear(): void {
     this.clearTimer();
+    AppStorage.set(StoreKeys.MainTabFloatingBar, false);
   }
 
   private clearTimer(): void {
@@ -113,40 +110,6 @@ struct MainTabPage {
     void this.probeClipboardInvite(context);
   }
 
-  private bootstrapUmengSdk(context: common.UIAbilityContext): void {
-    const afterInit = (): void => {
-      UmengSdkService.ensureInitialized(context);
-      UmengSdkService.enablePushNotification(context);
-      if (UserStore.isLoggedIn()) {
-        UmengSdkService.bindUserAlias(UserStore.getUserInfo().id);
-      }
-    };
-
-    if (UmengSdkService.isPrivacyAgreed(context)) {
-      afterInit();
-      return;
-    }
-
-    this.getUIContext().showAlertDialog({
-      title: '服务说明',
-      message: '为向你发送专注提醒等通知，应用将使用友盟推送与统计服务。你可随时在系统设置中关闭通知权限。',
-      autoCancel: false,
-      primaryButton: {
-        value: '同意并继续',
-        action: () => {
-          UmengSdkService.markPrivacyAgreed(context);
-          afterInit();
-        }
-      },
-      secondaryButton: {
-        value: '查看隐私政策',
-        action: () => {
-          pushPrivacyPolicy();
-        }
-      }
-    });
-  }
-
   private syncLockLifecycle(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.maybeProbeClipboardOnForeground(hostContext);
@@ -184,95 +147,29 @@ struct MainTabPage {
     this.isEndingLock = false;
   }
 
-  @Builder
-  private buildTabSymbol(tab: MainTabKey): void {
-    SymbolGlyph(this.getTabSymbol(tab))
-      .fontSize(21)
-      .fontColor([this.currentTab === tab ? AppTheme.colors.primary : AppTheme.colors.textSecondary])
-      .fontWeight(this.currentTab === tab ? 500 : 400)
-  }
-
-  private getTabSymbol(tab: MainTabKey): Resource {
-    const selected = this.currentTab === tab;
-    if (tab === 'focus') {
-      return selected ? $r('sys.symbol.timer_circle_fill') : $r('sys.symbol.timer');
-    }
-
-    if (tab === 'plans') {
-      return selected ? $r('sys.symbol.doc_plaintext_fill') : $r('sys.symbol.doc_plaintext');
-    }
-
-    if (tab === 'stats') {
-      return selected ? $r('sys.symbol.calendar') : $r('sys.symbol.calendar');
-    }
-
-    return selected ? $r('sys.symbol.person_fill') : $r('sys.symbol.person');
-  }
-
-  @Builder
-  private buildTabItem(tab: MainTabKey, title: string): void {
-    Column({ space: 6 }) {
-      this.buildTabSymbol(tab)
-
-      Text(title)
-        .fontSize(12)
-        .fontWeight(this.currentTab === tab ? FontWeight.Medium : FontWeight.Regular)
-        .fontColor(this.currentTab === tab ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
-    }
-    .layoutWeight(1)
-    .padding({ top: 10, bottom: 2 })
-    .alignItems(HorizontalAlign.Center)
-    .onClick(() => {
-      this.currentTab = tab;
-    })
+  private handleTabChange(tab: MainTabKey): void {
+    this.currentTab = tab;
   }
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
-      Column() {
-        Stack() {
-          FocusHomePage({
-            onSelectTab: (tab: 'plans') => {
-              this.currentTab = tab;
-            }
-          })
-            .width('100%')
-            .height('100%')
-            .visibility(this.currentTab === 'focus' ? Visibility.Visible : Visibility.Hidden)
-
-          ContractTabPage({ isPageActive: this.currentTab === 'plans' })
-            .width('100%')
-            .height('100%')
-            .visibility(this.currentTab === 'plans' ? Visibility.Visible : Visibility.Hidden)
-
-          StatsPage()
-            .width('100%')
-            .height('100%')
-            .visibility(this.currentTab === 'stats' ? Visibility.Visible : Visibility.Hidden)
-
-          ProfilePage()
-            .width('100%')
-            .height('100%')
-            .visibility(this.currentTab === 'profile' ? Visibility.Visible : Visibility.Hidden)
-        }
-        .width('100%')
-        .layoutWeight(1)
-
-        Row() {
-          this.buildTabItem('focus', '专注')
-          this.buildTabItem('plans', '计划')
-          this.buildTabItem('stats', '统计')
-          this.buildTabItem('profile', '我的')
-        }
-        .width('100%')
-        .padding({ left: 12, right: 12, top: 8, bottom: 8 + this.bottomGestureInsetVp })
-        .backgroundColor(AppTheme.colors.backgroundSoft)
-        .border({ width: 1, color: AppTheme.colors.border })
+      if (this.useImmersiveTab) {
+        MainTabImmersiveLayout({
+          currentTab: this.currentTab,
+          bottomGestureInsetVp: this.bottomGestureInsetVp,
+          onTabChange: (tab: MainTabKey) => {
+            this.handleTabChange(tab);
+          }
+        })
+      } else {
+        MainTabLegacyLayout({
+          currentTab: this.currentTab,
+          bottomGestureInsetVp: this.bottomGestureInsetVp,
+          onTabChange: (tab: MainTabKey) => {
+            this.handleTabChange(tab);
+          }
+        })
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(AppTheme.colors.background)
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
 
       InAppMessageBanner()
     }

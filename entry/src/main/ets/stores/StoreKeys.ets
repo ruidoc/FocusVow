@@ -21,6 +21,7 @@ export class StoreKeys {
   static readonly AppIsForeground: string = 'app.isForeground';
   static readonly InAppMessage: string = 'app.inAppMessage';
   static readonly MainTabTarget: string = 'main.tab.target';
+  static readonly MainTabFloatingBar: string = 'main.tab.floatingBar';
   static readonly DuoWaitSessionId: string = 'duo.wait.session_id';
   static readonly DuoWaitTitle: string = 'duo.wait.title';
   static readonly DuoWaitInviteText: string = 'duo.wait.invite_text';

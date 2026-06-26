@@ -19,22 +19,26 @@ struct SettingsPage {
     UserStore.hydrate(hostContext);
   }
 
-  private logout(): void {
+  private async logout(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    UserStore.logout(hostContext);
+    const guardError = await UserStore.logout(hostContext);
+    if (guardError) {
+      showToast(`已退出，但屏时策略未完全清除，可能仍无法卸载：${guardError}`, this.getUIContext());
+      return;
+    }
     showToast('已退出登录', this.getUIContext());
   }
 
   private confirmLogout(): void {
     this.getUIContext().showAlertDialog({
       title: '退出登录',
-      message: '退出后本机将不再同步当前账号数据，确认退出吗？',
+      message: '退出后将移除本机全部屏时策略（含本地契约与定时契约），登录后会自动恢复。确认退出吗？',
       autoCancel: true,
       primaryButton: {
         value: '确认退出',
         fontColor: AppTheme.colors.danger,
         action: () => {
-          this.logout();
+          void this.logout();
         }
       },
       secondaryButton: {

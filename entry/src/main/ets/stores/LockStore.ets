@@ -51,7 +51,8 @@ function enrichCovenantLockFromPlans(context: common.Context, state: ActiveLockS
     state.updatedAt,
     state.duoSessionId.length > 0 ? state.duoSessionId : plan.duoSessionId,
     state.recordId,
-    state.participationMode
+    state.participationMode,
+    state.partnerNickname
   );
 }
 
@@ -143,7 +144,8 @@ export class LockStore {
       options?.title ?? '单人专注',
       options?.duoSessionId ?? '',
       options?.recordId ?? '',
-      options?.participationMode ?? ''
+      options?.participationMode ?? '',
+      options?.partnerNickname ?? ''
     );
     LockStore.setState(context, nextState);
     LockStore.setQuickFocusDurationMinutes(context, durationMinutes);

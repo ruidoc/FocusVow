@@ -1,14 +1,18 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
+import { DuoHonorCertificateCard } from '../../components/certificate/DuoHonorCertificateCard';
 import { HonorCertificateCard } from '../../components/certificate/HonorCertificateCard';
 import { ShameCertificateCard } from '../../components/certificate/ShameCertificateCard';
+import { TraitorShameCertificateCard } from '../../components/certificate/TraitorShameCertificateCard';
+import { VictimShameCertificateCard } from '../../components/certificate/VictimShameCertificateCard';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
   createEmptyHonorCertificateData,
   createEmptyShameCertificateData,
   HonorCertificateData,
+  isDuoHonorCertificate,
   ShameCertificateData
 } from '../../models/CertificateModel';
 import { backRoute } from '../../router/PageRoutes';
@@ -29,23 +33,25 @@ struct CertificatePreviewPage {
   @State honorData: HonorCertificateData = createEmptyHonorCertificateData();
   @State shameData: ShameCertificateData = createEmptyShameCertificateData();
   @State isSaving: boolean = false;
-  @State qrReady: boolean = false;
 
   aboutToAppear(): void {
     this.kind = AppStorage.get<string>(StoreKeys.CertificateKind) ?? 'honor';
     this.honorData = AppStorage.get<HonorCertificateData>(StoreKeys.CertificateHonor) ?? createEmptyHonorCertificateData();
     this.shameData = AppStorage.get<ShameCertificateData>(StoreKeys.CertificateShame) ?? createEmptyShameCertificateData();
-    setTimeout(() => {
-      this.qrReady = true;
-    }, 320);
   }
 
   private getPageTitle(): string {
-    return this.kind === 'shame' ? '违约耻辱证' : '履约荣誉证';
+    if (this.kind === 'shame') {
+      return this.shameData.cardTitle.length > 0 ? this.shameData.cardTitle : '违约记录';
+    }
+    if (isDuoHonorCertificate(this.honorData)) {
+      return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '双人履约证书';
+    }
+    return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '履约证书';
   }
 
   private async handleSave(): Promise<void> {
-    if (this.isSaving || !this.qrReady) {
+    if (this.isSaving) {
       return;
     }
     this.isSaving = true;
@@ -64,7 +70,15 @@ struct CertificatePreviewPage {
   @Builder
   private buildCertificate(): void {
     if (this.kind === 'shame') {
-      ShameCertificateCard({ data: this.shameData })
+      if (this.shameData.shameVariant === 'victim') {
+        VictimShameCertificateCard({ data: this.shameData })
+      } else if (this.shameData.shameVariant === 'violator') {
+        TraitorShameCertificateCard({ data: this.shameData })
+      } else {
+        ShameCertificateCard({ data: this.shameData })
+      }
+    } else if (isDuoHonorCertificate(this.honorData)) {
+      DuoHonorCertificateCard({ data: this.honorData })
     } else {
       HonorCertificateCard({ data: this.honorData })
     }
@@ -104,7 +118,6 @@ struct CertificatePreviewPage {
         .textIconSpace(8)
         .layoutDirection(SecurityComponentLayoutDirection.HORIZONTAL)
         .backgroundColor(AppTheme.colors.primarySoft)
-        .enabled(this.qrReady)
         .onClick(async (_event: ClickEvent, result: SaveButtonOnClickResult) => {
           if (result === SaveButtonOnClickResult.SUCCESS) {
             await this.handleSave();
@@ -121,14 +134,6 @@ struct CertificatePreviewPage {
       this.buildCertificate()
 
       this.buildSaveButton()
-
-      if (!this.qrReady) {
-        Text('正在生成证书二维码...')
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
-          .width('100%')
-          .textAlign(TextAlign.Center)
-      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

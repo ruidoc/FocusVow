@@ -1,9 +1,12 @@
 import {
+  CERTIFICATE_AD_SLOGAN,
+  CERTIFICATE_FOOTER_BRAND,
   HonorCertificateData,
-  ShameCertificateData
+  ShameCertificateData,
+  ShameCertificateVariant
 } from '../models/CertificateModel';
 import { ActiveLockState } from '../models/ActiveLockModel';
-import { DuoShameRecord, DuoTimelineRecord } from '../models/DuoModel';
+import { DuoShameRecord, DuoTimelineRecord, getDuoPartnerDisplayName } from '../models/DuoModel';
 import { UserInfo } from '../models/UserModel';
 
 function formatIsoFromMs(ms: number): string {
@@ -57,7 +60,10 @@ function buildShameRecordFromLock(
     actual_min: actualMin,
     completed_at: completedAt,
     breach_role: breachRole,
-    failed_reason: failedReason
+    failed_reason: failedReason,
+    partner: lock.partnerNickname.length > 0
+      ? { id: '', nickname: lock.partnerNickname }
+      : null
   };
 }
 
@@ -87,12 +93,6 @@ function formatChineseDateTime(raw: string, fallbackDate: string): string {
   return `${dateLabel} ${trimmedTime}`;
 }
 
-function formatIsoDate(raw: string, fallbackDate: string): string {
-  const source = raw.length > 0 ? raw : fallbackDate;
-  const normalized = source.replace('T', ' ');
-  return normalized.split(' ')[0];
-}
-
 function getDisplayName(user: UserInfo): string {
   if (user.username.trim().length > 0) {
     return user.username.trim();
@@ -100,92 +100,100 @@ function getDisplayName(user: UserInfo): string {
   if (user.phone.trim().length > 0) {
     return user.phone.trim();
   }
-  return '无名考生';
+  return '无名用户';
 }
 
-function getQrContent(user: UserInfo): string {
-  if (user.invite_code.trim().length > 0) {
-    return `FocusVow专注契约 | 邀请码 ${user.invite_code.trim()}`;
-  }
-  return 'FocusVow专注契约';
+function getCounterpartNameFromRecord(record: DuoTimelineRecord): string {
+  return getDuoPartnerDisplayName(record.partner);
+}
+
+function getCounterpartNameFromShameRecord(record: DuoShameRecord): string {
+  return getDuoPartnerDisplayName(record.partner);
 }
 
 function getTimelineModeLabel(record: DuoTimelineRecord): string {
   if (record.participation_mode === 'duo') {
     return '1v1 连坐契约';
   }
-  return '单人闭关契约';
+  return '单人专注契约';
 }
 
 function getShameModeLabel(record: DuoShameRecord): string {
   if (record.participation_mode === 'duo') {
     return '1v1 连坐契约';
   }
-  return '单人闭关契约';
+  return '单人专注契约';
 }
 
-function getShameReasonLabel(record: DuoShameRecord): string {
-  const reason = record.failed_reason.trim().toLowerCase();
-  if (reason.length === 0) {
-    return record.breach_role === 'violator' ? '强杀断开' : '连带失败';
+function resolveShameVariant(record: DuoShameRecord): ShameCertificateVariant {
+  if (record.participation_mode !== 'duo') {
+    return 'solo';
   }
-  if (reason === 'tear' || reason === 'breach' || reason === 'manual_stop') {
-    return '强杀断开';
-  }
-  if (reason === 'partner_breach') {
-    return '被搭子连坐';
-  }
-  if (reason === 'timeout') {
-    return '超时失守';
-  }
-  return record.failed_reason;
+  return record.breach_role === 'violator' ? 'violator' : 'victim';
 }
 
-function buildHonorBehaviorVerdict(successRate?: number): string {
-  if (successRate !== undefined && successRate > 0) {
-    const percentile = Math.min(99, Math.max(1, Math.round(successRate)));
-    return `顶住诱惑，物理隔离手机，此战胜率击败全球 ${percentile}% 考研党。`;
-  }
-  return '顶住诱惑，物理隔离手机，成功守完全程。';
+function buildSoloHonorCardTitle(): string {
+  return '履约证书';
 }
 
-function buildShameBehaviorVerdict(record: DuoShameRecord): string {
-  if (record.participation_mode === 'duo' && record.breach_role !== 'violator') {
-    return '被搭子连坐波及，本局清白记录一并作废。';
-  }
-  const reason = getShameReasonLabel(record);
-  if (reason === '被搭子连坐') {
-    return '搭子先撕毁契约，你被连坐记入耻辱柱。';
-  }
-  return '临阵脱逃，主动为同专业竞争对手腾出一个录取名额。';
+function buildDuoHonorCardTitle(): string {
+  return '双人履约证书';
 }
 
-function buildShameBreachNarrative(record: DuoShameRecord): string {
-  const modeLabel = getShameModeLabel(record);
-  if (record.participation_mode === 'duo' && record.breach_role !== 'violator') {
-    return `在「${record.title}」${modeLabel}期间，搭子先毁约，你于第 ${record.actual_min} 分钟被连带判定失败。`;
-  }
-  return `在「${record.title}」${modeLabel}期间，因意志力极其薄弱，于第 ${record.actual_min} 分钟单方面强杀 App 撕毁生死契约。`;
+function buildSoloHonorResultNarrative(record: DuoTimelineRecord): string {
+  return `完成「${record.title}」${record.actual_min} 分钟，契约履行完毕。`;
+}
+
+function buildDuoHonorResultNarrative(record: DuoTimelineRecord): string {
+  return `两人共同完成 ${record.actual_min} 分钟，连坐契约履行完毕。`;
+}
+
+function buildSoloShameCardTitle(): string {
+  return '违约记录';
+}
+
+function buildViolatorShameCardTitle(): string {
+  return '连坐违约证书';
+}
+
+function buildVictimShameCardTitle(): string {
+  return '连坐中止证书';
+}
+
+function buildSoloShameResultNarrative(record: DuoShameRecord): string {
+  return `「${record.title}」第 ${record.actual_min} 分钟提前退出，本次契约未完成。`;
+}
+
+function buildViolatorShameResultNarrative(record: DuoShameRecord): string {
+  return `于第 ${record.actual_min} 分钟退出，搭子因连坐规则同步终止。`;
+}
+
+function buildVictimShameResultNarrative(record: DuoShameRecord, counterpartName: string): string {
+  return `搭子 ${counterpartName} 于第 ${record.actual_min} 分钟退出，我已完成 ${record.actual_min} / ${record.total_min} 分钟，本场因连坐规则终止。`;
 }
 
 export function buildHonorCertificateData(
   record: DuoTimelineRecord,
   fallbackDate: string,
   user: UserInfo,
-  successRate?: number
+  _successRate?: number
 ): HonorCertificateData {
   const completedRaw = record.completed_at ?? fallbackDate;
+  const partnerName = record.participation_mode === 'duo' ? getCounterpartNameFromRecord(record) : '';
+  const isDuo = partnerName.length > 0;
   return {
     userName: getDisplayName(user),
-    dateLabel: formatChineseDate(completedRaw, fallbackDate),
+    partnerName,
+    cardTitle: isDuo ? buildDuoHonorCardTitle() : buildSoloHonorCardTitle(),
+    modeLabel: getTimelineModeLabel(record),
     contractTitle: record.title,
     durationMinutes: record.actual_min,
-    modeLabel: getTimelineModeLabel(record),
-    behaviorVerdict: buildHonorBehaviorVerdict(successRate),
-    closingRemark: '特发此证，以资鼓励。距离成功上岸，再近一步。',
-    issuedAt: formatIsoDate(completedRaw, fallbackDate),
-    qrContent: getQrContent(user),
-    footerSlogan: '扫码加入铁血闭关契约 | FocusVow 专注契约'
+    resultNarrative: isDuo
+      ? buildDuoHonorResultNarrative(record)
+      : buildSoloHonorResultNarrative(record),
+    footerBrand: CERTIFICATE_FOOTER_BRAND,
+    footerDatetime: formatChineseDateTime(completedRaw, fallbackDate),
+    adSlogan: CERTIFICATE_AD_SLOGAN
   };
 }
 
@@ -195,18 +203,36 @@ export function buildShameCertificateData(
   user: UserInfo
 ): ShameCertificateData {
   const completedRaw = record.completed_at ?? fallbackDate;
+  const variant = resolveShameVariant(record);
+  const counterpartName = record.participation_mode === 'duo'
+    ? getCounterpartNameFromShameRecord(record)
+    : '';
+  let cardTitle = buildSoloShameCardTitle();
+  let roleLabel = '';
+  let resultNarrative = buildSoloShameResultNarrative(record);
+  if (variant === 'victim') {
+    cardTitle = buildVictimShameCardTitle();
+    roleLabel = '守约方';
+    resultNarrative = buildVictimShameResultNarrative(record, counterpartName);
+  } else if (variant === 'violator') {
+    cardTitle = buildViolatorShameCardTitle();
+    roleLabel = '违约方';
+    resultNarrative = buildViolatorShameResultNarrative(record);
+  }
   return {
     userName: getDisplayName(user),
-    datetimeLabel: formatChineseDateTime(completedRaw, fallbackDate),
+    counterpartName,
+    cardTitle,
+    roleLabel,
+    modeLabel: getShameModeLabel(record),
     contractTitle: record.title,
     totalMinutes: record.total_min,
     actualMinutes: record.actual_min,
-    modeLabel: getShameModeLabel(record),
-    breachNarrative: buildShameBreachNarrative(record),
-    behaviorVerdict: buildShameBehaviorVerdict(record),
-    punishmentLabel: '[ 2027年考研二战留级体验卡 ] 现已即时生效。',
-    qrContent: getQrContent(user),
-    footerSlogan: '围观此人下一次赌局 | 拒绝当鸽子下载 FocusVow'
+    resultNarrative,
+    footerBrand: CERTIFICATE_FOOTER_BRAND,
+    footerDatetime: formatChineseDateTime(completedRaw, fallbackDate),
+    adSlogan: CERTIFICATE_AD_SLOGAN,
+    shameVariant: variant
   };
 }
 
@@ -228,7 +254,10 @@ export function buildHonorCertificateFromLock(
     participation_mode: lock.participationMode === 'duo' ? 'duo' : 'solo',
     total_min: totalMin,
     actual_min: durationMinutes,
-    completed_at: completedAt
+    completed_at: completedAt,
+    partner: lock.partnerNickname.length > 0
+      ? { id: '', nickname: lock.partnerNickname }
+      : null
   };
   return buildHonorCertificateData(record, fallbackDate, user);
 }
