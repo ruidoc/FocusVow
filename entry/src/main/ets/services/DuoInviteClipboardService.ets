@@ -23,12 +23,16 @@ export function isFocusInviteClipboardText(raw: string): boolean {
   if (text.includes('【专注契约】')) {
     return true;
   }
-  return text.includes('重载口令') && /\$[^$]+\$/.test(text);
+  return text.includes('重载口令') && /\$[^$]+\$/.test(text) ||
+    text.includes('复制口令') && /\$[^$]+\$/.test(text);
 }
 
 function buildInviteDialogMessage(session: DuoSessionView): string {
   const initiatorName = session.initiator?.nickname ?? '好友';
-  return `「${session.title}」\n时长 ${session.duration_min} 分钟 · 白名单模式\n发起人：${initiatorName}\n\n确认后将选择要限制的应用并加入契约。`;
+  const durationLabel = session.type === 'scheduled'
+    ? '定时契约 · 到点一起履约'
+    : `时长 ${session.duration_min} 分钟 · 白名单模式`;
+  return `「${session.title}」\n${durationLabel}\n发起人：${initiatorName}\n\n确认后将选择要限制的应用并加入契约。`;
 }
 
 export class DuoInviteClipboardService {

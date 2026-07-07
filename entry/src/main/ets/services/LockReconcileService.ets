@@ -50,7 +50,7 @@ export async function reconcileCovenantNaturalCompletion(
     markScheduledListStale(context);
     clearScheduledActivationTracking(sessionId);
     await restartCycleGuardIfEnabled(context);
-    SettingsStore.updateStatusMessage(context, '契约窗口已结束，恭喜上岸');
+    SettingsStore.updateStatusMessage(context, '契约窗口已结束，履约完成');
     if (UserStore.isLoggedIn()) {
       await FocusSyncService.flushPending(context);
     }

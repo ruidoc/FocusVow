@@ -1,4 +1,5 @@
 import deviceInfo from '@ohos.deviceInfo';
+import { ActiveLockState, isLocked } from '../../models/ActiveLockModel';
 import { MainTabKey } from '../../router/PageRoutes';
 
 export const FLOATING_TAB_EXTRA_BOTTOM_VP: number = 72;
@@ -32,6 +33,11 @@ export function getMainTabIcons(tab: MainTabKey): MainTabIconPair {
     normal: $r('sys.symbol.person'),
     selected: $r('sys.symbol.person_fill')
   };
+}
+
+/** 对齐 RN Tabs：专注进行中隐藏底部 Tab */
+export function shouldHideMainTabBar(activeLock: ActiveLockState): boolean {
+  return isLocked(activeLock);
 }
 
 export function supportsImmersiveTab(): boolean {

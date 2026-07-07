@@ -1,18 +1,23 @@
 import { common } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { InputConfirmSheet } from '../../components/common/InputConfirmSheet';
+import { DuoFocusHeader } from '../../components/focus/DuoFocusHeader';
+import { FocusTimeRing } from '../../components/focus/FocusTimeRing';
 import { AppTheme } from '../../constants/Theme';
 import { TEAR_CONFIRM_REQUIRED_TEXT } from '../../constants/TearConfirm';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import {
   ActiveLockState,
   createIdleLockState,
-  isDuoCovenantLock,
+  getRemainingSeconds,
   isLocked,
-  normalizeActiveLockState
+  minutesToHours,
+  normalizeActiveLockState,
+  resolveDuoSessionIdFromLock
 } from '../../models/ActiveLockModel';
 import { FocusPlan } from '../../models/PlanModel';
-import { isDuoWaitPartnerJoined } from '../../models/DuoModel';
+import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import {
   endCycleGuardLock,
@@ -42,10 +47,12 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.DuoWaitScheduleLabel) duoWaitScheduleLabel: string = '';
   @State remainingLabel: string = LockStore.getRemainingLabel();
   @State showTearConfirm: boolean = false;
+  @State topSafeInsetVp: number = 0;
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
   private duoWaitPollTick: number = 0;
+  private duoPartnerSyncSessionId: string = '';
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -54,7 +61,20 @@ export struct FocusHomePage {
     LockStore.hydrate(hostContext);
     this.syncRemainingLabel();
     void this.reconcileDuoWait();
+    void this.syncDuoPartnerDisplay();
     this.startTimer();
+    this.loadTopSafeInset(hostContext);
+  }
+
+  private loadTopSafeInset(hostContext: common.UIAbilityContext): void {
+    const ui = this.getUIContext();
+    window.getLastWindow(hostContext, (err, win) => {
+      if (err.code) {
+        return;
+      }
+      const systemAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      this.topSafeInsetVp = ui.px2vp(systemAvoid.topRect.height);
+    });
   }
 
   aboutToDisappear(): void {
@@ -76,6 +96,9 @@ export struct FocusHomePage {
       if (this.duoWaitSessionId.length > 0 && this.duoWaitPollTick % 5 === 0) {
         void this.reconcileDuoWait();
       }
+      if (this.isDuoFocus() && this.duoWaitPollTick % 5 === 0) {
+        void this.syncDuoPartnerDisplay();
+      }
     }, 1000);
   }
 
@@ -88,10 +111,10 @@ export struct FocusHomePage {
       if (this.duoWaitScheduleLabel.length > 0) {
         return `定时契约 · ${this.duoWaitScheduleLabel}`;
       }
-      return '定时契约 · 等待搭子加入后可复制口令';
+      return '定时契约 · 等待搭子加入后可发给搭子';
     }
     const title = this.duoWaitTitle.length > 0 ? this.duoWaitTitle : '搭子互督';
-    return `${title} · 点击进入复制口令`;
+    return `${title} · 点击进入发给搭子`;
   }
 
   private async reconcileDuoWait(): Promise<void> {
@@ -123,6 +146,56 @@ export struct FocusHomePage {
     }
   }
 
+  private async syncDuoPartnerDisplay(): Promise<void> {
+    if (!this.isDuoFocus()) {
+      this.duoPartnerSyncSessionId = '';
+      return;
+    }
+
+    const sessionId = resolveDuoSessionIdFromLock(this.activeLock);
+    if (sessionId.length === 0) {
+      return;
+    }
+
+    if (
+      this.duoPartnerSyncSessionId === sessionId &&
+      this.activeLock.partnerNickname.trim().length > 0
+    ) {
+      return;
+    }
+
+    const response = await DuoApiService.getSession(sessionId);
+    const session = DuoApiService.parseSession(response);
+    if (!session) {
+      return;
+    }
+
+    const partnerNickname = resolveDuoCounterpartName(session);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const currentState = LockStore.getState();
+    const nextTitle = currentState.title.length > 0
+      ? currentState.title
+      : (session.title.length > 0 ? session.title : '搭子互督');
+
+    LockStore.setState(hostContext, normalizeActiveLockState({
+      kind: currentState.kind,
+      strategyName: currentState.strategyName,
+      title: nextTitle,
+      planId: currentState.planId,
+      selectedTokens: currentState.selectedTokens,
+      selectedCount: currentState.selectedCount,
+      mode: currentState.mode,
+      startedAt: currentState.startedAt,
+      endAt: currentState.endAt,
+      updatedAt: currentState.updatedAt,
+      duoSessionId: currentState.duoSessionId,
+      recordId: currentState.recordId,
+      participationMode: currentState.participationMode,
+      partnerNickname
+    }));
+    this.duoPartnerSyncSessionId = sessionId;
+  }
+
   private syncRemainingLabel(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
@@ -136,7 +209,7 @@ export struct FocusHomePage {
 
   private getTearConfirmMessage(): string {
     if (this.activeLock.participationMode === 'duo') {
-      return '撕毁后本次专注立即失败，搭子也会被连带。撕毁契约后无法撤销，你与搭子都将记为失败。';
+      return '撕毁后本次专注立即失败，搭子也会因连坐记为失败。撕毁契约后无法撤销，你与搭子都将记为失败。';
     }
     return '撕毁后本次专注记为违约，会生成耻辱证。撕毁契约后无法撤销，本次将记入耻辱柱。';
   }
@@ -207,18 +280,88 @@ export struct FocusHomePage {
     this.startTimer();
   }
 
-  private getLockSubtitle(): string {
-    const count = this.activeLock.selectedCount;
-    const duoHint = this.activeLock.participationMode === 'duo' && this.activeLock.partnerNickname.length > 0
-      ? `与 ${this.activeLock.partnerNickname} 互督 · `
-      : '';
+  private isDuoFocus(): boolean {
+    return this.activeLock.participationMode === 'duo';
+  }
+
+  private getSelfDisplayName(): string {
+    const username = UserStore.getUserInfo().username.trim();
+    return username.length > 0 ? username : '我';
+  }
+
+  private getPartnerDisplayName(): string {
+    const nickname = this.activeLock.partnerNickname.trim();
+    return nickname.length > 0 ? nickname : '搭子';
+  }
+
+  private getFocusKindLabel(): string {
+    if (this.isDuoFocus()) {
+      return '搭子互督';
+    }
     if (this.activeLock.kind === 'covenant') {
-      return `${duoHint}已限制 ${count} 个应用，当前由契约自动锁定`;
+      return '单人定时契约';
     }
-    if (this.activeLock.kind === 'cycle_guard') {
-      return `娱乐限额已用完，当前已限制 ${count} 个应用`;
+    if (this.activeLock.kind === 'quick_focus') {
+      return '单人即时契约';
     }
-    return `${duoHint}已限制 ${count} 个应用，计时结束后自动上岸`;
+    return '专注中';
+  }
+
+  private getLockStatusText(): string {
+    const count = this.activeLock.selectedCount;
+    const modeLabel = this.activeLock.mode === 'allow' ? '白名单模式' : '黑名单模式';
+    if (this.activeLock.mode === 'allow') {
+      return `已放行 ${count} 个应用 · ${modeLabel}`;
+    }
+    return `已限制 ${count} 个应用 · ${modeLabel}`;
+  }
+
+  private getTotalDurationMinutes(): number {
+    if (this.activeLock.endAt <= 0 || this.activeLock.startedAt <= 0) {
+      return 0;
+    }
+    return Math.max(Math.floor((this.activeLock.endAt - this.activeLock.startedAt) / 60000), 0);
+  }
+
+  private getFocusSubtitle(): string {
+    const kindLabel = this.getFocusKindLabel();
+    const totalMinutes = this.getTotalDurationMinutes();
+    if (totalMinutes > 0) {
+      return `${kindLabel} · 共 ${minutesToHours(totalMinutes)}`;
+    }
+    return kindLabel;
+  }
+
+  private getProgressValue(): number {
+    if (this.activeLock.endAt <= 0 || this.activeLock.startedAt <= 0) {
+      return 0;
+    }
+    const totalMs = this.activeLock.endAt - this.activeLock.startedAt;
+    if (totalMs <= 0) {
+      return 0;
+    }
+    const remainingMs = Math.max(this.activeLock.endAt - Date.now(), 0);
+    const elapsedMs = totalMs - remainingMs;
+    return Math.min(Math.max((elapsedMs / totalMs) * 100, 0), 100);
+  }
+
+  private getElapsedMinutes(): number {
+    if (this.activeLock.endAt <= 0 || this.activeLock.startedAt <= 0) {
+      return 0;
+    }
+    const totalSeconds = Math.floor((this.activeLock.endAt - this.activeLock.startedAt) / 1000);
+    const remainingSeconds = getRemainingSeconds(this.activeLock, Date.now());
+    return Math.max(Math.floor((totalSeconds - remainingSeconds) / 60), 0);
+  }
+
+  private shouldUseCompactTime(): boolean {
+    return this.remainingLabel.length > 5;
+  }
+
+  private canShowTearButton(): boolean {
+    return this.activeLock.kind === 'quick_focus' ||
+      this.activeLock.kind === 'covenant' ||
+      this.activeLock.kind === 'cycle_guard';
   }
 
   private getEndLockButtonLabel(): string {
@@ -229,25 +372,6 @@ export struct FocusHomePage {
       return '结束当前锁定';
     }
     return '结束';
-  }
-
-  private getLockHint(): string {
-    if (this.activeLock.kind === 'cycle_guard') {
-      return '结束后会重新开始一轮娱乐限额计时';
-    }
-    if (this.activeLock.kind === 'covenant') {
-      if (isDuoCovenantLock(this.activeLock)) {
-        return '提前结束视为撕毁契约，你与搭子都将记为失败';
-      }
-      return '提前结束视为撕毁契约，自然跑满才算上岸';
-    }
-    if (this.activeLock.kind === 'quick_focus') {
-      if (this.activeLock.participationMode === 'duo') {
-        return '提前结束视为撕毁契约，搭子也会被连带';
-      }
-      return '提前结束视为撕毁契约，自然跑满才算上岸';
-    }
-    return '';
   }
 
   @Builder
@@ -281,52 +405,89 @@ export struct FocusHomePage {
   }
 
   @Builder
+  private buildWeakTearButton(): void {
+    Row() {
+      Text(this.getEndLockButtonLabel())
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textMuted)
+    }
+    .height(40)
+    .padding({ left: 20, right: 20 })
+    .margin({ top: 10 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(20)
+    .opacity(this.isEndingLock ? 0.5 : 1)
+    .enabled(!this.isEndingLock)
+    .onClick(() => {
+      void this.endCurrentLock();
+    })
+  }
+
+  @Builder
+  private buildLockStatusChip(): void {
+    Row({ space: 6 }) {
+      SymbolGlyph(this.activeLock.mode === 'allow'
+        ? $r('sys.symbol.checkmark_circle')
+        : $r('sys.symbol.lock_fill'))
+        .fontSize(14)
+        .fontColor([AppTheme.colors.primary])
+
+      Text(this.getLockStatusText())
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.primary)
+    }
+    .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+    .backgroundColor(AppTheme.colors.primarySoft)
+    .borderRadius(AppTheme.radius.pill)
+    .margin({ bottom: 10 })
+  }
+
+  @Builder
   private buildLockedState(): void {
-    Column({ space: 18 }) {
-      this.buildStatusIcon(true)
+    Column({ space: 24 }) {
+      FocusTimeRing({
+        remainingLabel: this.remainingLabel,
+        elapsedMinutes: this.getElapsedMinutes(),
+        progressValue: this.getProgressValue(),
+        isDuo: this.isDuoFocus(),
+        useCompactTime: this.shouldUseCompactTime()
+      })
 
-      if (this.activeLock.endAt > 0) {
-        Text(this.remainingLabel)
-          .fontSize(56)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
+      this.buildLockStatusChip()
 
+      Column({ space: 4 }) {
         Text(this.activeLock.title)
           .fontSize(24)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
-      } else {
-        Text(this.activeLock.title)
-          .fontSize(32)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text(this.getFocusSubtitle())
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)
+          .lineHeight(22)
       }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
 
-      Text(this.getLockSubtitle())
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .textAlign(TextAlign.Center)
-
-      AppActionButton({
-        label: this.getEndLockButtonLabel(),
-        variant: 'danger',
-        isEnabled: !this.isEndingLock,
-        onPress: () => {
-          this.endCurrentLock();
-        }
-      })
-
-      if (this.getLockHint().length > 0) {
-        Text(this.getLockHint())
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textMuted)
-          .textAlign(TextAlign.Center)
+      if (this.canShowTearButton()) {
+        this.buildWeakTearButton()
       }
     }
     .width('100%')
-    .padding({ left: 12, right: 12 })
+    .padding({
+      left: 24,
+      right: 24,
+      top: this.isDuoFocus() ? 48 : 0
+    })
     .alignItems(HorizontalAlign.Center)
   }
 
@@ -602,7 +763,7 @@ export struct FocusHomePage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: Alignment.TopStart }) {
       SystemNavPage({
         title: '专注',
         showTitleBar: false,
@@ -611,6 +772,18 @@ export struct FocusHomePage {
           this.buildHomeContent();
         }
       })
+
+      if (this.isActiveLocked() && this.isDuoFocus()) {
+        DuoFocusHeader({
+          selfName: this.getSelfDisplayName(),
+          partnerName: this.getPartnerDisplayName()
+        })
+          .padding({
+            left: 24,
+            right: 24,
+            top: this.topSafeInsetVp + 16
+          })
+      }
 
       InputConfirmSheet({
         visible: this.showTearConfirm,

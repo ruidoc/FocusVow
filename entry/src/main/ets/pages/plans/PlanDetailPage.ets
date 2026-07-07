@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { pasteboard } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
+import { copyDuoInviteText, shareDuoInviteText } from '../../services/DuoInviteShareService';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
@@ -166,6 +166,9 @@ struct PlanDetailPage {
   }
 
   private getInviteCode(): string {
+    if (this.session?.invite_text && this.session.invite_text.length > 0) {
+      return this.session.invite_text;
+    }
     return this.session?.token ?? '';
   }
 
@@ -341,10 +344,18 @@ struct PlanDetailPage {
     const inviteText = this.session.invite_text && this.session.invite_text.length > 0
       ? this.session.invite_text
       : this.session.token;
-    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, inviteText);
-    const systemPasteboard = pasteboard.getSystemPasteboard();
-    await systemPasteboard.setData(pasteData);
-    showToast('邀请口令已复制', this.getUIContext());
+    await copyDuoInviteText(this.getUIContext(), inviteText);
+  }
+
+  private async shareInvite(): Promise<void> {
+    if (!this.session?.token) {
+      return;
+    }
+    const inviteText = this.session.invite_text && this.session.invite_text.length > 0
+      ? this.session.invite_text
+      : this.session.token;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    await shareDuoInviteText(hostContext, this.getUIContext(), inviteText);
   }
 
   private async saveChanges(): Promise<void> {
@@ -550,29 +561,41 @@ struct PlanDetailPage {
           .backgroundColor(AppTheme.colors.surfaceRaised)
           .borderRadius(12)
         } else {
-          Text('邀请码')
+          Text('邀请内容')
             .fontSize(13)
             .fontColor(AppTheme.colors.textSecondary)
             .width('100%')
           Text(this.getInviteCode().length > 0 ? this.getInviteCode() : '生成中…')
-            .fontSize(22)
-            .fontWeight(FontWeight.Medium)
+            .fontSize(14)
+            .lineHeight(22)
             .fontColor(AppTheme.colors.textPrimary)
-            .letterSpacing(1)
             .width('100%')
-          Text('复制口令发给搭子，对方加入后会出现在双方契约列表。')
+          Text('发给搭子或复制口令，对方加入后会出现在双方契约列表。')
             .fontSize(13)
             .fontColor(AppTheme.colors.textSecondary)
             .width('100%')
-          Button('复制邀请口令')
-            .width('100%')
-            .height(42)
-            .type(ButtonType.Capsule)
-            .backgroundColor(AppTheme.colors.primarySoft)
-            .fontColor(AppTheme.colors.primary)
-            .onClick(() => {
-              void this.copyInvite();
-            })
+          Row({ space: 12 }) {
+            Button('发给搭子')
+              .layoutWeight(2)
+              .height(42)
+              .type(ButtonType.Capsule)
+              .backgroundColor(AppTheme.colors.primary)
+              .fontColor('#FFFFFF')
+              .onClick(() => {
+                void this.shareInvite();
+              })
+            Button('复制口令')
+              .layoutWeight(1)
+              .height(42)
+              .type(ButtonType.Capsule)
+              .fontSize(14)
+              .backgroundColor(AppTheme.colors.primarySoft)
+              .fontColor(AppTheme.colors.primary)
+              .onClick(() => {
+                void this.copyInvite();
+              })
+          }
+          .width('100%')
         }
       }
       .width('100%')

@@ -2,23 +2,36 @@
   "app": {
     "signingConfigs": [
       {
-        "name": "default",
+        "name": "debug",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "/Users/yangrui/.ohos/config/default_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.cer",
+          "certpath": "/Users/yangrui/.ohos/config/debug_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B9A848BFD65A4EFB88CBC86FAA46A1D0F2773A8A5A672F46517C1C527BC2706C085DB47D927ECEF",
-          "profile": "/Users/yangrui/.ohos/config/default_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p7b",
+          "keyPassword": "0000001AE5B18A79A04FD75456547C11F46C3B283810AB68514803B56E8B48248F75BC95F7D5EDD1B25F",
+          "profile": "/Users/yangrui/.ohos/config/debug_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/yangrui/.ohos/config/default_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p12",
-          "storePassword": "0000001B8F96E805C52301A5BD257C586F2E66BF12DB31D3B76CB08739AA1D037F24C2B3267BDB8872D9FC"
+          "storeFile": "/Users/yangrui/.ohos/config/debug_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p12",
+          "storePassword": "0000001A6AB87F52F3EF8366222AC0A1D0ACD13ABBFE17B5309621567B79A4C8996972DBF7D54E947584"
+        }
+      },
+      {
+        "name": "release",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "/Users/yangrui/.ohos/config/release_FocusVow_ptQ9kV3MHlPeBJGeOKjsxPLdb20PRM_p545h164cl_s=.p12",
+          "storePassword": "0000001ABD23FB01AF39C5B99A8C1711D63175FAAF07861CE96C9BADFEB8B213174461ECDDEFB8CDB7B7",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A268FB89C18A711D3CC84AE0325AB589A1496821B08E5650872F0CB9D3563E8A6B50C64374CA5",
+          "signAlg": "SHA256withECDSA",
+          "profile": "/Users/yangrui/.ohos/config/release-profileRelease.p7b",
+          "certpath": "/Users/yangrui/.ohos/config/release.cer"
         }
       }
     ],
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
+        "signingConfig": "debug",
         "targetSdkVersion": "6.1.0(23)",
         "compatibleSdkVersion": "6.0.2(22)",
         "runtimeOS": "HarmonyOS",
@@ -32,10 +45,21 @@
     ],
     "buildModeSet": [
       {
-        "name": "debug",
+        "name": "debug"
       },
       {
         "name": "release"
+      }
+    ],
+    "capabilities": [
+      {
+        "bundleName": "com.freeshore.focusvow",
+        "config": [
+          {
+            "name": "Push Kit",
+            "capability": "com.huawei.service.push.base_service"
+          }
+        ]
       }
     ]
   },

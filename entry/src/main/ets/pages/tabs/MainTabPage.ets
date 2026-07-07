@@ -18,7 +18,7 @@ import { UserStore } from '../../stores/UserStore';
 import { InAppMessageBanner } from '../../components/common/InAppMessageBanner';
 import { MainTabImmersiveLayout } from './MainTabImmersiveLayout';
 import { MainTabLegacyLayout } from './MainTabLegacyLayout';
-import { supportsImmersiveTab } from './MainTabUtil';
+import { shouldHideMainTabBar, supportsImmersiveTab } from './MainTabUtil';
 
 bootstrapStores();
 
@@ -28,7 +28,8 @@ struct MainTabPage {
   @State currentTab: MainTabKey = 'focus';
   @State private bottomGestureInsetVp: number = 0;
   @State private useImmersiveTab: boolean = false;
-  @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
+  @StorageLink(StoreKeys.LockActiveState) @Watch('onActiveLockChanged') activeLock: ActiveLockState =
+    createIdleLockState();
   @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
   @StorageLink(StoreKeys.MainTabTarget) @Watch('onMainTabTargetChanged') pendingTab: string = '';
 
@@ -137,7 +138,7 @@ struct MainTabPage {
     const ok = await endQuickFocus(
       hostContext,
       lockSnapshot,
-      '契约已履行，恭喜上岸',
+      '契约已履行',
       '专注已结束，但解除限制失败'
     );
     if (ok) {
@@ -148,7 +149,16 @@ struct MainTabPage {
   }
 
   private handleTabChange(tab: MainTabKey): void {
+    if (shouldHideMainTabBar(this.activeLock) && tab !== 'focus') {
+      return;
+    }
     this.currentTab = tab;
+  }
+
+  private onActiveLockChanged(): void {
+    if (shouldHideMainTabBar(this.activeLock) && this.currentTab !== 'focus') {
+      this.currentTab = 'focus';
+    }
   }
 
   build() {
@@ -157,6 +167,7 @@ struct MainTabPage {
         MainTabImmersiveLayout({
           currentTab: this.currentTab,
           bottomGestureInsetVp: this.bottomGestureInsetVp,
+          hideTabBar: shouldHideMainTabBar(this.activeLock),
           onTabChange: (tab: MainTabKey) => {
             this.handleTabChange(tab);
           }
@@ -165,6 +176,7 @@ struct MainTabPage {
         MainTabLegacyLayout({
           currentTab: this.currentTab,
           bottomGestureInsetVp: this.bottomGestureInsetVp,
+          hideTabBar: shouldHideMainTabBar(this.activeLock),
           onTabChange: (tab: MainTabKey) => {
             this.handleTabChange(tab);
           }

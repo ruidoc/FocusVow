@@ -137,10 +137,29 @@ export function isTimedLockFinished(state: ActiveLockState, nowAt: number): bool
   return state.endAt > 0 && getRemainingSeconds(state, nowAt) === 0;
 }
 
+export function minutesToHours(minutes: number): string {
+  const safeMinutes = Math.max(0, Math.floor(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+
+  if (hours === 0) {
+    return `${remainingMinutes} 分钟`;
+  }
+  if (remainingMinutes === 0) {
+    return `${hours} 小时`;
+  }
+  return `${hours} 小时 ${remainingMinutes} 分`;
+}
+
 export function formatRemainingSeconds(totalSeconds: number): string {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const minutes = Math.floor(safeSeconds / 60);
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
   const seconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
 
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }

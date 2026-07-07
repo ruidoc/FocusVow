@@ -5,12 +5,28 @@
       "copyCodeResource": {
         "enable": false
       }
+    },
+    "arkOptions": {
+      "buildProfileFields": {
+        "API_BASE_URL": "https://focus.freeshore.cn/dev-api"
+      }
     }
   },
   "buildOptionSet": [
     {
+      "name": "debug",
+      "arkOptions": {
+        "buildProfileFields": {
+          "API_BASE_URL": "https://focus.freeshore.cn/dev-api"
+        }
+      }
+    },
+    {
       "name": "release",
       "arkOptions": {
+        "buildProfileFields": {
+          "API_BASE_URL": "https://focus.freeshore.cn/api"
+        },
         "obfuscation": {
           "ruleOptions": {
             "enable": false,

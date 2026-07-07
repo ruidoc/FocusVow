@@ -10,6 +10,7 @@ import { StatsPage } from './StatsPage';
 export struct MainTabLegacyLayout {
   @Prop currentTab: MainTabKey = 'focus';
   @Prop bottomGestureInsetVp: number = 0;
+  @Prop hideTabBar: boolean = false;
   onTabChange?: (tab: MainTabKey) => void;
 
   @Builder
@@ -83,6 +84,7 @@ export struct MainTabLegacyLayout {
       .padding({ left: 12, right: 12, top: 8, bottom: 8 + this.bottomGestureInsetVp })
       .backgroundColor(AppTheme.colors.backgroundSoft)
       .border({ width: 1, color: AppTheme.colors.border })
+      .visibility(this.hideTabBar ? Visibility.None : Visibility.Visible)
     }
     .width('100%')
     .height('100%')

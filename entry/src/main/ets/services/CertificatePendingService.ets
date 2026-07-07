@@ -86,7 +86,7 @@ function buildShameDialogMessage(data: ShameCertificateData): string {
     return `「${data.contractTitle}」因 ${data.counterpartName} 退出而中止，${data.cardTitle}已生成。可保存到相册。`;
   }
   if (data.shameVariant === 'violator' && data.counterpartName.length > 0) {
-    return `「${data.contractTitle}」本次未守完全程，连带影响了 ${data.counterpartName}。${data.cardTitle}已生成。`;
+    return `「${data.contractTitle}」本次未守完全程，因连坐规则影响了 ${data.counterpartName}。${data.cardTitle}已生成。`;
   }
   return `「${data.contractTitle}」本次未守完全程，${data.cardTitle}已生成。可保存到相册。`;
 }
@@ -108,7 +108,7 @@ export function tryPresentCertificateGuide(uiContext: UIContext): void {
     const data = buildHonorCertificateFromLock(pending.lock, user, pending.endedAt);
     const isDuo = data.partnerName.length > 0;
     uiContext.showAlertDialog({
-      title: isDuo ? '双人契约达成' : '恭喜上岸',
+      title: isDuo ? '双人契约达成' : '契约履行完成',
       message: buildHonorDialogMessage(data),
       autoCancel: false,
       primaryButton: {
@@ -137,14 +137,14 @@ export function tryPresentCertificateGuide(uiContext: UIContext): void {
     pending.failedReason
   );
   const dialogTitle = data.shameVariant === 'victim'
-    ? '契约被炸 · 无罪释放'
+    ? '连坐中止 · 耻辱证已生成'
     : '违约耻辱证已生成';
   uiContext.showAlertDialog({
     title: dialogTitle,
     message: buildShameDialogMessage(data),
     autoCancel: false,
     primaryButton: {
-      value: data.shameVariant === 'victim' ? '查看被炸证' : '查看耻辱证',
+      value: '查看耻辱证',
       fontColor: AppTheme.colors.danger,
       action: () => {
         clearPendingCertificate();

@@ -284,8 +284,12 @@ struct QuickStartPage {
       TextInput({ text: this.title, placeholder: '今天要完成什么？' })
         .width('100%')
         .height(44)
+        .enterKeyType(EnterKeyType.Done)
         .onChange((value: string) => {
           this.title = value;
+        })
+        .onSubmit(() => {
+          focusControl.requestFocus('');
         })
 
       this.buildAppCard()

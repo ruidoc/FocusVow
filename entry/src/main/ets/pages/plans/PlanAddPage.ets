@@ -346,8 +346,12 @@ struct PlanAddPage {
         .border({ width: 1, color: AppTheme.colors.border })
         .borderRadius(12)
         .padding({ left: 14, right: 14 })
+        .enterKeyType(EnterKeyType.Done)
         .onChange((value: string) => {
           this.planName = value;
+        })
+        .onSubmit(() => {
+          focusControl.requestFocus('');
         })
     }
     .width('100%')

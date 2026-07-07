@@ -1,7 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { pasteboard } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
-import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
+import { copyDuoInviteText, shareDuoInviteText } from '../../services/DuoInviteShareService';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView, isDuoWaitPartnerJoined, resolveDuoCounterpartName } from '../../models/DuoModel';
@@ -23,7 +22,7 @@ struct DuoWaitPage {
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @State session: DuoSessionView | null = null;
   @State inviteText: string = '';
-  @State remainSeconds: number = 300;
+  @State remainSeconds: number = 600;
   @State isStarting: boolean = false;
   @State partnerReady: boolean = false;
 
@@ -232,11 +231,15 @@ struct DuoWaitPage {
     if (this.inviteText.length === 0) {
       return;
     }
-    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.inviteText);
-    const systemPasteboard = pasteboard.getSystemPasteboard();
-    await systemPasteboard.setData(pasteData);
-    DuoInviteClipboardService.dismissToken(extractDuoInviteToken(this.inviteText));
-    showToast('口令已复制，请发给搭子', this.getUIContext());
+    await copyDuoInviteText(this.getUIContext(), this.inviteText);
+  }
+
+  private async shareInvite(): Promise<void> {
+    if (this.inviteText.length === 0) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    await shareDuoInviteText(hostContext, this.getUIContext(), this.inviteText);
   }
 
   private async cancelInvite(): Promise<void> {
@@ -396,17 +399,32 @@ struct DuoWaitPage {
       this.buildInviteCard()
 
       if (!this.partnerReady) {
-        Button('复制口令')
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Capsule)
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .backgroundColor(AppTheme.colors.primary)
-          .fontColor('#FFFFFF')
-          .onClick(() => {
-            void this.copyInvite();
-          })
+        Row({ space: 12 }) {
+          Button('发给搭子')
+            .layoutWeight(2)
+            .height(52)
+            .type(ButtonType.Capsule)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .backgroundColor(AppTheme.colors.primary)
+            .fontColor('#FFFFFF')
+            .onClick(() => {
+              void this.shareInvite();
+            })
+
+          Button('复制口令')
+            .layoutWeight(1)
+            .height(52)
+            .type(ButtonType.Capsule)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .backgroundColor(AppTheme.colors.primarySoft)
+            .fontColor(AppTheme.colors.primary)
+            .onClick(() => {
+              void this.copyInvite();
+            })
+        }
+        .width('100%')
       } else {
         Button('返回计划')
           .width('100%')

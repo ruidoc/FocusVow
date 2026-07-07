@@ -17,7 +17,7 @@ export struct HonorRecordListSection {
   build() {
     if (this.items.length === 0) {
       Column({ space: 8 }) {
-        Text('当前周期还没有上岸记录。')
+        Text('当前周期还没有荣誉记录。')
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
         Text('先完成一局专注，这里会完整记录你的履约战绩。')
