@@ -20,7 +20,7 @@ export struct PlanListContent {
 
   private listScroller: Scroller = new Scroller();
   @StorageLink(StoreKeys.ScheduledListDirty) @Watch('onListDirtyChanged') listDirty: boolean = true;
-  @State allSessions: DuoSessionView[] = [];
+  @StorageLink(StoreKeys.ScheduledListAll) @Watch('onAllSessionsChanged') allSessions: DuoSessionView[] = [];
   @State activeFilter: ScheduledListFilter = 'all';
   @State displaySessions: DuoSessionView[] = [];
   @State statusMessage: string = '';
@@ -29,7 +29,6 @@ export struct PlanListContent {
 
   aboutToAppear(): void {
     ScheduledListStore.hydrate();
-    this.allSessions = ScheduledListStore.getAllSessions();
     this.syncFilterFromStore();
     this.refreshDisplaySessions();
     this.onScrollerReady?.(this.listScroller);
@@ -49,15 +48,18 @@ export struct PlanListContent {
 
   private onIsPageActiveChanged(): void {
     if (this.isPageActive) {
-      this.allSessions = ScheduledListStore.getAllSessions();
       this.syncFilterFromStore();
       this.refreshDisplaySessions();
       void this.syncOnVisible();
     }
   }
 
+  private onAllSessionsChanged(): void {
+    this.refreshDisplaySessions();
+  }
+
   private onListDirtyChanged(): void {
-    if (!this.listDirty || !this.isPageActive) {
+    if (!this.listDirty) {
       return;
     }
     void this.loadAll(false);
@@ -100,7 +102,6 @@ export struct PlanListContent {
     this.statusMessage = '';
     const response = await DuoApiService.getScheduledList();
     const list = DuoApiService.parseScheduledList(response);
-    this.allSessions = list.items;
     ScheduledListStore.setAllSessions(list.items);
     this.refreshDisplaySessions();
 
@@ -246,7 +247,8 @@ export struct PlanListContent {
               }
             })
           }
-        }, (session: DuoSessionView) => `${this.activeFilter}_${session.session_id}`)
+        }, (session: DuoSessionView) =>
+          `${this.activeFilter}_${session.session_id}_${session.title}_${session.schedule_start}_${session.schedule_end}`)
       }
       .width('100%')
       .height('100%')

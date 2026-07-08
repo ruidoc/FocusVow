@@ -15,13 +15,20 @@ struct LoginPage {
   @State email: string = '';
   @State password: string = '';
   @State loading: boolean = false;
+  @State agreedToTerms: boolean = false;
 
   private isFormValid(): boolean {
-    return EMAIL_PATTERN.test(this.email.trim()) && this.password.length >= 6;
+    return EMAIL_PATTERN.test(this.email.trim()) &&
+      this.password.length >= 6 &&
+      this.agreedToTerms;
   }
 
   private async submitLogin(): Promise<void> {
-    if (!this.isFormValid()) {
+    if (!this.agreedToTerms) {
+      showToast('请先阅读并同意《隐私政策》和《用户协议》', this.getUIContext());
+      return;
+    }
+    if (!EMAIL_PATTERN.test(this.email.trim()) || this.password.length < 6) {
       showToast('请输入有效邮箱和至少 6 位密码', this.getUIContext());
       return;
     }
@@ -105,7 +112,12 @@ struct LoginPage {
         }
       })
 
-      AgreementConsentRow()
+      AgreementConsentRow({
+        agreed: this.agreedToTerms,
+        onAgreedChange: (agreed: boolean) => {
+          this.agreedToTerms = agreed;
+        }
+      })
 
       Button('还没有账号？去注册')
         .type(ButtonType.Normal)

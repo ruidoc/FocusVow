@@ -1,3 +1,4 @@
+import { formatStatsDateTimeLabel as formatStatsDateTimeLabelFromUtil } from '../common/DateTimeFormatUtil';
 import {
   DuoShameDay,
   DuoShameRecord,
@@ -43,18 +44,7 @@ export function getStatsDetailPageTitle(period: StatsPeriod, section: StatsDetai
 }
 
 export function formatStatsDateTimeLabel(raw: string, fallbackDate: string): string {
-  if (raw.length === 0) {
-    return fallbackDate;
-  }
-  const normalized = raw.replace('T', ' ');
-  const parts = normalized.split(' ');
-  const datePart = parts.length > 0 ? parts[0] : fallbackDate;
-  if (parts.length < 2) {
-    return datePart;
-  }
-  const timePart = parts[1];
-  const trimmedTime = timePart.length >= 5 ? timePart.substring(0, 5) : timePart;
-  return `${datePart} ${trimmedTime}`;
+  return formatStatsDateTimeLabelFromUtil(raw, fallbackDate);
 }
 
 export function getParticipationModeTag(participationMode: string): string {

@@ -14,7 +14,15 @@
     "pages": "$profile:main_pages",
     "requestPermissions": [
       {
-        "name": "ohos.permission.MANAGE_SCREEN_TIME_GUARD"
+        "name": "ohos.permission.MANAGE_SCREEN_TIME_GUARD",
+        "reason": "$string:permission_screen_time_guard_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility",
+            "TimeGuardExtAbility"
+          ],
+          "when": "inuse"
+        }
       },
       {
         "name": "ohos.permission.INTERNET"

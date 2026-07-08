@@ -1,3 +1,4 @@
+import { formatChineseDateTime } from '../common/DateTimeFormatUtil';
 import {
   CERTIFICATE_AD_SLOGAN,
   CERTIFICATE_FOOTER_BRAND,
@@ -65,32 +66,6 @@ function buildShameRecordFromLock(
       ? { id: '', nickname: lock.partnerNickname }
       : null
   };
-}
-
-function formatChineseDate(raw: string, fallbackDate: string): string {
-  const source = raw.length > 0 ? raw : fallbackDate;
-  const normalized = source.replace('T', ' ');
-  const datePart = normalized.split(' ')[0];
-  const segments = datePart.split('-');
-  if (segments.length < 3) {
-    return datePart;
-  }
-  const month = segments[1].padStart(2, '0');
-  const day = segments[2].padStart(2, '0');
-  return `${segments[0]}年${month}月${day}日`;
-}
-
-function formatChineseDateTime(raw: string, fallbackDate: string): string {
-  const source = raw.length > 0 ? raw : fallbackDate;
-  const normalized = source.replace('T', ' ');
-  const parts = normalized.split(' ');
-  const dateLabel = formatChineseDate(parts[0], fallbackDate);
-  if (parts.length < 2) {
-    return dateLabel;
-  }
-  const timePart = parts[1];
-  const trimmedTime = timePart.length >= 5 ? timePart.substring(0, 5) : timePart;
-  return `${dateLabel} ${trimmedTime}`;
 }
 
 function getDisplayName(user: UserInfo): string {

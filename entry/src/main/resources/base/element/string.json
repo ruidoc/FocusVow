@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "专注契约"
+    },
+    {
+      "name": "permission_screen_time_guard_reason",
+      "value": "用于专注契约功能，在用户开启专注时对自选应用限时限制，结束后自动解除。"
     }
   ]
 }

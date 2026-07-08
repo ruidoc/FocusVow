@@ -1,5 +1,4 @@
 import { common } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
 import { copyDuoInviteText, shareDuoInviteText } from '../../services/DuoInviteShareService';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { AppActionButton } from '../../components/common/AppActionButton';
@@ -46,7 +45,6 @@ struct PlanDetailPage {
   @State isEditing: boolean = false;
   @State isSaving: boolean = false;
   @State statusMessage: string = '';
-  @State topSafeInsetVp: number = 0;
 
   @State planName: string = '';
   @State startTime: string = '09:00';
@@ -64,14 +62,6 @@ struct PlanDetailPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     UserStore.hydrate(hostContext);
-    const ui = this.getUIContext();
-    window.getLastWindow(hostContext, (err, win) => {
-      if (err.code) {
-        return;
-      }
-      const systemAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
-      this.topSafeInsetVp = ui.px2vp(systemAvoid.topRect.height);
-    });
     this.sessionId = AppStorage.get<string>(StoreKeys.ScheduledSessionCurrentId) ?? '';
     if (this.sessionId.length === 0 || !UserStore.isLoggedIn()) {
       navigateToMainTab('plans');
@@ -407,7 +397,15 @@ struct PlanDetailPage {
     this.fillFormFromSession(nextSession);
     this.isEditing = false;
     this.isSaving = false;
-    ScheduledListStore.markDirty();
+    ScheduledListStore.patchSession(nextSession);
+    const listResponse = await DuoApiService.getScheduledList();
+    const list = DuoApiService.parseScheduledList(listResponse);
+    if (listResponse.statusCode === 200) {
+      ScheduledListStore.setAllSessions(list.items);
+      ScheduledListStore.clearDirty();
+    } else {
+      ScheduledListStore.markDirty();
+    }
     if (guardResult.ok) {
       showToast('已保存', this.getUIContext());
     } else {
@@ -605,23 +603,6 @@ struct PlanDetailPage {
       .borderRadius(AppTheme.radius.lg)
       .alignItems(HorizontalAlign.Start)
     }
-  }
-
-  @Builder
-  private buildEditActionButton(): void {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph($r('sys.symbol.square_and_pencil'))
-        .fontSize(18)
-        .fontColor([AppTheme.colors.primary])
-    }
-    .width(40)
-    .height(40)
-    .backgroundColor(AppTheme.colors.primarySoft)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .margin({ top: this.topSafeInsetVp + 8, right: 12 })
-    .onClick(() => {
-      this.enterEditMode();
-    })
   }
 
   @Builder
@@ -948,7 +929,12 @@ struct PlanDetailPage {
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: this.getBottomSpacerHeight(),
-        showAction: false,
+        showAction: this.shouldShowEditAction(),
+        actionLabel: '编辑',
+        actionIcon: $r('sys.symbol.square_and_pencil'),
+        onAction: () => {
+          this.enterEditMode();
+        },
         onBack: () => {
           if (this.isEditing) {
             this.cancelEditMode();
@@ -960,15 +946,6 @@ struct PlanDetailPage {
           this.buildBody();
         }
       })
-
-      if (this.shouldShowEditAction()) {
-        Stack({ alignContent: Alignment.TopEnd }) {
-          this.buildEditActionButton()
-        }
-        .width('100%')
-        .height('100%')
-        .hitTestBehavior(HitTestMode.Transparent)
-      }
 
       if (this.shouldShowDestructiveFooter()) {
         Stack({ alignContent: Alignment.Bottom }) {

@@ -47,7 +47,7 @@ export struct TraitorShameCertificateCard {
       })
 
       Column({ space: 4 }) {
-        Text(`实际 ${this.data.actualMinutes} / 计划 ${this.data.totalMinutes} 分钟`)
+        Text(`实际 ${this.data.actualMinutes} 分钟 / 计划 ${this.data.totalMinutes} 分钟`)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor('#F2D0D0')

@@ -14,6 +14,9 @@ bootstrapStores();
 /** 娱乐限额入口暂时隐藏，恢复时改为 true */
 const SHOW_CYCLE_GUARD_MENU: boolean = false;
 
+/** 顶部「消息」入口暂时隐藏，恢复时改为 true */
+const SHOW_MESSAGE_ACTION: boolean = false;
+
 @Component
 export struct ProfilePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
@@ -198,7 +201,7 @@ export struct ProfilePage {
   build() {
     SystemNavPage({
       title: '我的',
-      showAction: true,
+      showAction: SHOW_MESSAGE_ACTION,
       actionLabel: '消息',
       actionIcon: $r('sys.symbol.bell'),
       horizontalPadding: 14,
