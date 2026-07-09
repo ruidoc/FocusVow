@@ -130,6 +130,8 @@ export interface DuoPushPayload {
   violator_name?: string;
   message?: string;
   duration_min?: string;
+  active_at?: string;
+  end_at?: string;
 }
 
 export interface PushDispatchOptions {

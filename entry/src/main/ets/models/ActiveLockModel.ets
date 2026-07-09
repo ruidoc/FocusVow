@@ -10,6 +10,10 @@ export interface QuickFocusOptions {
   recordId?: string;
   participationMode?: QuickFocusParticipationMode;
   partnerNickname?: string;
+  /** 服务端权威开始时刻（ms）；搭子互督应对齐 active_at */
+  startedAtMs?: number;
+  /** 服务端权威结束时刻（ms）；搭子互督应对齐 end_at */
+  endAtMs?: number;
 }
 
 export const CYCLE_GUARD_STRATEGY_NAME: string = 'cycle_quota_strategy';
@@ -173,9 +177,16 @@ export function createQuickFocusLockState(
   duoSessionId: string = '',
   recordId: string = '',
   participationMode: 'solo' | 'duo' | '' = '',
-  partnerNickname: string = ''
+  partnerNickname: string = '',
+  startedAtMs?: number,
+  endAtMs?: number
 ): ActiveLockState {
   const safeDuration = durationMinutes > 0 ? durationMinutes : 25;
+  const hasServerEnd = endAtMs !== undefined && endAtMs > 0;
+  const endAt = hasServerEnd ? endAtMs : nowAt + safeDuration * 60 * 1000;
+  const startedAt = startedAtMs !== undefined && startedAtMs > 0
+    ? startedAtMs
+    : (hasServerEnd ? endAt - safeDuration * 60 * 1000 : nowAt);
 
   return {
     kind: 'quick_focus',
@@ -185,8 +196,8 @@ export function createQuickFocusLockState(
     selectedTokens: [...selectedTokens],
     selectedCount: selectedTokens.length,
     mode,
-    startedAt: nowAt,
-    endAt: nowAt + safeDuration * 60 * 1000,
+    startedAt,
+    endAt,
     updatedAt: nowAt,
     duoSessionId,
     recordId,

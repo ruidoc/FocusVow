@@ -145,7 +145,9 @@ export class LockStore {
       options?.duoSessionId ?? '',
       options?.recordId ?? '',
       options?.participationMode ?? '',
-      options?.partnerNickname ?? ''
+      options?.partnerNickname ?? '',
+      options?.startedAtMs,
+      options?.endAtMs
     );
     LockStore.setState(context, nextState);
     LockStore.setQuickFocusDurationMinutes(context, durationMinutes);

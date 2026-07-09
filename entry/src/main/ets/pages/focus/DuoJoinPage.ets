@@ -3,20 +3,21 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { DuoSessionView, resolveDuoCounterpartName } from '../../models/DuoModel';
-import { QuickFocusOptions } from '../../models/ActiveLockModel';
-import { PageRoutes, backRoute, pushRoute, navigateToMainTab, returnToMainTab } from '../../router/PageRoutes';
+import { DuoSessionView } from '../../models/DuoModel';
+import { PageRoutes, backRoute, pushRoute, navigateToMainTab } from '../../router/PageRoutes';
 import {
-  applyScreenRestriction,
   chooseRestrictedApps,
   ensureScreenTimeAuthorization,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
+import {
+  DuoInstantLockOptions,
+  startOrAlignInstantDuoFocus
+} from '../../services/DuoInstantLockService';
 import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
-import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -177,7 +178,17 @@ struct DuoJoinPage {
       return;
     }
 
-    const lockResult = await applyScreenRestriction(this.selectedTokens, 'allow');
+    const lockOptions: DuoInstantLockOptions = {
+      navigateHome: true,
+      clearWait: false,
+      alignToServerEnd: false
+    };
+    const lockResult = await startOrAlignInstantDuoFocus(
+      hostContext,
+      session,
+      this.selectedTokens,
+      lockOptions
+    );
     if (!lockResult.ok) {
       SettingsStore.updateStatusMessage(hostContext, '已加入互督，但本机限制未成功开启，请返回首页重试');
       this.toastError('已加入互督，但本机限制未成功开启，请返回首页重试');
@@ -185,18 +196,9 @@ struct DuoJoinPage {
       return;
     }
 
-    const focusOptions: QuickFocusOptions = {
-      title: session.title,
-      duoSessionId: session.session_id,
-      recordId: session.record_id || session.my_record_id || '',
-      participationMode: 'duo',
-      partnerNickname: resolveDuoCounterpartName(session)
-    };
-    LockStore.startQuickFocus(hostContext, this.selectedTokens, session.duration_min, 'allow', focusOptions);
     DuoInviteClipboardService.dismissToken(token);
     void DuoInviteClipboardService.clearInviteClipboard();
     this.isSubmitting = false;
-    returnToMainTab('focus');
   }
 
   @Builder
@@ -327,7 +329,14 @@ struct DuoJoinPage {
       this.buildPreviewCard()
       this.buildAppCard()
 
-      Button('确认加入并开始')
+      if (this.preview !== null && this.preview.type !== 'scheduled') {
+        Text('建议确认发起人已打开 App 后再加入，以便同时开始。')
+          .fontSize(13)
+          .fontColor(AppTheme.colors.warning)
+          .width('100%')
+      }
+
+      Button(this.preview?.type === 'scheduled' ? '确认加入' : '确认加入并开始')
         .width('100%')
         .height(52)
         .type(ButtonType.Capsule)

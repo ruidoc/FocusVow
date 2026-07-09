@@ -1,12 +1,15 @@
 import { common } from '@kit.AbilityKit';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { ActiveLockState, isLocked, QuickFocusOptions, resolveDuoSessionIdFromLock, withLockPartnerNickname } from '../models/ActiveLockModel';
-import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody, resolveDuoCounterpartName } from '../models/DuoModel';
-import { returnToMainTab } from '../router/PageRoutes';
+import { ActiveLockState, isLocked, resolveDuoSessionIdFromLock, withLockPartnerNickname } from '../models/ActiveLockModel';
+import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody } from '../models/DuoModel';
 import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
-import { applyScreenRestriction, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
+import { releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { DuoApiService } from './DuoApiService';
 import { clearDuoWaitContext } from './DuoWaitContextService';
+import {
+  DuoInstantLockOptions,
+  startOrAlignInstantDuoFocus
+} from './DuoInstantLockService';
 import { InAppMessageService } from './InAppMessageService';
 import {
   clearScheduledActivationTracking,
@@ -154,6 +157,70 @@ export class DuoPushHandler {
     await DuoPushHandler.handleDuoBreach(context, breachPayload, options);
   }
 
+  /**
+   * 回前台 / 冷启动：补齐「该锁未锁」与「已锁但 endAt 漂移」。
+   * - 有本地 duo 锁：对齐服务端 end_at，或发现 breached 则走撕毁
+   * - 有等待中的即时契约且远端已 active：按剩余时间开锁
+   */
+  static async syncActiveDuoSessionIfNeeded(
+    context: common.UIAbilityContext,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    await DuoPushHandler.syncActiveDuoBreachIfNeeded(context, options);
+
+    LockStore.hydrate(context);
+    const state = DuoPushHandler.resolveActiveLockState(context);
+    const lockedSessionId = resolveDuoSessionIdFromLock(state);
+    if (lockedSessionId.length > 0 && state.kind === 'quick_focus' && state.participationMode === 'duo') {
+      const response = await DuoApiService.getSession(lockedSessionId);
+      const session = DuoApiService.parseSession(response);
+      if (session && session.status === 'active' && session.type !== 'scheduled') {
+        SettingsStore.hydrate(context);
+        const alignOptions: DuoInstantLockOptions = {
+          navigateHome: false,
+          clearWait: true,
+          alignToServerEnd: true
+        };
+        await startOrAlignInstantDuoFocus(context, session, state.selectedTokens, alignOptions);
+      }
+      return;
+    }
+
+    if (LockStore.isLocked()) {
+      return;
+    }
+
+    const waitSessionId = AppStorage.get<string>(StoreKeys.DuoWaitSessionId) ?? '';
+    const waitIsScheduled = AppStorage.get<boolean>(StoreKeys.DuoWaitIsScheduled) === true;
+    if (waitSessionId.length === 0 || waitIsScheduled) {
+      return;
+    }
+
+    const response = await DuoApiService.getSession(waitSessionId);
+    const session = DuoApiService.parseSession(response);
+    if (!session) {
+      return;
+    }
+    if (session.status === 'expired' || session.status === 'cancelled' || session.status === 'breached') {
+      clearDuoWaitContext();
+      return;
+    }
+    if (session.status !== 'active' || session.type === 'scheduled') {
+      return;
+    }
+
+    SettingsStore.hydrate(context);
+    const tokens = SettingsStore.getState().selectedTokens;
+    const title = String(AppStorage.get<string>(StoreKeys.DuoWaitTitle) ?? session.title);
+    const catchUpOptions: DuoInstantLockOptions = {
+      title,
+      navigateHome: options?.isForeground === true,
+      clearWait: true,
+      alignToServerEnd: true
+    };
+    await startOrAlignInstantDuoFocus(context, session, tokens, catchUpOptions);
+  }
+
   private static persistPendingBreach(context: common.Context, payload: DuoPushPayload): void {
     writeStoredString(context, PENDING_BREACH_KEY, JSON.stringify(payload));
   }
@@ -237,6 +304,14 @@ export class DuoPushHandler {
     const durationMin = record['duration_min'];
     if (durationMin && durationMin.length > 0) {
       payload.duration_min = durationMin;
+    }
+    const activeAt = record['active_at'];
+    if (activeAt && activeAt.length > 0) {
+      payload.active_at = activeAt;
+    }
+    const endAt = record['end_at'];
+    if (endAt && endAt.length > 0) {
+      payload.end_at = endAt;
     }
     return payload;
   }
@@ -365,34 +440,14 @@ export class DuoPushHandler {
       return;
     }
 
-    LockStore.hydrate(context);
-    if (LockStore.isLocked()) {
-      return;
-    }
-
     SettingsStore.hydrate(context);
     const tokens = SettingsStore.getState().selectedTokens;
-    if (tokens.length === 0) {
-      return;
-    }
-
-    const durationMin = payload.duration_min
-      ? Number(payload.duration_min)
-      : session.duration_min;
-    const lockResult = await applyScreenRestriction(tokens, 'allow');
-    if (!lockResult.ok) {
-      return;
-    }
-
-    const focusOptions: QuickFocusOptions = {
-      title: session.title,
-      duoSessionId: session.session_id,
-      recordId: session.my_record_id || session.record_id || '',
-      participationMode: 'duo',
-      partnerNickname: resolveDuoCounterpartName(session)
+    const startOptions: DuoInstantLockOptions = {
+      navigateHome: true,
+      clearWait: true,
+      alignToServerEnd: true
     };
-    LockStore.startQuickFocus(context, tokens, durationMin, 'allow', focusOptions);
-    returnToMainTab('focus');
+    await startOrAlignInstantDuoFocus(context, session, tokens, startOptions);
   }
 
   private static async handleDuoBreach(

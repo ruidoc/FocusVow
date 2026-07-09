@@ -30,6 +30,10 @@ import {
   tryPresentCertificateGuide,
 } from "../../services/CertificatePendingService";
 import { clearDuoWaitContext, openDuoWaitPage } from "../../services/DuoWaitContextService";
+import {
+  DuoInstantLockOptions,
+  startOrAlignInstantDuoFocus,
+} from "../../services/DuoInstantLockService";
 import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
 import { SettingsStore } from "../../stores/SettingsStore";
@@ -133,8 +137,24 @@ export struct FocusHomePage {
       return;
     }
 
-    if (session.status === "expired" || session.status === "cancelled") {
+    if (session.status === "expired" || session.status === "cancelled" || session.status === "breached") {
       clearDuoWaitContext();
+      return;
+    }
+
+    // 即时契约已激活：首页直接按服务端 end_at 补锁，不再只清等待态
+    if (!this.duoWaitIsScheduled && session.status === "active" && session.type !== "scheduled") {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      SettingsStore.hydrate(hostContext);
+      const tokens = SettingsStore.getState().selectedTokens;
+      const title = this.duoWaitTitle.length > 0 ? this.duoWaitTitle : session.title;
+      const lockOptions: DuoInstantLockOptions = {
+        title,
+        navigateHome: false,
+        clearWait: true,
+        alignToServerEnd: true,
+      };
+      await startOrAlignInstantDuoFocus(hostContext, session, tokens, lockOptions);
       return;
     }
 
@@ -564,7 +584,7 @@ export struct FocusHomePage {
         },
       })
       Column({ space: 10 }) {
-        Text("搭子互督：双人专注，一人毁约，两人连坐")
+        Text("搭子互督：一人毁约，两人连坐")
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)

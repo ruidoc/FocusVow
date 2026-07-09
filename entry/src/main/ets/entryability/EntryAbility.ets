@@ -113,7 +113,7 @@ export default class EntryAbility extends UIAbility {
     if (context) {
       void FocusSyncService.flushPending(context);
       void DuoPushHandler.processPendingBreach(this.context).then(() => {
-        return DuoPushHandler.syncActiveDuoBreachIfNeeded(this.context, { isForeground: true });
+        return DuoPushHandler.syncActiveDuoSessionIfNeeded(this.context, { isForeground: true });
       });
     }
   }

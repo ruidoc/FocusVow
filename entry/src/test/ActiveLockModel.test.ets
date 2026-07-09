@@ -16,7 +16,30 @@ export default function activeLockModelTest() {
       expect(lock.selectedCount).assertEqual(2);
       expect(lock.startedAt).assertEqual(startAt);
       expect(lock.endAt).assertEqual(startAt + 25 * 60 * 1000);
-      expect(lock.title).assertEqual('快速专注');
+      expect(lock.title).assertEqual('单人专注');
+    });
+
+    it('aligns quick focus lock to server end_at', 0, () => {
+      const nowAt = 1_700_000_000_000;
+      const serverStart = nowAt - 60_000;
+      const serverEnd = nowAt + 9 * 60 * 1000;
+      const lock = createQuickFocusLockState(
+        ['token-a'],
+        10,
+        'allow',
+        nowAt,
+        '搭子互督',
+        'session-1',
+        'record-1',
+        'duo',
+        '搭子',
+        serverStart,
+        serverEnd
+      );
+
+      expect(lock.startedAt).assertEqual(serverStart);
+      expect(lock.endAt).assertEqual(serverEnd);
+      expect(getRemainingSeconds(lock, nowAt)).assertEqual(9 * 60);
     });
 
     it('calculates remaining seconds and finish state', 0, () => {
