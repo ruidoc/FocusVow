@@ -12,6 +12,7 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
+    "easyGo": "$profile:easy_go",
     "requestPermissions": [
       {
         "name": "ohos.permission.MANAGE_SCREEN_TIME_GUARD",

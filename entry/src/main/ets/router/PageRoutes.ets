@@ -73,12 +73,25 @@ export function backRoute(): void {
 }
 
 /** 已在主 Tab 内时，仅切换底部 Tab（如「我的」页内入口） */
-export function openMainTab(tab: MainTabKey = 'plans'): void {
+export function openMainTab(tab: MainTabKey = 'focus'): void {
   AppStorage.setOrCreate(StoreKeys.MainTabTarget, tab);
+}
+
+/**
+ * 从二级页回到主 Tab，避免 replace 再叠一层 MainTabPage。
+ * 栈里已有主页时用 back 回到该实例；否则 replace 兜底。
+ */
+export function returnToMainTab(tab: MainTabKey = 'focus'): void {
+  openMainTab(tab);
+  const stackLength = Number(router.getLength());
+  if (stackLength > 1) {
+    router.back({ url: PageRoutes.FocusHome });
+    return;
+  }
+  replaceRoute(PageRoutes.FocusHome);
 }
 
 /** 从二级页返回主 Tab，并打开指定 Tab */
 export function navigateToMainTab(tab: MainTabKey = 'plans'): void {
-  openMainTab(tab);
-  replaceRoute(PageRoutes.FocusHome);
+  returnToMainTab(tab);
 }

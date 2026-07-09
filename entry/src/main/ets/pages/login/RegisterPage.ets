@@ -4,7 +4,7 @@ import { AppActionButton } from "../../components/common/AppActionButton";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { showToast } from "../../common/Toast";
 import { AppTheme } from "../../constants/Theme";
-import { backRoute, PageRoutes, replaceRoute } from "../../router/PageRoutes";
+import { backRoute, PageRoutes, replaceRoute, returnToMainTab } from "../../router/PageRoutes";
 import { ExtendApiService } from "../../services/ExtendApiService";
 import { UserStore } from "../../stores/UserStore";
 
@@ -140,7 +140,7 @@ struct RegisterPage {
     }
 
     showToast("注册成功", this.getUIContext());
-    replaceRoute(PageRoutes.FocusHome);
+    returnToMainTab("focus");
   }
 
   @Builder

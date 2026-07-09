@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { AppTheme } from '../../constants/Theme';
+import { AppTheme, resolveContentMaxWidthVp } from '../../constants/Theme';
 import { PageHeader } from './PageHeader';
 
 type PageHeaderMode = 'default' | 'custom' | 'none';
@@ -36,6 +36,9 @@ export struct PageScaffold {
 
   @State private topSafeInsetVp: number = 0;
   @State private bottomSafeInsetVp: number = 0;
+  /** 取窗口短边宽度：竖屏铺满，横屏与竖屏同宽 */
+  @State private contentMaxWidthVp: number = Number.MAX_VALUE;
+  private mainWindow: window.Window | undefined = undefined;
 
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext();
@@ -48,11 +51,32 @@ export struct PageScaffold {
       if (err.code) {
         return;
       }
+      this.mainWindow = win;
       const systemAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       const navIndicatorAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
       this.topSafeInsetVp = ui.px2vp(systemAvoid.topRect.height);
       this.bottomSafeInsetVp = ui.px2vp(navIndicatorAvoid.bottomRect.height);
+      this.syncContentMaxWidth(win);
+      win.on('windowSizeChange', () => {
+        this.syncContentMaxWidth(win);
+      });
     });
+  }
+
+  aboutToDisappear(): void {
+    if (this.mainWindow !== undefined) {
+      this.mainWindow.off('windowSizeChange');
+      this.mainWindow = undefined;
+    }
+  }
+
+  private syncContentMaxWidth(win: window.Window): void {
+    const ui = this.getUIContext();
+    const rect = win.getWindowProperties().windowRect;
+    this.contentMaxWidthVp = resolveContentMaxWidthVp(
+      ui.px2vp(rect.width),
+      ui.px2vp(rect.height)
+    );
   }
 
   private getPaddingTop(): number {
@@ -143,10 +167,33 @@ export struct PageScaffold {
       if (this.scrollPage) {
         Scroll() {
           Column() {
-            this.buildPageBody()
+            Column() {
+              this.buildPageBody()
+            }
+            .width('100%')
+            .constraintSize({ maxWidth: this.contentMaxWidthVp })
+            .padding({
+              left: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
+              right: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
+              top: this.getPaddingTop(),
+              bottom: this.getPaddingBottom()
+            })
           }
           .width('100%')
           .constraintSize({ minHeight: '100%' })
+          .alignItems(HorizontalAlign.Center)
+        }
+        .scrollBar(BarState.Off)
+        .width('100%')
+        .height('100%')
+      } else {
+        Column() {
+          Column() {
+            this.buildPageBody()
+          }
+          .width('100%')
+          .constraintSize({ maxWidth: this.contentMaxWidthVp })
+          .layoutWeight(1)
           .padding({
             left: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
             right: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
@@ -154,21 +201,9 @@ export struct PageScaffold {
             bottom: this.getPaddingBottom()
           })
         }
-        .scrollBar(BarState.Off)
         .width('100%')
         .height('100%')
-      } else {
-        Column() {
-          this.buildPageBody()
-        }
-        .width('100%')
-        .height('100%')
-        .padding({
-          left: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
-          right: this.isFullBleedCustomHeader() ? 0 : this.horizontalPadding,
-          top: this.getPaddingTop(),
-          bottom: this.getPaddingBottom()
-        })
+        .alignItems(HorizontalAlign.Center)
       }
     }
     .width('100%')

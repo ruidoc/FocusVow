@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { ActiveLockState, isLocked, QuickFocusOptions, resolveDuoSessionIdFromLock, withLockPartnerNickname } from '../models/ActiveLockModel';
 import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody, resolveDuoCounterpartName } from '../models/DuoModel';
-import { PageRoutes, replaceRoute } from '../router/PageRoutes';
+import { returnToMainTab } from '../router/PageRoutes';
 import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
 import { applyScreenRestriction, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { DuoApiService } from './DuoApiService';
@@ -392,7 +392,7 @@ export class DuoPushHandler {
       partnerNickname: resolveDuoCounterpartName(session)
     };
     LockStore.startQuickFocus(context, tokens, durationMin, 'allow', focusOptions);
-    replaceRoute(PageRoutes.FocusHome);
+    returnToMainTab('focus');
   }
 
   private static async handleDuoBreach(

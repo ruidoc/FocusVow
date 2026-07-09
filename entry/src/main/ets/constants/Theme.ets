@@ -30,4 +30,14 @@ class ThemeRadius {
 export class AppTheme {
   static readonly colors: ThemeColors = new ThemeColors();
   static readonly radius: ThemeRadius = new ThemeRadius();
+  /**
+   * 契约证书最大宽度（vp）。
+   * 证书底图与文字按手机宽度排版，超出后印章/文案会错位。
+   */
+  static readonly certificateMaxWidth: number = 380;
+}
+
+/** 内容区最大宽度取窗口短边：竖屏铺满，横屏与竖屏同宽 */
+export function resolveContentMaxWidthVp(widthVp: number, heightVp: number): number {
+  return Math.min(widthVp, heightVp);
 }

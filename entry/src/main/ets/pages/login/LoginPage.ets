@@ -4,7 +4,7 @@ import { AgreementConsentRow } from '../../components/common/AgreementConsentRow
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute, PageRoutes, replaceRoute } from '../../router/PageRoutes';
+import { backRoute, PageRoutes, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
 import { UserStore } from '../../stores/UserStore';
 
 const EMAIL_PATTERN: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -48,7 +48,7 @@ struct LoginPage {
     }
 
     showToast('登录成功', this.getUIContext());
-    replaceRoute(PageRoutes.FocusHome);
+    returnToMainTab('focus');
   }
 
   @Builder

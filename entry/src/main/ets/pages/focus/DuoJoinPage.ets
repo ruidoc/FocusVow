@@ -5,7 +5,7 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView, resolveDuoCounterpartName } from '../../models/DuoModel';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
-import { PageRoutes, backRoute, pushRoute, replaceRoute, navigateToMainTab } from '../../router/PageRoutes';
+import { PageRoutes, backRoute, pushRoute, navigateToMainTab, returnToMainTab } from '../../router/PageRoutes';
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
@@ -196,7 +196,7 @@ struct DuoJoinPage {
     DuoInviteClipboardService.dismissToken(token);
     void DuoInviteClipboardService.clearInviteClipboard();
     this.isSubmitting = false;
-    replaceRoute(PageRoutes.FocusHome);
+    returnToMainTab('focus');
   }
 
   @Builder

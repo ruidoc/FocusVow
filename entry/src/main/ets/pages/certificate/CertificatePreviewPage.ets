@@ -130,13 +130,34 @@ struct CertificatePreviewPage {
 
   @Builder
   private buildContent(): void {
-    Column({ space: 18 }) {
-      this.buildCertificate()
+    Column() {
+      Scroll() {
+        Column() {
+          Column() {
+            this.buildCertificate()
+          }
+          .width('100%')
+          .constraintSize({ maxWidth: AppTheme.certificateMaxWidth })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
 
-      this.buildSaveButton()
+      Column() {
+        this.buildSaveButton()
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: AppTheme.certificateMaxWidth })
+      .padding({ top: 12 })
     }
     .width('100%')
-    .alignItems(HorizontalAlign.Start)
+    .height('100%')
+    .justifyContent(FlexAlign.SpaceBetween)
+    .alignItems(HorizontalAlign.Center)
   }
 
   build() {
@@ -144,6 +165,8 @@ struct CertificatePreviewPage {
       SystemNavPage({
         title: this.getPageTitle(),
         showBack: true,
+        usePageScroll: false,
+        bottomSpacerHeight: 0,
         onBack: () => {
           backRoute();
         },

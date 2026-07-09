@@ -6,7 +6,7 @@ import {
   HdsNavigationTitleMode,
   ScrollEffectType
 } from '@kit.UIDesignKit';
-import { AppTheme } from '../../constants/Theme';
+import { AppTheme, resolveContentMaxWidthVp } from '../../constants/Theme';
 import { FLOATING_TAB_EXTRA_BOTTOM_VP } from '../../pages/tabs/MainTabUtil';
 import { StoreKeys } from '../../stores/StoreKeys';
 
@@ -39,6 +39,9 @@ export struct SystemNavPage {
 
   private scroller: Scroller = new Scroller();
   @State private topSafeInsetVp: number = 0;
+  /** 取窗口短边宽度：竖屏铺满，横屏与竖屏同宽 */
+  @State private contentMaxWidthVp: number = Number.MAX_VALUE;
+  private mainWindow: window.Window | undefined = undefined;
 
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext();
@@ -51,9 +54,30 @@ export struct SystemNavPage {
       if (err.code) {
         return;
       }
+      this.mainWindow = win;
       const systemAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       this.topSafeInsetVp = ui.px2vp(systemAvoid.topRect.height);
+      this.syncContentMaxWidth(win);
+      win.on('windowSizeChange', () => {
+        this.syncContentMaxWidth(win);
+      });
     });
+  }
+
+  aboutToDisappear(): void {
+    if (this.mainWindow !== undefined) {
+      this.mainWindow.off('windowSizeChange');
+      this.mainWindow = undefined;
+    }
+  }
+
+  private syncContentMaxWidth(win: window.Window): void {
+    const ui = this.getUIContext();
+    const rect = win.getWindowProperties().windowRect;
+    this.contentMaxWidthVp = resolveContentMaxWidthVp(
+      ui.px2vp(rect.width),
+      ui.px2vp(rect.height)
+    );
   }
 
   private getTopSpacerHeight(): number {
@@ -95,6 +119,7 @@ export struct SystemNavPage {
           this.content()
         }
         .width('100%')
+        .constraintSize({ maxWidth: this.contentMaxWidthVp })
         .padding({ left: this.horizontalPadding, right: this.horizontalPadding })
         .alignItems(HorizontalAlign.Start)
 
@@ -105,7 +130,7 @@ export struct SystemNavPage {
       .width('100%')
       .constraintSize({ minHeight: '100%' })
       .justifyContent(FlexAlign.Start)
-      .alignItems(HorizontalAlign.Start)
+      .alignItems(HorizontalAlign.Center)
       .backgroundColor(AppTheme.colors.background)
     }
     .width('100%')
@@ -126,6 +151,7 @@ export struct SystemNavPage {
         this.content()
       }
       .width('100%')
+      .constraintSize({ maxWidth: this.contentMaxWidthVp })
       .layoutWeight(1)
       .padding({
         left: this.horizontalPadding,
@@ -138,7 +164,7 @@ export struct SystemNavPage {
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Start)
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(HorizontalAlign.Center)
     .backgroundColor(AppTheme.colors.background)
   }
 
@@ -156,6 +182,8 @@ export struct SystemNavPage {
       HdsNavigation() {
         this.buildPageContent()
       }
+      // 默认 Auto 会在宽屏自动 Split，右侧出现空内容区；强制 Stack 保持单栏全宽
+      .mode(NavigationMode.Stack)
       .titleMode(HdsNavigationTitleMode.MINI)
       .hideTitleBar(!this.showTitleBar)
       .hideBackButton(!this.showBack)
@@ -222,6 +250,8 @@ export struct SystemNavPage {
       HdsNavigation() {
         this.buildPageContent()
       }
+      // 默认 Auto 会在宽屏自动 Split，右侧出现空内容区；强制 Stack 保持单栏全宽
+      .mode(NavigationMode.Stack)
       .titleMode(HdsNavigationTitleMode.MINI)
       .hideTitleBar(!this.showTitleBar)
       .hideBackButton(!this.showBack)

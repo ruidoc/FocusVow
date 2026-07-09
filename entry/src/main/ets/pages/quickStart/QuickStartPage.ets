@@ -3,7 +3,7 @@ import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { showErrorToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute, replaceRoute, PageRoutes } from '../../router/PageRoutes';
+import { backRoute, returnToMainTab } from '../../router/PageRoutes';
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
@@ -134,7 +134,7 @@ struct QuickStartPage {
       participationMode: 'solo'
     };
     LockStore.startQuickFocus(hostContext, this.selectedTokens, this.durationMinutes, this.mode, focusOptions);
-    replaceRoute(PageRoutes.FocusHome);
+    returnToMainTab('focus');
   }
 
   private onDurationSliderChange(value: number): void {
