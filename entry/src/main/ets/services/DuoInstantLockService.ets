@@ -152,6 +152,10 @@ export async function startOrAlignInstantDuoFocus(
     if (options?.clearWait !== false) {
       clearDuoWaitContext();
     }
+    // 锁已存在时仍需按需回首页，避免等待页卡住（推送已开锁但导航失败）
+    if (options?.navigateHome !== false) {
+      returnToMainTab('focus');
+    }
     const already: DuoInstantLockResult = {
       ok: true,
       message: '',

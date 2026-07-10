@@ -66,19 +66,18 @@ struct DuoWaitPage {
 
   private startTimers(): void {
     this.clearTimers();
+    // 定时 / 即时均轮询 session：搭子加入后推送可能不到达，需靠轮询兜底开锁并回首页
+    this.pollId = setInterval(() => {
+      void this.refreshSession();
+    }, 3000);
     if (this.isScheduled) {
-      this.pollId = setInterval(() => {
-        void this.refreshSession();
-      }, 3000);
       return;
     }
 
     this.timerId = setInterval(() => {
       if (this.remainSeconds > 0) {
         this.remainSeconds -= 1;
-        return;
       }
-      void this.refreshSession();
     }, 1000);
   }
 
@@ -240,6 +239,8 @@ struct DuoWaitPage {
       this.isStarting = false;
       return;
     }
+    // 成功或已锁：确保离开等待页（navigateHome 可能在 alreadyLocked 路径遗漏）
+    returnToMainTab("focus");
   }
 
   private async copyInvite(): Promise<void> {
