@@ -290,7 +290,7 @@ struct DuoJoinPage {
         .width('100%')
 
       Column({ space: 12 }) {
-        TextInput({ text: this.tokenInput, placeholder: '粘贴口令，例如 $FOCUS123$' })
+        TextInput({ text: this.tokenInput, placeholder: '粘贴口令，例如 $12345678$' })
           .width('100%')
           .height(44)
           .onChange((value: string) => {
