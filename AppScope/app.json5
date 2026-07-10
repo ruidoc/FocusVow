@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.freeshore.focusvow",
     "vendor": "freeshore",
-    "versionCode": 1000001,
-    "versionName": "1.0.0",
+    "versionCode": 1000002,
+    "versionName": "1.0.1",
     "icon": "$media:startIcon",
     "label": "$string:app_name"
   }
