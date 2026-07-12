@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { common } from '@kit.AbilityKit';
 import { AppContextHolder } from '../common/AppContextHolder';
+import { getAppVersion, getDeviceModel } from '../common/AppInfo';
 import { ApiConfig } from '../config/ApiConfig';
 import { ApiEnvelope } from '../models/UserModel';
 import { FocusSyncService } from './FocusSyncService';
@@ -45,11 +46,16 @@ export class HttpService {
     return HttpService.request('POST', path, body, requiresAuth, skipPendingFlush, context);
   }
 
-  private static buildHeaders(requiresAuth: boolean, context?: common.Context): Record<string, string> {
+  private static async buildHeaders(
+    requiresAuth: boolean,
+    context?: common.Context
+  ): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'project-tag': ApiConfig.PROJECT_TAG,
-      'os': ApiConfig.OS_TAG
+      'os': ApiConfig.OS_TAG,
+      'device-model': getDeviceModel(),
+      'app-version': await getAppVersion()
     };
 
     if (requiresAuth) {
@@ -98,7 +104,7 @@ export class HttpService {
     try {
       const requestOptions: http.HttpRequestOptions = {
         method: verb === 'GET' ? http.RequestMethod.GET : http.RequestMethod.POST,
-        header: HttpService.buildHeaders(requiresAuth, context),
+        header: await HttpService.buildHeaders(requiresAuth, context),
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: ApiConfig.CONNECT_TIMEOUT_MS,
         readTimeout: ApiConfig.READ_TIMEOUT_MS
