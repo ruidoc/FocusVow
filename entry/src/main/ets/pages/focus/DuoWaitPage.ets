@@ -1,12 +1,10 @@
 import { common } from "@kit.AbilityKit";
 import { showErrorToast, showToast } from "../../common/Toast";
 import { copyDuoInviteText, shareDuoInviteText } from "../../services/DuoInviteShareService";
+import { extractDuoInviteToken } from "../../services/DuoInviteClipboardService";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { AppTheme } from "../../constants/Theme";
-import {
-  DuoSessionView,
-  isDuoWaitPartnerJoined,
-} from "../../models/DuoModel";
+import { DuoSessionView, isDuoWaitPartnerJoined } from "../../models/DuoModel";
 import { backRoute, navigateToMainTab, returnToMainTab } from "../../router/PageRoutes";
 import { DuoApiService } from "../../services/DuoApiService";
 import {
@@ -17,8 +15,22 @@ import { clearDuoWaitContext } from "../../services/DuoWaitContextService";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { ScheduledListStore } from "../../stores/ScheduledListStore";
 import { StoreKeys } from "../../stores/StoreKeys";
+import { UserStore } from "../../stores/UserStore";
 
 bootstrapStores();
+
+/** 取件码分组：前 4 + 后 4 */
+function splitPickupCode(token: string): string[] {
+  const digits = token.replace(/\D/g, "");
+  if (digits.length === 8) {
+    return [digits.slice(0, 4), digits.slice(4)];
+  }
+  const trimmed = token.trim();
+  if (trimmed.length === 0) {
+    return ["····", "····"];
+  }
+  return [trimmed];
+}
 
 @Entry
 @Component
@@ -114,11 +126,23 @@ struct DuoWaitPage {
   }
 
   private getInitiatorName(): string {
-    return this.session?.initiator?.nickname ?? "我";
+    const fromSession = this.session?.initiator?.nickname?.trim() ?? "";
+    if (fromSession.length > 0) {
+      return fromSession;
+    }
+    const localName = UserStore.getUserInfo().username.trim();
+    if (localName.length > 0) {
+      return localName;
+    }
+    return "我";
   }
 
   private getPartnerName(): string {
-    return this.session?.partner?.nickname ?? "等待搭子";
+    const fromSession = this.session?.partner?.nickname?.trim() ?? "";
+    if (fromSession.length > 0) {
+      return fromSession;
+    }
+    return "等待搭子";
   }
 
   private getHeaderTitle(): string {
@@ -138,10 +162,22 @@ struct DuoWaitPage {
   private getHintText(): string {
     if (this.isScheduled) {
       return this.partnerReady
-        ? "契约已保存，到点将按定时计划自动履约。"
-        : "把下方口令发给搭子，对方加入后将在定时时段一起履约。";
+        ? "契约已保存，到点将按定时计划自动履约"
+        : "把下方口令发给搭子，加入后将在定时时段一起履约。";
     }
-    return "把下方口令发给搭子，对方加入后双方将同时开始锁机。";
+    return "把下方口令发给搭子，加入后双方同时开始锁机";
+  }
+
+  private getInviteToken(): string {
+    const sessionToken = this.session?.token?.trim() ?? "";
+    if (sessionToken.length > 0) {
+      return sessionToken;
+    }
+    return extractDuoInviteToken(this.inviteText);
+  }
+
+  private getPickupParts(): string[] {
+    return splitPickupCode(this.getInviteToken());
   }
 
   private getPartnerStatus(): string {
@@ -230,11 +266,14 @@ struct DuoWaitPage {
       lockOptions,
     );
     if (!result.ok && !result.alreadyLocked) {
-      const tip = result.message === "no_selected_tokens"
-        ? "请先选择要限制的应用"
-        : (result.message === "session_already_ended"
-          ? "契约已结束"
-          : (result.message.length > 0 ? result.message : "开启锁机失败"));
+      const tip =
+        result.message === "no_selected_tokens"
+          ? "请先选择要限制的应用"
+          : result.message === "session_already_ended"
+            ? "契约已结束"
+            : result.message.length > 0
+              ? result.message
+              : "开启锁机失败";
       this.toastError(tip);
       this.isStarting = false;
       return;
@@ -297,33 +336,63 @@ struct DuoWaitPage {
   }
 
   @Builder
-  private buildParticipantRow(name: string, status: string, active: boolean): void {
-    Row({ space: 10 }) {
-      Text(name.substring(0, 1))
+  private buildParticipantColumn(
+    avatarLabel: string,
+    name: string,
+    status: string,
+    active: boolean,
+    mutedAvatar: boolean = false,
+  ): void {
+    Column({ space: 8 }) {
+      Text(avatarLabel)
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
-        .fontColor(active ? AppTheme.colors.primary : AppTheme.colors.textMuted)
-        .width(36)
-        .height(36)
+        .fontColor(
+          mutedAvatar
+            ? AppTheme.colors.textMuted
+            : active
+              ? AppTheme.colors.primary
+              : AppTheme.colors.textMuted,
+        )
+        .width(44)
+        .height(44)
         .textAlign(TextAlign.Center)
-        .backgroundColor(active ? AppTheme.colors.primarySoft : AppTheme.colors.surfaceRaised)
-        .borderRadius(18)
-      Column({ space: 2 }) {
-        Text(name)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width("100%")
-        Text(status)
-          .fontSize(12)
-          .fontColor(active ? AppTheme.colors.success : AppTheme.colors.textMuted)
-          .width("100%")
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
+        .backgroundColor(
+          mutedAvatar
+            ? AppTheme.colors.surfaceRaised
+            : active
+              ? AppTheme.colors.primarySoft
+              : AppTheme.colors.surfaceRaised,
+        )
+        .borderRadius(22)
+      Text(name)
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+      Text(status)
+        .fontSize(12)
+        .fontColor(active ? AppTheme.colors.success : AppTheme.colors.textMuted)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
     }
-    .width("100%")
-    .alignItems(VerticalAlign.Center);
+    .layoutWeight(1)
+    .alignItems(HorizontalAlign.Center);
+  }
+
+  @Builder
+  private buildParticipantArrow(): void {
+    // 单字符长箭头，避免线/箭头分色（对齐 RN trending-flat）
+    Text('→')
+      .fontSize(28)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(AppTheme.colors.borderStrong)
+      .textAlign(TextAlign.Center)
+      .width(48)
+      .height(28);
   }
 
   @Builder
@@ -342,14 +411,20 @@ struct DuoWaitPage {
           .width("100%")
           .textAlign(TextAlign.Center)
       }.width("100%")
-      Column({ space: 12 }) {
-        this.buildParticipantRow(this.getInitiatorName(), "已发起契约", true)
-        this.buildParticipantRow(
+      Row() {
+        this.buildParticipantColumn("我", this.getInitiatorName(), "已发起契约", true, false)
+        this.buildParticipantArrow()
+        this.buildParticipantColumn(
+          "搭",
           this.getPartnerName(),
           this.getPartnerStatus(),
           this.session?.partner !== null && this.session?.partner !== undefined,
+          true,
         )
-      }.width("100%")
+      }
+      .width("100%")
+      .margin({ top: 4 })
+      .alignItems(VerticalAlign.Center)
     }
     .width("100%")
     .padding(20)
@@ -362,19 +437,30 @@ struct DuoWaitPage {
   private buildInviteCard(): void {
     Column({ space: 12 }) {
       Text("邀请口令")
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width("100%")
-      Text(this.inviteText.length > 0 ? this.inviteText : "正在生成口令…")
         .fontSize(14)
-        .lineHeight(22)
+        .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textSecondary)
-        .width("100%")
+      Row({ space: 12 }) {
+        ForEach(
+          this.getPickupParts(),
+          (part: string, index: number) => {
+            Text(part)
+              .fontSize(32)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.colors.accentOrange)
+              .letterSpacing(3);
+          },
+          (part: string, index: number) => `${index}-${part}`,
+        )
+      }
+      Text("搭子在「加入互督」中输入这 8 位数字即可")
+        .fontSize(12)
+        .fontColor(AppTheme.colors.textMuted)
+        .textAlign(TextAlign.Center)
     }
     .width("100%")
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
+    .padding({ top: 24, bottom: 24, left: 20, right: 20 })
+    .alignItems(HorizontalAlign.Center)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(AppTheme.radius.lg);
@@ -395,11 +481,12 @@ struct DuoWaitPage {
           .fontColor(AppTheme.colors.textSecondary)
           .width("100%")
           .textAlign(TextAlign.Center)
+        Text(this.getHintText())
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textMuted)
+          .width("100%")
+          .textAlign(TextAlign.Center)
       }.width("100%")
-      Text(this.getHintText())
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width("100%")
 
       this.buildRitualCard()
       this.buildInviteCard()

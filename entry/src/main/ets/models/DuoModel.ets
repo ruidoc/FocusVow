@@ -225,6 +225,24 @@ export function isDuoWaitPartnerJoined(
     (session.status === 'active' && session.type !== 'scheduled');
 }
 
+function parsePartnerBrief(raw: Object | undefined | null): DuoPartnerBrief | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const record = raw as Record<string, Object>;
+  const id = String(record['id'] ?? '');
+  const nickname = String(record['nickname'] ?? '').trim();
+  const avatar = String(record['avatar'] ?? '');
+  if (id.length === 0 && nickname.length === 0) {
+    return undefined;
+  }
+  return {
+    id,
+    nickname,
+    avatar
+  };
+}
+
 export function parseDuoSessionView(raw: Record<string, Object> | undefined): DuoSessionView | null {
   if (!raw) {
     return null;
@@ -234,6 +252,11 @@ export function parseDuoSessionView(raw: Record<string, Object> | undefined): Du
   if (sessionId.length === 0 && recordId.length === 0) {
     return null;
   }
+  const partnerRaw = raw['partner'];
+  const partner =
+    partnerRaw === null
+      ? null
+      : parsePartnerBrief(partnerRaw as Object | undefined);
   return {
     session_id: sessionId,
     token: String(raw['token'] ?? ''),
@@ -255,8 +278,8 @@ export function parseDuoSessionView(raw: Record<string, Object> | undefined): Du
     breached_by: raw['breached_by'] ? String(raw['breached_by']) : undefined,
     breached_by_name: raw['breached_by_name'] ? String(raw['breached_by_name']) : undefined,
     breach_reason: raw['breach_reason'] ? String(raw['breach_reason']) : undefined,
-    initiator: raw['initiator'] as DuoPartnerBrief | undefined,
-    partner: raw['partner'] as DuoPartnerBrief | null | undefined,
+    initiator: parsePartnerBrief(raw['initiator'] as Object | undefined),
+    partner: partner,
     expects_duo: raw['expects_duo'] === true || raw['expects_duo'] === 'true',
     has_ever_activated: raw['has_ever_activated'] === true || raw['has_ever_activated'] === 'true',
     editable: raw['editable'] === true || raw['editable'] === 'true',
