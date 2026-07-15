@@ -8,16 +8,19 @@ import {
   DuoScheduledUpdatePayload,
   DuoSessionView,
   getScheduleRepeatDays,
-  getScheduledSessionStatusLabel
+  getScheduledSessionStatusLabel,
+  isScheduledSessionActivationOpen
 } from '../../models/DuoModel';
-import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, summarizeRepeatDays } from '../../models/PlanModel';
+import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, summarizeRepeatDays, validateScheduledStartTime } from '../../models/PlanModel';
 import { PageRoutes, backRoute, navigateToMainTab } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
   getGuardSyncIssue,
   removeGuardForSession,
+  reconcileStaleScheduledWindows,
   syncGuardForSession
 } from '../../services/ScheduledCovenantService';
+import { validateScheduledPlanTime } from '../../services/ScheduledPlanValidation';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import {
   chooseRestrictedApps,
@@ -78,15 +81,18 @@ struct PlanDetailPage {
   private async loadSession(): Promise<void> {
     this.isLoading = true;
     const response = await DuoApiService.getSession(this.sessionId);
-    const nextSession = DuoApiService.parseSession(response);
+    let nextSession = DuoApiService.parseSession(response);
     if (!nextSession) {
       showErrorToast(response.message ?? '无法加载契约', this.getUIContext());
       navigateToMainTab('plans');
       return;
     }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const reconciled = await reconcileStaleScheduledWindows([nextSession], hostContext);
+    nextSession = reconciled[0] ?? nextSession;
     this.session = nextSession;
     this.fillFormFromSession(nextSession);
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    ScheduledListStore.patchSession(nextSession);
     const guardIssue = getGuardSyncIssue(hostContext, nextSession.session_id);
     this.statusMessage = guardIssue?.message ?? '';
     this.isLoading = false;
@@ -170,7 +176,8 @@ struct PlanDetailPage {
     if (this.isLoading || this.isEditing) {
       return false;
     }
-    if (this.session?.status === 'active') {
+    // 真正履约中（窗口内 active）隐藏作废/退出；滞留 active 允许操作
+    if (this.session !== null && isScheduledSessionActivationOpen(this.session)) {
       return false;
     }
     return this.isPartner() || this.isInitiator();
@@ -355,6 +362,26 @@ struct PlanDetailPage {
     if (this.selectedTokens.length === 0) {
       this.statusMessage = '请先至少选择 1 个应用';
       return;
+    }
+
+    if (this.isInitiator()) {
+      const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
+      if (startTimeError.length > 0) {
+        showErrorToast(startTimeError, this.getUIContext());
+        return;
+      }
+      ScheduledListStore.hydrate();
+      const scheduleTimeError = validateScheduledPlanTime(
+        this.startTime,
+        this.endTime,
+        this.repeatDays,
+        ScheduledListStore.getAllSessions(),
+        this.session.session_id
+      );
+      if (scheduleTimeError.length > 0) {
+        showErrorToast(scheduleTimeError, this.getUIContext());
+        return;
+      }
     }
 
     this.isSaving = true;

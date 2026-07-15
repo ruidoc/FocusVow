@@ -182,8 +182,148 @@ export function getScheduleRepeatDays(repeat: string): number[] {
   return days.length > 0 ? days : [1, 2, 3, 4, 5];
 }
 
+function parseClockToMinutes(clock: string): number {
+  const parts = clock.split(':');
+  return Math.floor(Number(parts[0]) || 0) * 60 + Math.floor(Number(parts[1]) || 0);
+}
+
+export function getScheduledSessionStartMin(session: DuoSessionView): number {
+  const scheduleJson = session.schedule_json;
+  const startMinRaw = Number(scheduleJson?.['start_min']);
+  if (Number.isFinite(startMinRaw)) {
+    return startMinRaw;
+  }
+  const startClock = session.schedule_start && session.schedule_start.length > 0
+    ? session.schedule_start
+    : String(scheduleJson?.['start'] ?? '09:00');
+  return parseClockToMinutes(startClock);
+}
+
+export function getScheduledSessionEndMin(session: DuoSessionView): number {
+  const scheduleJson = session.schedule_json;
+  const endMinRaw = Number(scheduleJson?.['end_min']);
+  if (Number.isFinite(endMinRaw)) {
+    return endMinRaw;
+  }
+  const endClock = session.schedule_end && session.schedule_end.length > 0
+    ? session.schedule_end
+    : String(scheduleJson?.['end'] ?? '18:00');
+  return parseClockToMinutes(endClock);
+}
+
+export function isInactiveScheduledSession(session: DuoSessionView): boolean {
+  return session.status === 'completed'
+    || session.status === 'failed'
+    || session.status === 'cancelled'
+    || session.status === 'breached'
+    || session.status === 'expired';
+}
+
+function getScheduledRepeatWeekday(nowAt: number = Date.now()): number {
+  const jsWeekday = new Date(nowAt).getDay();
+  return jsWeekday === 0 ? 7 : jsWeekday;
+}
+
+function getPreviousScheduledWeekday(day: number): number {
+  return day === 1 ? 7 : day - 1;
+}
+
+/**
+ * 当前是否处于定时契约的排期窗口内（按 schedule_start/end + repeat）。
+ * 跨午夜窗口沿用本地 PlanModel.isPlanRunning 规则。
+ */
+export function isScheduledSessionInWindow(
+  session: DuoSessionView,
+  nowAt: number = Date.now()
+): boolean {
+  const repeatRaw = session.schedule_repeat && session.schedule_repeat.length > 0
+    ? session.schedule_repeat
+    : String(session.schedule_json?.['repeat'] ?? '');
+  const repeatDays = getScheduleRepeatDays(repeatRaw);
+  if (repeatDays.length === 0) {
+    return false;
+  }
+
+  const nowDate = new Date(nowAt);
+  const currentWeekday = getScheduledRepeatWeekday(nowAt);
+  const currentMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
+  const startMinutes = getScheduledSessionStartMin(session);
+  const endMinutes = getScheduledSessionEndMin(session);
+
+  if (endMinutes > startMinutes) {
+    return repeatDays.includes(currentWeekday) &&
+      currentMinutes >= startMinutes &&
+      currentMinutes < endMinutes;
+  }
+
+  if (currentMinutes >= startMinutes) {
+    return repeatDays.includes(currentWeekday);
+  }
+
+  return repeatDays.includes(getPreviousScheduledWeekday(currentWeekday)) &&
+    currentMinutes < endMinutes;
+}
+
+/**
+ * 本次激活窗口是否仍有效：优先看 end_at；缺失时回退到排期窗口。
+ */
+export function isScheduledSessionActivationOpen(
+  session: DuoSessionView,
+  nowAt: number = Date.now()
+): boolean {
+  if (session.status !== 'active') {
+    return false;
+  }
+  if (session.end_at && session.end_at.length > 0) {
+    const endMs = Date.parse(session.end_at);
+    if (Number.isFinite(endMs)) {
+      return nowAt < endMs;
+    }
+  }
+  return isScheduledSessionInWindow(session, nowAt);
+}
+
+/** 服务端仍为 active，但本地已判定本窗口结束，需要补报 complete-window */
+export function shouldCompleteStaleScheduledWindow(
+  session: DuoSessionView,
+  nowAt: number = Date.now()
+): boolean {
+  return session.type === 'scheduled' &&
+    session.status === 'active' &&
+    !isScheduledSessionActivationOpen(session, nowAt);
+}
+
+export function sortScheduledSessions(sessions: DuoSessionView[]): DuoSessionView[] {
+  const sorted = sessions.slice();
+  sorted.sort((left: DuoSessionView, right: DuoSessionView) => {
+    const inactiveLeft = isInactiveScheduledSession(left);
+    const inactiveRight = isInactiveScheduledSession(right);
+    if (inactiveLeft !== inactiveRight) {
+      return inactiveLeft ? 1 : -1;
+    }
+    const activeLeft = isScheduledSessionActivationOpen(left);
+    const activeRight = isScheduledSessionActivationOpen(right);
+    if (activeLeft !== activeRight) {
+      return activeLeft ? -1 : 1;
+    }
+    const startDiff = getScheduledSessionStartMin(left) - getScheduledSessionStartMin(right);
+    if (startDiff !== 0) {
+      return startDiff;
+    }
+    return left.title.localeCompare(right.title);
+  });
+  return sorted;
+}
+
 export function getScheduledSessionStatusLabel(session: DuoSessionView): string {
   if (session.status === 'active') {
+    // 窗口已结束但 complete-window 未回写时，勿误导为「进行中」
+    if (!isScheduledSessionActivationOpen(session)) {
+      if (session.expects_duo && session.participation_mode !== 'duo') {
+        return '等待搭子';
+      }
+      return '待开始';
+    }
     return '进行中';
   }
   if (session.status === 'scheduled') {

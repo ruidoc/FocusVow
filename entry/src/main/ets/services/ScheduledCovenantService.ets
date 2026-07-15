@@ -1,6 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { ActiveLockState, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
-import { DuoSessionView, getScheduleRepeatDays, parseStringArray, resolveDuoCounterpartName } from '../models/DuoModel';
+import {
+  DuoSessionView,
+  getScheduleRepeatDays,
+  parseStringArray,
+  resolveDuoCounterpartName,
+  shouldCompleteStaleScheduledWindow
+} from '../models/DuoModel';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { LockStore } from '../stores/LockStore';
 import { DuoApiService } from './DuoApiService';
@@ -219,6 +225,37 @@ export async function syncAllScheduledGuardStrategies(
   return { ok: true, data: true, message: '定时契约屏时策略已同步' };
 }
 
+/**
+ * 补报窗口外仍滞留为 active 的定时契约（对齐 RN flushPendingScheduledCompletion 的目标）。
+ * 返回纠正后的列表；调用方负责写回 ScheduledListStore。
+ */
+export async function reconcileStaleScheduledWindows(
+  sessions: DuoSessionView[],
+  context?: common.Context
+): Promise<DuoSessionView[]> {
+  if (sessions.length === 0) {
+    return sessions;
+  }
+
+  const nextSessions: DuoSessionView[] = [];
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    if (!shouldCompleteStaleScheduledWindow(session)) {
+      nextSessions.push(session);
+      continue;
+    }
+    const response = await DuoApiService.completeScheduledWindow(session.session_id, context);
+    const completed = DuoApiService.parseSession(response);
+    if (completed) {
+      nextSessions.push(completed);
+      clearScheduledActivationTracking(session.session_id);
+      continue;
+    }
+    nextSessions.push(session);
+  }
+  return nextSessions;
+}
+
 export async function syncAllScheduledGuardOnLogin(context: common.Context): Promise<GuardResult<boolean>> {
   const response = await DuoApiService.getScheduledList();
   if (response.statusCode !== 200) {
@@ -230,9 +267,10 @@ export async function syncAllScheduledGuardOnLogin(context: common.Context): Pro
   }
 
   const list = DuoApiService.parseScheduledList(response);
-  ScheduledListStore.setAllSessions(list.items);
+  const reconciled = await reconcileStaleScheduledWindows(list.items, context);
+  ScheduledListStore.setAllSessions(reconciled);
   ScheduledListStore.clearDirty();
-  return syncAllScheduledGuardStrategies(context, list.items);
+  return syncAllScheduledGuardStrategies(context, reconciled);
 }
 
 function resolveDuoSessionId(lock: ActiveLockState): string {

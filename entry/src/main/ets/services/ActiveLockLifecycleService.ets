@@ -6,6 +6,7 @@ import { DuoApiService } from './DuoApiService';
 import { FocusSyncService } from './FocusSyncService';
 import { GuardResult, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { LockStore } from '../stores/LockStore';
+import { refreshStats } from '../stores/StatsStore';
 import { UserStore } from '../stores/UserStore';
 import {
   clearScheduledActivationTracking,
@@ -77,6 +78,9 @@ export async function endQuickFocus(
       context,
       result.ok ? successMessage : `${failurePrefix}：${result.message}`
     );
+    if (result.ok && markCompleted) {
+      refreshStats();
+    }
     return result.ok;
   } finally {
     endingLock = false;
@@ -104,6 +108,9 @@ export async function tearQuickFocus(
       context,
       result.ok ? '契约已撕毁' : `撕毁失败：${result.message}`
     );
+    if (result.ok) {
+      refreshStats();
+    }
     return result.ok;
   } finally {
     endingLock = false;
@@ -153,6 +160,9 @@ export async function tearCovenantWindow(
       context,
       stopResult.ok ? '契约已撕毁' : `撕毁失败：${stopResult.message}`
     );
+    if (stopResult.ok) {
+      refreshStats();
+    }
     return stopResult.ok;
   } finally {
     endingLock = false;
@@ -178,6 +188,9 @@ export async function skipCovenantWindow(
     await restartCycleGuardIfEnabled(context);
     const message = stopResult.ok ? '已跳过本次契约窗口' : `已跳过本次契约窗口，但停止策略失败：${stopResult.message}`;
     SettingsStore.updateStatusMessage(context, message);
+    if (stopResult.ok) {
+      refreshStats();
+    }
     return { ok: stopResult.ok, data: stopResult.ok, message };
   } finally {
     endingLock = false;

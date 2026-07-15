@@ -14,6 +14,7 @@ import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { setScheduledDuoWait } from '../../services/DuoWaitContextService';
 import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { validateScheduledPlanTime } from '../../services/ScheduledPlanValidation';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
@@ -167,6 +168,18 @@ struct PlanAddPage {
     const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
     if (startTimeError.length > 0) {
       showErrorToast(startTimeError, uiContext);
+      return;
+    }
+
+    ScheduledListStore.hydrate();
+    const scheduleTimeError = validateScheduledPlanTime(
+      this.startTime,
+      this.endTime,
+      this.repeatDays,
+      ScheduledListStore.getAllSessions()
+    );
+    if (scheduleTimeError.length > 0) {
+      showErrorToast(scheduleTimeError, uiContext);
       return;
     }
 

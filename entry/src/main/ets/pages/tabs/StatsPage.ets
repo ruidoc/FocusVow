@@ -32,6 +32,7 @@ import {
   StatsPeriod
 } from '../../services/StatsRecordUtil';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { registerStatsReload, unregisterStatsReload } from '../../stores/StatsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { common } from '@kit.AbilityKit';
@@ -50,7 +51,6 @@ bootstrapStores();
 
 type StatsDetailSection = 'timeline' | 'shame';
 
-const STATS_SHARE_HORIZONTAL_PADDING: number = 14;
 const STATS_SHARE_BOTTOM_PADDING: number = 24;
 
 @Component
@@ -60,17 +60,30 @@ export struct StatsPage {
   @State timeline: DuoTimelineDay[] = [];
   @State shame: DuoShameDay[] = [];
   @State isLoading: boolean = false;
+  @State isRefreshing: boolean = false;
   @State errorMessage: string = '';
+  private scroller: Scroller = new Scroller();
   private reloadVersion: number = 0;
   private isSharing: boolean = false;
 
   aboutToAppear(): void {
+    registerStatsReload(() => {
+      void this.reload();
+    });
     void this.reload();
   }
 
-  private async reload(): Promise<void> {
+  aboutToDisappear(): void {
+    unregisterStatsReload();
+  }
+
+  private async reload(fromPull: boolean = false): Promise<void> {
     const requestVersion = ++this.reloadVersion;
-    this.isLoading = true;
+    if (fromPull) {
+      this.isRefreshing = true;
+    } else {
+      this.isLoading = true;
+    }
     this.errorMessage = '';
 
     if (!UserStore.isLoggedIn()) {
@@ -79,6 +92,7 @@ export struct StatsPage {
       this.timeline = [];
       this.shame = [];
       this.isLoading = false;
+      this.isRefreshing = false;
       return;
     }
 
@@ -107,6 +121,7 @@ export struct StatsPage {
     this.timeline = timelineData?.items ?? [];
     this.shame = shameData?.items ?? [];
     this.isLoading = false;
+    this.isRefreshing = false;
   }
 
   private getSuccessMinutes(): number {
@@ -595,6 +610,7 @@ export struct StatsPage {
         this.buildPeriodButton('month');
       }
       .width('100%')
+      .padding({ top: 16 })
 
       this.buildStatusNotice()
       if (this.isLoading) {
@@ -612,18 +628,32 @@ export struct StatsPage {
 
   @Builder
   private buildStatsBody(): void {
-    Column() {
-      this.buildStatsContent()
+    Refresh({ refreshing: $$this.isRefreshing }) {
+      Scroll(this.scroller) {
+        Column() {
+          this.buildStatsContent()
+        }
+        .width('100%')
+        .constraintSize({ minHeight: '100%' })
+        .justifyContent(FlexAlign.Start)
+        .padding({ bottom: STATS_SHARE_BOTTOM_PADDING })
+        .backgroundColor(AppTheme.colors.background)
+        .alignItems(HorizontalAlign.Start)
+        .id(STATS_SNAPSHOT_ID)
+      }
+      .width('100%')
+      .height('100%')
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
     }
-    .width('100%')
-    .padding({
-      left: STATS_SHARE_HORIZONTAL_PADDING,
-      right: STATS_SHARE_HORIZONTAL_PADDING,
-      bottom: STATS_SHARE_BOTTOM_PADDING
+    .pullToRefresh(true)
+    .onRefreshing(() => {
+      void this.reload(true);
     })
-    .backgroundColor(AppTheme.colors.background)
-    .alignItems(HorizontalAlign.Start)
-    .id(STATS_SNAPSHOT_ID)
+    .width('100%')
+    .height('100%')
+    .align(Alignment.TopStart)
   }
 
   build() {
@@ -633,9 +663,9 @@ export struct StatsPage {
       showAction: true,
       actionLabel: '分享',
       actionIcon: $r('sys.symbol.share'),
-      horizontalPadding: 0,
-      contentSpace: 18,
       bottomSpacerHeight: 0,
+      usePageScroll: false,
+      bindScrollers: [this.scroller],
       onAction: () => {
         void this.handleSharePress();
       },

@@ -9,12 +9,15 @@ import { stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import {
   clearScheduledActivationTracking,
   markScheduledListStale,
-  reconcileScheduledCovenantActivation
+  reconcileScheduledCovenantActivation,
+  reconcileStaleScheduledWindows
 } from './ScheduledCovenantService';
 import { restartCycleGuardIfEnabled } from './CycleGuardService';
 import { queueHonorCertificate } from './CertificatePendingService';
 import { FocusSyncService } from './FocusSyncService';
 import { LockStore } from '../stores/LockStore';
+import { ScheduledListStore } from '../stores/ScheduledListStore';
+import { refreshStats } from '../stores/StatsStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { UserStore } from '../stores/UserStore';
 
@@ -54,6 +57,7 @@ export async function reconcileCovenantNaturalCompletion(
     if (UserStore.isLoggedIn()) {
       await FocusSyncService.flushPending(context);
     }
+    refreshStats();
     return true;
   } finally {
     covenantCompletionInFlight = false;
@@ -65,5 +69,10 @@ export async function reconcileLockLifecycle(context: common.UIAbilityContext): 
   await reconcileCovenantNaturalCompletion(context);
   if (UserStore.isLoggedIn()) {
     await FocusSyncService.flushPending(context);
+    const cached = ScheduledListStore.getAllSessions();
+    if (cached.length > 0) {
+      const reconciled = await reconcileStaleScheduledWindows(cached, context);
+      ScheduledListStore.setAllSessions(reconciled);
+    }
   }
 }

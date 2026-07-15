@@ -20,6 +20,7 @@ import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { StoreKeys } from '../stores/StoreKeys';
 import { readStoredString, removeStoredKey, writeStoredString } from './PreferencesService';
 import { LockStore } from '../stores/LockStore';
+import { refreshStats } from '../stores/StatsStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { queueShameCertificate } from './CertificatePendingService';
 import { bootstrapStores } from '../stores/StoreBootstrap';
@@ -491,6 +492,7 @@ export class DuoPushHandler {
     queueShameCertificate(lockSnapshot, Date.now(), 'victim', 'partner_breach');
     LockStore.clear(context);
     markScheduledListStale(context);
+    refreshStats();
     clearScheduledActivationTracking(sessionId);
     SettingsStore.updateStatusMessage(context, message);
     DuoPushHandler.clearPendingBreach(context);

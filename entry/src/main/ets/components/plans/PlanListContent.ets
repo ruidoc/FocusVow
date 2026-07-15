@@ -1,10 +1,10 @@
 import { common } from '@kit.AbilityKit';
 import { ScheduledSessionCard } from './ScheduledSessionCard';
 import { AppTheme } from '../../constants/Theme';
-import { DuoSessionView } from '../../models/DuoModel';
+import { DuoSessionView, sortScheduledSessions } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
-import { getGuardSyncIssueCount } from '../../services/ScheduledCovenantService';
+import { getGuardSyncIssueCount, reconcileStaleScheduledWindows } from '../../services/ScheduledCovenantService';
 import { ScheduledListFilter, ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
@@ -42,8 +42,9 @@ export struct PlanListContent {
   }
 
   private refreshDisplaySessions(): void {
-    this.displaySessions = this.allSessions.filter((session: DuoSessionView) =>
+    const filtered = this.allSessions.filter((session: DuoSessionView) =>
       this.matchesFilter(session, this.activeFilter));
+    this.displaySessions = sortScheduledSessions(filtered);
   }
 
   private onIsPageActiveChanged(): void {
@@ -102,14 +103,17 @@ export struct PlanListContent {
     this.statusMessage = '';
     const response = await DuoApiService.getScheduledList();
     const list = DuoApiService.parseScheduledList(response);
-    ScheduledListStore.setAllSessions(list.items);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const reconciled = response.statusCode === 200
+      ? await reconcileStaleScheduledWindows(list.items, hostContext)
+      : list.items;
+    ScheduledListStore.setAllSessions(reconciled);
     this.refreshDisplaySessions();
 
     if (response.statusCode !== 200 && response.message) {
       this.statusMessage = response.message;
     } else {
       ScheduledListStore.clearDirty();
-      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const guardIssueCount = getGuardSyncIssueCount(hostContext);
       if (guardIssueCount > 0) {
         this.statusMessage = `有 ${guardIssueCount} 条契约待完成本机屏时配置`;
@@ -248,7 +252,7 @@ export struct PlanListContent {
             })
           }
         }, (session: DuoSessionView) =>
-          `${this.activeFilter}_${session.session_id}_${session.title}_${session.schedule_start}_${session.schedule_end}`)
+          `${this.activeFilter}_${session.session_id}_${session.status}_${session.title}_${session.schedule_start}_${session.schedule_end}`)
       }
       .width('100%')
       .height('100%')

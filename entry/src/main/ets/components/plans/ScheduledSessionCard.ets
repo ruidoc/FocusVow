@@ -1,7 +1,8 @@
 import {
   DuoSessionView,
   getScheduleRepeatDays,
-  getScheduledSessionStatusLabel
+  getScheduledSessionStatusLabel,
+  isScheduledSessionActivationOpen
 } from '../../models/DuoModel';
 import { summarizeRepeatDays } from '../../models/PlanModel';
 import { AppTheme } from '../../constants/Theme';
@@ -20,8 +21,12 @@ export struct ScheduledSessionCard {
   };
   onPress?: () => void;
 
+  private isEffectivelyActive(): boolean {
+    return isScheduledSessionActivationOpen(this.session);
+  }
+
   private getTagBackgroundColor(): string {
-    if (this.session.status === 'active') {
+    if (this.isEffectivelyActive()) {
       return AppTheme.colors.primarySoft;
     }
     if (this.session.expects_duo && this.session.participation_mode !== 'duo') {
@@ -31,7 +36,7 @@ export struct ScheduledSessionCard {
   }
 
   private getTagTextColor(): string {
-    if (this.session.status === 'active') {
+    if (this.isEffectivelyActive()) {
       return AppTheme.colors.primary;
     }
     if (this.session.expects_duo && this.session.participation_mode !== 'duo') {
