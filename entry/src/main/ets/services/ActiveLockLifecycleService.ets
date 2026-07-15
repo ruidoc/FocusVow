@@ -3,6 +3,7 @@ import { ActiveLockState, resolveDuoSessionIdFromLock } from '../models/ActiveLo
 import { FocusSyncResult } from '../models/FocusSyncModel';
 import { endCurrentCycleGuardLockAndRestart, restartCycleGuardIfEnabled } from './CycleGuardService';
 import { DuoApiService } from './DuoApiService';
+import { DuoBgSyncService } from './DuoBgSyncService';
 import { FocusSyncService } from './FocusSyncService';
 import { GuardResult, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { LockStore } from '../stores/LockStore';
@@ -15,6 +16,10 @@ import {
 import { SettingsStore } from '../stores/SettingsStore';
 
 let endingLock: boolean = false;
+
+function notifyDuoBgSync(): void {
+  DuoBgSyncService.ensure();
+}
 
 function saveQuickFocusPending(
   context: common.Context,
@@ -73,6 +78,7 @@ export async function endQuickFocus(
     await FocusSyncService.flushPending(context);
     if (result.ok) {
       LockStore.clear(context);
+      notifyDuoBgSync();
     }
     SettingsStore.updateStatusMessage(
       context,
@@ -103,6 +109,7 @@ export async function tearQuickFocus(
     await FocusSyncService.flushPending(context);
     if (result.ok) {
       LockStore.clear(context);
+      notifyDuoBgSync();
     }
     SettingsStore.updateStatusMessage(
       context,
@@ -153,6 +160,7 @@ export async function tearCovenantWindow(
     const sessionId = resolveDuoSessionIdFromLock(state);
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
     LockStore.clear(context);
+    notifyDuoBgSync();
     markScheduledListStale(context);
     clearScheduledActivationTracking(sessionId);
     await restartCycleGuardIfEnabled(context);
@@ -183,6 +191,7 @@ export async function skipCovenantWindow(
     const sessionId = resolveDuoSessionIdFromLock(state);
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
     LockStore.clear(context);
+    notifyDuoBgSync();
     markScheduledListStale(context);
     clearScheduledActivationTracking(sessionId);
     await restartCycleGuardIfEnabled(context);

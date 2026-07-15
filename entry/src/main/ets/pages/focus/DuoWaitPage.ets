@@ -11,7 +11,7 @@ import {
   DuoInstantLockOptions,
   startOrAlignInstantDuoFocus,
 } from "../../services/DuoInstantLockService";
-import { clearDuoWaitContext } from "../../services/DuoWaitContextService";
+import { clearDuoWaitContext, syncDuoWaitExpireAt } from "../../services/DuoWaitContextService";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { ScheduledListStore } from "../../stores/ScheduledListStore";
 import { StoreKeys } from "../../stores/StoreKeys";
@@ -214,6 +214,7 @@ struct DuoWaitPage {
       AppStorage.setOrCreate(StoreKeys.DuoWaitInviteText, next.invite_text);
     }
     if (!this.isScheduled && next.expire_at) {
+      syncDuoWaitExpireAt(next.expire_at);
       const remain = Math.max(
         0,
         Math.floor((new Date(next.expire_at).getTime() - Date.now()) / 1000),

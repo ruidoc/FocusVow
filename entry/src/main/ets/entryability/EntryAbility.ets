@@ -5,6 +5,7 @@ import { window } from '@kit.ArkUI';
 import { MsgContent, PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { getPreferencesStorageDir, warmUpPreferencesStore } from '../services/PreferencesService';
+import { DuoBgSyncService } from '../services/DuoBgSyncService';
 import { DuoPushHandler } from '../services/DuoPushHandler';
 import { UmengPushMessageBody } from '../models/DuoModel';
 import { FocusSyncService } from '../services/FocusSyncService';
@@ -25,6 +26,9 @@ export default class EntryAbility extends UIAbility {
     webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
     warmUpPreferencesStore(this.context);
+    DuoBgSyncService.bindPoll((ctx) => {
+      return DuoPushHandler.syncActiveDuoSessionIfNeeded(ctx, { isForeground: false });
+    });
     this.setupPushAgent();
     UmengSdkService.handleLaunchWant(want, this.context);
     hilog.info(DOMAIN, TAG, 'preferences storage dir=%{public}s', getPreferencesStorageDir(this.context));
@@ -114,6 +118,8 @@ export default class EntryAbility extends UIAbility {
       void FocusSyncService.flushPending(context);
       void DuoPushHandler.processPendingBreach(this.context).then(() => {
         return DuoPushHandler.syncActiveDuoSessionIfNeeded(this.context, { isForeground: true });
+      }).then(() => {
+        DuoBgSyncService.ensure(this.context);
       });
     }
   }
@@ -122,5 +128,6 @@ export default class EntryAbility extends UIAbility {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
+    DuoBgSyncService.ensure(this.context);
   }
 }

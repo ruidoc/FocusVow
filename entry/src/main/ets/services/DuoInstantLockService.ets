@@ -6,6 +6,7 @@ import {
 import { DuoSessionView, resolveDuoCounterpartName } from '../models/DuoModel';
 import { returnToMainTab } from '../router/PageRoutes';
 import { LockStore } from '../stores/LockStore';
+import { DuoBgSyncService } from './DuoBgSyncService';
 import { applyScreenRestriction } from './ScreenTimeService';
 import { clearDuoWaitContext } from './DuoWaitContextService';
 
@@ -152,6 +153,7 @@ export async function startOrAlignInstantDuoFocus(
     if (options?.clearWait !== false) {
       clearDuoWaitContext();
     }
+    DuoBgSyncService.ensure();
     // 锁已存在时仍需按需回首页，避免等待页卡住（推送已开锁但导航失败）
     if (options?.navigateHome !== false) {
       returnToMainTab('focus');
@@ -201,6 +203,7 @@ export async function startOrAlignInstantDuoFocus(
   if (options?.clearWait !== false) {
     clearDuoWaitContext();
   }
+  DuoBgSyncService.ensure();
   if (options?.navigateHome !== false) {
     returnToMainTab('focus');
   }

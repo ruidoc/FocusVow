@@ -1,18 +1,18 @@
-import { common, wantAgent, Want, WantAgent } from '@kit.AbilityKit';
-import { notificationManager } from '@kit.NotificationKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
-import { init, onProfileSignIn, onProfileSignOff } from '@umeng/analytics';
-import { PushAgent } from '@umeng/push';
-import { AppContextHolder } from '../common/AppContextHolder';
-import { DuoPushHandler } from './DuoPushHandler';
-import { UmengConfig } from '../config/UmengConfig';
-import { StoreKeys } from '../stores/StoreKeys';
+import { common, wantAgent, Want, WantAgent } from "@kit.AbilityKit";
+import { notificationManager } from "@kit.NotificationKit";
+import { hilog } from "@kit.PerformanceAnalysisKit";
+import { init, onProfileSignIn, onProfileSignOff } from "@umeng/analytics";
+import { PushAgent } from "@umeng/push";
+import { AppContextHolder } from "../common/AppContextHolder";
+import { DuoPushHandler } from "./DuoPushHandler";
+import { UmengConfig } from "../config/UmengConfig";
+import { StoreKeys } from "../stores/StoreKeys";
 
 const DOMAIN: number = 0x0000;
-const TAG: string = 'UmengSdk';
+const TAG: string = "UmengSdk";
 
 let sdkInitialized: boolean = false;
-let lastUmengDeviceToken: string = '';
+let lastUmengDeviceToken: string = "";
 
 interface PushMessageParts {
   extra: Record<string, string>;
@@ -28,13 +28,13 @@ export class UmengSdkService {
       return;
     }
     if (UmengConfig.APP_MESSAGE_SECRET.length === 0) {
-      hilog.warn(DOMAIN, TAG, 'APP_MESSAGE_SECRET is empty, skip umeng init');
+      hilog.warn(DOMAIN, TAG, "APP_MESSAGE_SECRET is empty, skip umeng init");
       return;
     }
 
     init();
     sdkInitialized = true;
-    hilog.info(DOMAIN, TAG, 'umeng sdk initialized');
+    hilog.info(DOMAIN, TAG, "umeng sdk initialized");
   }
 
   static getLastUmengDeviceToken(): string {
@@ -42,17 +42,17 @@ export class UmengSdkService {
   }
 
   static handlePushInitCallback(data: Record<string, string>): void {
-    hilog.info(DOMAIN, TAG, 'push init callback: %{public}s', JSON.stringify(data));
+    hilog.info(DOMAIN, TAG, "push init callback: %{public}s", JSON.stringify(data));
 
-    const code = String(data['code'] ?? '');
-    if (code.length > 0 && code !== '0') {
+    const code = String(data["code"] ?? "");
+    if (code.length > 0 && code !== "0") {
       return;
     }
 
-    const umengToken = String(data['data'] ?? data['device_token'] ?? '');
+    const umengToken = String(data["data"] ?? data["device_token"] ?? "");
     if (umengToken.length > 0) {
       lastUmengDeviceToken = umengToken;
-      hilog.info(DOMAIN, TAG, 'umeng device token (后台测试用这个): %{public}s', umengToken);
+      hilog.info(DOMAIN, TAG, "umeng device token (后台测试用这个): %{public}s", umengToken);
     }
 
     setTimeout(() => {
@@ -63,19 +63,22 @@ export class UmengSdkService {
   // 监听友盟推送消息
   static setupPushListeners(): void {
     PushAgent.onNotificationMessage((payload: Record<string, string>) => {
-      hilog.info(DOMAIN, TAG, 'notification arrived (fg/bg): %{public}s', JSON.stringify(payload));
+      hilog.info(DOMAIN, TAG, "notification arrived (fg/bg): %{public}s", JSON.stringify(payload));
       const parts = UmengSdkService.parseNotificationParts(payload as Record<string, Object>);
       const isForeground = UmengSdkService.isAppForeground();
       if (!isForeground) {
         void UmengSdkService.publishLocalNotification(parts);
       }
       void DuoPushHandler.handlePayload(
-        DuoPushHandler.parsePushPayload(parts.extra, parts.customText.length > 0 ? parts.customText : undefined),
+        DuoPushHandler.parsePushPayload(
+          parts.extra,
+          parts.customText.length > 0 ? parts.customText : undefined,
+        ),
         {
           isForeground,
           title: parts.title,
-          text: parts.text
-        }
+          text: parts.text,
+        },
       );
     });
   }
@@ -86,7 +89,7 @@ export class UmengSdkService {
     }
 
     PushAgent.enableNotification(context, (result: Record<string, string>) => {
-      hilog.info(DOMAIN, TAG, 'push notification permission: %{public}s', JSON.stringify(result));
+      hilog.info(DOMAIN, TAG, "push notification permission: %{public}s", JSON.stringify(result));
       void UmengSdkService.logPushDiagnostics();
     });
   }
@@ -99,16 +102,21 @@ export class UmengSdkService {
 
     try {
       const notifyState = await PushAgent.isNotificationEnabled();
-      hilog.info(DOMAIN, TAG, 'notification switch: %{public}s', JSON.stringify(notifyState));
+      hilog.info(DOMAIN, TAG, "notification switch: %{public}s", JSON.stringify(notifyState));
     } catch (error) {
-      hilog.warn(DOMAIN, TAG, 'notification switch check failed: %{public}s', String(error));
+      hilog.warn(DOMAIN, TAG, "notification switch check failed: %{public}s", String(error));
     }
 
     try {
       const thirdToken = await PushAgent.getThirdToken();
-      hilog.info(DOMAIN, TAG, 'huawei third token (厂商通道用,勿填测试设备): %{public}s', JSON.stringify(thirdToken));
+      hilog.info(
+        DOMAIN,
+        TAG,
+        "huawei third token (厂商通道用,勿填测试设备): %{public}s",
+        JSON.stringify(thirdToken),
+      );
     } catch (error) {
-      hilog.warn(DOMAIN, TAG, 'huawei third token failed: %{public}s', String(error));
+      hilog.warn(DOMAIN, TAG, "huawei third token failed: %{public}s", String(error));
     }
   }
 
@@ -118,7 +126,7 @@ export class UmengSdkService {
     }
 
     PushAgent.setAlias(userId, UmengConfig.PUSH_ALIAS_TYPE, (result: Record<string, string>) => {
-      hilog.info(DOMAIN, TAG, 'push alias bound: %{public}s', JSON.stringify(result));
+      hilog.info(DOMAIN, TAG, "push alias bound: %{public}s", JSON.stringify(result));
     });
     onProfileSignIn(UmengConfig.PUSH_ALIAS_TYPE, userId);
   }
@@ -143,7 +151,7 @@ export class UmengSdkService {
     void DuoPushHandler.handlePayload(
       DuoPushHandler.parsePushPayload(pushExtra),
       { isForeground: AppStorage.get<boolean>(StoreKeys.AppIsForeground) ?? false },
-      hostContext
+      hostContext,
     );
   }
 
@@ -153,7 +161,7 @@ export class UmengSdkService {
       return null;
     }
 
-    const payloadText = String(params['focusvow_local_push'] ?? '');
+    const payloadText = String(params["focusvow_local_push"] ?? "");
     if (payloadText.length === 0) {
       return null;
     }
@@ -171,8 +179,8 @@ export class UmengSdkService {
   }
 
   private static async publishLocalNotification(parts: PushMessageParts): Promise<void> {
-    const title = parts.title.length > 0 ? parts.title : '专注契约提醒';
-    const text = parts.text.length > 0 ? parts.text : '你有一条新的专注通知';
+    const title = parts.title.length > 0 ? parts.title : "专注契约提醒";
+    const text = parts.text.length > 0 ? parts.text : "你有一条新的专注通知";
     const request: notificationManager.NotificationRequest = {
       id: UmengSdkService.createNotificationId(parts.msgId),
       notificationSlotType: notificationManager.SlotType.SERVICE_INFORMATION,
@@ -180,9 +188,9 @@ export class UmengSdkService {
         notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
         normal: {
           title,
-          text
-        }
-      }
+          text,
+        },
+      },
     };
     if (parts.msgId.length > 0) {
       request.appMessageId = parts.msgId;
@@ -190,7 +198,10 @@ export class UmengSdkService {
 
     const hostContext = AppContextHolder.getAbility();
     if (hostContext) {
-      const launchAgent: WantAgent | null = await UmengSdkService.buildNotificationWantAgent(hostContext, parts);
+      const launchAgent: WantAgent | null = await UmengSdkService.buildNotificationWantAgent(
+        hostContext,
+        parts,
+      );
       if (launchAgent) {
         request.wantAgent = launchAgent;
       }
@@ -198,40 +209,45 @@ export class UmengSdkService {
 
     try {
       await notificationManager.publish(request);
-      hilog.info(DOMAIN, TAG, 'local notification published: %{public}s', JSON.stringify({
-        title,
-        text,
-        msg_id: parts.msgId
-      }));
+      hilog.info(
+        DOMAIN,
+        TAG,
+        "local notification published: %{public}s",
+        JSON.stringify({
+          title,
+          text,
+          msg_id: parts.msgId,
+        }),
+      );
     } catch (error) {
-      hilog.warn(DOMAIN, TAG, 'local notification publish failed: %{public}s', String(error));
+      hilog.warn(DOMAIN, TAG, "local notification publish failed: %{public}s", String(error));
     }
   }
 
   private static async buildNotificationWantAgent(
     context: common.UIAbilityContext,
-    parts: PushMessageParts
+    parts: PushMessageParts,
   ): Promise<WantAgent | null> {
     const payload = UmengSdkService.clonePushPayload(parts);
-    const wantParameters: Record<string, Object> = {
-      'focusvow_local_push': JSON.stringify(payload)
-    };
+    const wantParameters: Record<string, Object> = {};
+    wantParameters['focusvow_local_push'] = JSON.stringify(payload);
 
+    const launchWant: Want = {
+      bundleName: context.applicationInfo.name,
+      abilityName: "EntryAbility",
+      parameters: wantParameters,
+    };
     const wantInfo: wantAgent.WantAgentInfo = {
-      wants: [{
-        bundleName: context.applicationInfo.name,
-        abilityName: 'EntryAbility',
-        parameters: wantParameters
-      }],
+      wants: [launchWant],
       actionType: wantAgent.OperationType.START_ABILITY,
       requestCode: UmengSdkService.createNotificationId(parts.msgId),
-      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG],
     };
 
     try {
       return await wantAgent.getWantAgent(wantInfo);
     } catch (error) {
-      hilog.warn(DOMAIN, TAG, 'build notification wantAgent failed: %{public}s', String(error));
+      hilog.warn(DOMAIN, TAG, "build notification wantAgent failed: %{public}s", String(error));
       return null;
     }
   }
@@ -244,27 +260,33 @@ export class UmengSdkService {
       payload[key] = parts.extra[key];
     }
     if (parts.customText.length > 0) {
-      payload['custom'] = parts.customText;
+      payload["custom"] = parts.customText;
     }
     return payload;
   }
 
   private static parseNotificationParts(payload: Record<string, Object>): PushMessageParts {
-    const body = UmengSdkService.asObjectRecord(payload['body']);
-    const extra = UmengSdkService.asObjectRecord(payload['extra']);
+    const body = UmengSdkService.asObjectRecord(payload["body"]);
+    const extra = UmengSdkService.asObjectRecord(payload["extra"]);
     const extraRecord = UmengSdkService.toStringRecord(extra ?? payload);
-    const customFromBody = body ? String(body['custom'] ?? '') : '';
-    const customFromPayload = String(payload['custom'] ?? '');
-    const fallbackBodyText = body ? '' : String(payload['body'] ?? '');
+    const customFromBody = body ? String(body["custom"] ?? "") : "";
+    const customFromPayload = String(payload["custom"] ?? "");
+    const fallbackBodyText = body ? "" : String(payload["body"] ?? "");
 
     return {
-      extra: Object.keys(extraRecord).length > 0 ? extraRecord : UmengSdkService.toStringRecord(payload),
-      customText: customFromBody.length > 0
-        ? customFromBody
-        : (customFromPayload.length > 0 ? customFromPayload : fallbackBodyText),
-      title: body ? String(body['title'] ?? '') : String(payload['title'] ?? ''),
-      text: body ? String(body['text'] ?? body['message'] ?? '') : String(payload['text'] ?? payload['message'] ?? ''),
-      msgId: String(payload['msg_id'] ?? payload['message_id'] ?? '')
+      extra:
+        Object.keys(extraRecord).length > 0 ? extraRecord : UmengSdkService.toStringRecord(payload),
+      customText:
+        customFromBody.length > 0
+          ? customFromBody
+          : customFromPayload.length > 0
+            ? customFromPayload
+            : fallbackBodyText,
+      title: body ? String(body["title"] ?? "") : String(payload["title"] ?? ""),
+      text: body
+        ? String(body["text"] ?? body["message"] ?? "")
+        : String(payload["text"] ?? payload["message"] ?? ""),
+      msgId: String(payload["msg_id"] ?? payload["message_id"] ?? ""),
     };
   }
 
@@ -272,7 +294,7 @@ export class UmengSdkService {
     if (value === undefined || value === null) {
       return null;
     }
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       if (value.length === 0) {
         return null;
       }
@@ -294,7 +316,7 @@ export class UmengSdkService {
       if (value === undefined || value === null) {
         continue;
       }
-      result[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      result[key] = typeof value === "object" ? JSON.stringify(value) : String(value);
     }
     return result;
   }
@@ -306,7 +328,7 @@ export class UmengSdkService {
 
     let hash = 0;
     for (let i = 0; i < msgId.length; i++) {
-      hash = ((hash * 31) + msgId.charCodeAt(i)) % 2147483647;
+      hash = (hash * 31 + msgId.charCodeAt(i)) % 2147483647;
     }
     return hash > 0 ? hash : Date.now() % 2147483647;
   }

@@ -44,5 +44,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.DuoWaitIsScheduled, false);
   AppStorage.setOrCreate(StoreKeys.DuoWaitScheduleLabel, '');
   AppStorage.setOrCreate(StoreKeys.DuoWaitDurationMin, 0);
+  AppStorage.setOrCreate(StoreKeys.DuoWaitExpireAtMs, 0);
+  AppStorage.setOrCreate(StoreKeys.DuoWaitStartedAtMs, 0);
   bootstrapped = true;
 }

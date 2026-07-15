@@ -10,6 +10,7 @@ import {
   DuoInstantLockOptions,
   startOrAlignInstantDuoFocus
 } from './DuoInstantLockService';
+import { DuoBgSyncService } from './DuoBgSyncService';
 import { InAppMessageService } from './InAppMessageService';
 import {
   clearScheduledActivationTracking,
@@ -444,7 +445,8 @@ export class DuoPushHandler {
     SettingsStore.hydrate(context);
     const tokens = SettingsStore.getState().selectedTokens;
     const startOptions: DuoInstantLockOptions = {
-      navigateHome: true,
+      // 后台只锁机，不导航；回前台再由页面态对齐
+      navigateHome: _options?.isForeground === true,
       clearWait: true,
       alignToServerEnd: true
     };
@@ -496,6 +498,7 @@ export class DuoPushHandler {
     clearScheduledActivationTracking(sessionId);
     SettingsStore.updateStatusMessage(context, message);
     DuoPushHandler.clearPendingBreach(context);
+    DuoBgSyncService.ensure(context);
 
     if (options?.isForeground) {
       InAppMessageService.dismiss();

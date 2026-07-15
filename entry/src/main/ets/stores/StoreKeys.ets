@@ -28,6 +28,10 @@ export class StoreKeys {
   static readonly DuoWaitIsScheduled: string = 'duo.wait.is_scheduled';
   static readonly DuoWaitScheduleLabel: string = 'duo.wait.schedule_label';
   static readonly DuoWaitDurationMin: string = 'duo.wait.duration_min';
+  /** 即时等待邀请过期时刻（ms），用于后台通知倒计时 */
+  static readonly DuoWaitExpireAtMs: string = 'duo.wait.expire_at_ms';
+  /** 即时等待开始时刻（ms），用于进度圆环 */
+  static readonly DuoWaitStartedAtMs: string = 'duo.wait.started_at_ms';
   static readonly ScheduledSessionCurrentId: string = 'scheduled.session.currentId';
   static readonly ScheduledListAll: string = 'scheduled.list.all';
   static readonly ScheduledListFilter: string = 'scheduled.list.filter';
