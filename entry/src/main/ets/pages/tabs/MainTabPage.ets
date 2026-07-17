@@ -1,37 +1,50 @@
-import { common } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
-import { ActiveLockState, createIdleLockState, normalizeActiveLockState } from '../../models/ActiveLockModel';
-import { MainTabKey } from '../../router/PageRoutes';
-import { endQuickFocus } from '../../services/ActiveLockLifecycleService';
-import { queueHonorCertificate, tryPresentCertificateGuide } from '../../services/CertificatePendingService';
-import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
-import { FocusSyncService } from '../../services/FocusSyncService';
-import { warmUpPreferencesStore } from '../../services/PreferencesService';
-import { reconcileLockLifecycle } from '../../services/LockReconcileService';
-import { CycleGuardStore } from '../../stores/CycleGuardStore';
-import { LockStore } from '../../stores/LockStore';
-import { PlanStore } from '../../stores/PlanStore';
-import { SettingsStore } from '../../stores/SettingsStore';
-import { bootstrapStores } from '../../stores/StoreBootstrap';
-import { StoreKeys } from '../../stores/StoreKeys';
-import { UserStore } from '../../stores/UserStore';
-import { InAppMessageBanner } from '../../components/common/InAppMessageBanner';
-import { MainTabImmersiveLayout } from './MainTabImmersiveLayout';
-import { MainTabLegacyLayout } from './MainTabLegacyLayout';
-import { shouldHideMainTabBar, supportsImmersiveTab } from './MainTabUtil';
+import { common } from "@kit.AbilityKit";
+import { window } from "@kit.ArkUI";
+import {
+  ActiveLockState,
+  createIdleLockState,
+  normalizeActiveLockState,
+} from "../../models/ActiveLockModel";
+import { MainTabKey } from "../../router/PageRoutes";
+import { endQuickFocus } from "../../services/ActiveLockLifecycleService";
+import {
+  queueHonorCertificate,
+  tryPresentCertificateGuide,
+  getPendingCertificate,
+} from "../../services/CertificatePendingService";
+import { DuoInviteClipboardService } from "../../services/DuoInviteClipboardService";
+import { FocusSyncService } from "../../services/FocusSyncService";
+import {
+  afterGuestSoloFocusEnded,
+  onCertificateGuideDismissed,
+} from "../../services/GuestSoloFocusService";
+import { warmUpPreferencesStore } from "../../services/PreferencesService";
+import { reconcileLockLifecycle } from "../../services/LockReconcileService";
+import { CycleGuardStore } from "../../stores/CycleGuardStore";
+import { LockStore } from "../../stores/LockStore";
+import { PlanStore } from "../../stores/PlanStore";
+import { SettingsStore } from "../../stores/SettingsStore";
+import { bootstrapStores } from "../../stores/StoreBootstrap";
+import { StoreKeys } from "../../stores/StoreKeys";
+import { UserStore } from "../../stores/UserStore";
+import { InAppMessageBanner } from "../../components/common/InAppMessageBanner";
+import { MainTabImmersiveLayout } from "./MainTabImmersiveLayout";
+import { MainTabLegacyLayout } from "./MainTabLegacyLayout";
+import { shouldHideMainTabBar, supportsImmersiveTab } from "./MainTabUtil";
 
 bootstrapStores();
 
 @Entry
 @Component
 struct MainTabPage {
-  @State currentTab: MainTabKey = 'focus';
+  @State currentTab: MainTabKey = "focus";
   @State private bottomGestureInsetVp: number = 0;
   @State private useImmersiveTab: boolean = false;
-  @StorageLink(StoreKeys.LockActiveState) @Watch('onActiveLockChanged') activeLock: ActiveLockState =
-    createIdleLockState();
+  @StorageLink(StoreKeys.LockActiveState)
+  @Watch("onActiveLockChanged")
+  activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
-  @StorageLink(StoreKeys.MainTabTarget) @Watch('onMainTabTargetChanged') pendingTab: string = '';
+  @StorageLink(StoreKeys.MainTabTarget) @Watch("onMainTabTargetChanged") pendingTab: string = "";
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
@@ -90,12 +103,14 @@ struct MainTabPage {
   }
 
   private consumePendingTab(): void {
-    if (this.pendingTab === 'focus' ||
-      this.pendingTab === 'plans' ||
-      this.pendingTab === 'stats' ||
-      this.pendingTab === 'profile') {
+    if (
+      this.pendingTab === "focus" ||
+      this.pendingTab === "plans" ||
+      this.pendingTab === "stats" ||
+      this.pendingTab === "profile"
+    ) {
       this.currentTab = this.pendingTab;
-      this.pendingTab = '';
+      this.pendingTab = "";
     }
   }
 
@@ -120,14 +135,18 @@ struct MainTabPage {
     CycleGuardStore.hydrate(hostContext);
     void reconcileLockLifecycle(hostContext);
     tryPresentCertificateGuide(this.getUIContext());
+    // 证书弹窗展示中仍占着 pending；关闭/回首页后再引导登录
+    if (!getPendingCertificate()) {
+      onCertificateGuideDismissed(this.getUIContext());
+    }
 
-    if (this.activeLock.kind === 'quick_focus' && LockStore.shouldAutoFinish()) {
+    if (this.activeLock.kind === "quick_focus" && LockStore.shouldAutoFinish()) {
       void this.finishQuickFocus();
     }
   }
 
   private async finishQuickFocus(): Promise<void> {
-    if (this.activeLock.kind !== 'quick_focus' || this.isEndingLock) {
+    if (this.activeLock.kind !== "quick_focus" || this.isEndingLock) {
       return;
     }
 
@@ -138,26 +157,29 @@ struct MainTabPage {
     const ok = await endQuickFocus(
       hostContext,
       lockSnapshot,
-      '契约已履行',
-      '专注已结束，但解除限制失败'
+      "契约已履行",
+      "专注已结束，但解除限制失败",
     );
-    if (ok) {
+    if (ok && UserStore.isLoggedIn()) {
+      // 已登录：弹荣誉证；游客单人只走登录引导
       queueHonorCertificate(lockSnapshot, endedAt);
       tryPresentCertificateGuide(this.getUIContext());
+    } else {
+      afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
     }
     this.isEndingLock = false;
   }
 
   private handleTabChange(tab: MainTabKey): void {
-    if (shouldHideMainTabBar(this.activeLock) && tab !== 'focus') {
+    if (shouldHideMainTabBar(this.activeLock) && tab !== "focus") {
       return;
     }
     this.currentTab = tab;
   }
 
   private onActiveLockChanged(): void {
-    if (shouldHideMainTabBar(this.activeLock) && this.currentTab !== 'focus') {
-      this.currentTab = 'focus';
+    if (shouldHideMainTabBar(this.activeLock) && this.currentTab !== "focus") {
+      this.currentTab = "focus";
     }
   }
 
@@ -170,8 +192,8 @@ struct MainTabPage {
           hideTabBar: shouldHideMainTabBar(this.activeLock),
           onTabChange: (tab: MainTabKey) => {
             this.handleTabChange(tab);
-          }
-        })
+          },
+        });
       } else {
         MainTabLegacyLayout({
           currentTab: this.currentTab,
@@ -179,13 +201,12 @@ struct MainTabPage {
           hideTabBar: shouldHideMainTabBar(this.activeLock),
           onTabChange: (tab: MainTabKey) => {
             this.handleTabChange(tab);
-          }
-        })
+          },
+        });
       }
-
       InAppMessageBanner()
     }
-    .width('100%')
-    .height('100%')
+    .width("100%")
+    .height("100%");
   }
 }

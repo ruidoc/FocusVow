@@ -18,6 +18,7 @@ import {
   savePersistedActiveLockState,
   savePersistedQuickFocusDurationMinutes
 } from '../services/ActiveLockPersistenceService';
+import { FocusStartedNotifyService } from '../services/FocusStartedNotifyService';
 import { getPlanWindow } from '../services/PlanWindowService';
 import { loadPersistedPlans } from '../services/PlanPersistenceService';
 import { bootstrapStores } from './StoreBootstrap';
@@ -151,6 +152,20 @@ export class LockStore {
     );
     LockStore.setState(context, nextState);
     LockStore.setQuickFocusDurationMinutes(context, durationMinutes);
+
+    // 互督由服务端推送；客户端只报单人锁机（含未登录）
+    const duoSessionId = options?.duoSessionId ?? '';
+    const isDuo =
+      duoSessionId.length > 0 ||
+      options?.participationMode === 'duo';
+    if (!isDuo) {
+      FocusStartedNotifyService.reportSoloStarted(
+        context,
+        durationMinutes,
+        options?.title
+      );
+    }
+
     return nextState;
   }
 }

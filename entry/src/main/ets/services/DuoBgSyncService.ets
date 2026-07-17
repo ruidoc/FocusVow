@@ -51,6 +51,13 @@ let notificationId: number = -1;
 let cachedWantAgent: WantAgent | null = null;
 let lastPublishedText: string = '';
 
+/** 单人 / 搭子专注锁定（不含 cycle_guard） */
+function isFocusLockActive(context: common.Context): boolean {
+  LockStore.hydrate(context);
+  const state = LockStore.getState();
+  return isLocked(state) && (state.kind === 'quick_focus' || state.kind === 'covenant');
+}
+
 function needsBgSync(context: common.Context): boolean {
   const waitId = AppStorage.get<string>(StoreKeys.DuoWaitSessionId) ?? '';
   const waitScheduled = AppStorage.get<boolean>(StoreKeys.DuoWaitIsScheduled) === true;
@@ -58,9 +65,7 @@ function needsBgSync(context: common.Context): boolean {
     return true;
   }
 
-  LockStore.hydrate(context);
-  const state = LockStore.getState();
-  return isLocked(state) && state.participationMode === 'duo';
+  return isFocusLockActive(context);
 }
 
 function isAppForeground(): boolean {
@@ -77,9 +82,8 @@ function elapsedProgress(remainSec: number, totalSec: number): number {
 }
 
 function buildStatusCopy(context: common.Context): StatusCopy {
-  LockStore.hydrate(context);
-  const state = LockStore.getState();
-  if (isLocked(state) && state.participationMode === 'duo') {
+  if (isFocusLockActive(context)) {
+    const state = LockStore.getState();
     const remain = getRemainingSeconds(state, Date.now());
     const totalSec = state.endAt > state.startedAt
       ? Math.max(1, Math.ceil((state.endAt - state.startedAt) / 1000))
@@ -131,7 +135,7 @@ function buildStatusCopy(context: common.Context): StatusCopy {
 }
 
 /**
- * 即时搭子等待 / 互督锁定：仅在退后台时申请 DATA_TRANSFER 长时任务。
+ * 即时搭子等待 / 单人与搭子专注锁定：仅在退后台时申请 DATA_TRANSFER 长时任务。
  * 用同一 notificationId + downloadTemplate 更新系统 LIVE_VIEW 通知。
  * 注意：downloadTemplate 进度色由系统固定（蓝），无法改成品牌色。
  */

@@ -34,6 +34,10 @@ import {
   DuoInstantLockOptions,
   startOrAlignInstantDuoFocus,
 } from "../../services/DuoInstantLockService";
+import {
+  afterGuestSoloFocusEnded,
+  ensureSoloFocusAccess,
+} from "../../services/GuestSoloFocusService";
 import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
 import { SettingsStore } from "../../stores/SettingsStore";
@@ -137,7 +141,11 @@ export struct FocusHomePage {
       return;
     }
 
-    if (session.status === "expired" || session.status === "cancelled" || session.status === "breached") {
+    if (
+      session.status === "expired" ||
+      session.status === "cancelled" ||
+      session.status === "breached"
+    ) {
       clearDuoWaitContext();
       return;
     }
@@ -261,9 +269,12 @@ export struct FocusHomePage {
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const ok = await tearQuickFocus(hostContext, lockSnapshot);
-      if (ok) {
+      if (ok && UserStore.isLoggedIn()) {
+        // 已登录：弹耻辱证；游客单人只走登录引导
         queueShameCertificate(lockSnapshot, endedAt, "violator", "tear");
         tryPresentCertificateGuide(this.getUIContext());
+      } else {
+        afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
       }
       this.remainingLabel = LockStore.getRemainingLabel();
       this.isEndingLock = false;
@@ -580,6 +591,10 @@ export struct FocusHomePage {
       AppActionButton({
         label: "单人专注",
         onPress: () => {
+          const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          if (!ensureSoloFocusAccess(hostContext)) {
+            return;
+          }
           pushRoute(PageRoutes.QuickStart);
         },
       })

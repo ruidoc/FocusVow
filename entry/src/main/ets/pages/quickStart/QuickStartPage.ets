@@ -9,6 +9,7 @@ import {
   chooseRestrictedApps,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
+import { ensureSoloFocusAccess } from '../../services/GuestSoloFocusService';
 import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -99,6 +100,9 @@ struct QuickStartPage {
 
   private async startFocus(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (!ensureSoloFocusAccess(hostContext)) {
+      return;
+    }
     if (LockStore.isLocked()) {
       this.toastError('当前已有进行中的锁定，请先回首页结束后再开始新的专注');
       return;

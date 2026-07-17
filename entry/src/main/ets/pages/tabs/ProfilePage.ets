@@ -20,7 +20,6 @@ const SHOW_MESSAGE_ACTION: boolean = false;
 @Component
 export struct ProfilePage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
-  @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) cycleSelectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
@@ -59,7 +58,7 @@ export struct ProfilePage {
   }
 
   private getPermissionLabel(): string {
-    return this.hasAuthorized ? `已授权 · ${this.selectedAppCount} 个应用` : '未授权';
+    return this.hasAuthorized ? '已授权' : '未授权';
   }
 
   private getCycleStatusLabel(): string {
@@ -175,7 +174,7 @@ export struct ProfilePage {
             pushRoute(PageRoutes.CycleGuardEdit);
           })
         }
-        this.buildMenuRow('权限与应用', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {
+        this.buildMenuRow('权限管理', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {
           pushRoute(PageRoutes.Permission);
         })
         this.buildMenuRow('意见反馈', $r('sys.symbol.ellipsis_message'), '', true, () => {

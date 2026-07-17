@@ -205,6 +205,11 @@ async function getUserAuthGranted(): Promise<boolean> {
   }
 }
 
+/** 查询屏时守护系统授权是否已授予 */
+export async function checkScreenTimeAuthorized(): Promise<boolean> {
+  return getUserAuthGranted();
+}
+
 export async function requestScreenTimeAuthorization(
   context: common.UIAbilityContext
 ): Promise<GuardResult<boolean>> {

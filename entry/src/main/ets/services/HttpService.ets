@@ -91,7 +91,12 @@ export class HttpService {
     skipPendingFlush: boolean = false,
     context?: common.Context
   ): Promise<ApiEnvelope> {
-    if (requiresAuth && !skipPendingFlush && !path.startsWith('/focus/sync')) {
+    if (
+      requiresAuth &&
+      !skipPendingFlush &&
+      !path.startsWith('/focus/sync') &&
+      !path.startsWith('/focus/started')
+    ) {
       const flushContext = context ?? AppContextHolder.get();
       if (flushContext) {
         await FocusSyncService.flushPending(flushContext);
