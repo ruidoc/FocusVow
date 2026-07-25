@@ -315,6 +315,10 @@ export class DuoPushHandler {
     if (endAt && endAt.length > 0) {
       payload.end_at = endAt;
     }
+    const tooShort = record['too_short'];
+    if (tooShort && tooShort.length > 0) {
+      payload.too_short = tooShort;
+    }
     return payload;
   }
 
@@ -491,7 +495,11 @@ export class DuoPushHandler {
       }
     }
 
-    queueShameCertificate(lockSnapshot, Date.now(), 'victim', 'partner_breach');
+    if (payload.too_short === '1' || payload.too_short === 'true') {
+      SettingsStore.updateStatusMessage(context, '专注不足 30 秒，本次不计时');
+    } else {
+      queueShameCertificate(lockSnapshot, Date.now(), 'victim', 'partner_breach');
+    }
     LockStore.clear(context);
     markScheduledListStale(context);
     refreshStats();

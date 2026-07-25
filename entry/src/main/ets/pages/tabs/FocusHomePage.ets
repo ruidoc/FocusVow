@@ -1,12 +1,12 @@
 import { common } from "@kit.AbilityKit";
 import { window } from "@kit.ArkUI";
-import { AppActionButton } from "../../components/common/AppActionButton";
 import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
 import { TEAR_CONFIRM_REQUIRED_TEXT } from "../../constants/TearConfirm";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
+import { UsersIcon } from "../../components/common/UsersIcon";
 import {
   ActiveLockState,
   createIdleLockState,
@@ -58,6 +58,8 @@ export struct FocusHomePage {
   @State remainingLabel: string = LockStore.getRemainingLabel();
   @State showTearConfirm: boolean = false;
   @State topSafeInsetVp: number = 0;
+  /** 单人入口按压缩放透明度，对齐 iOS activeOpacity=0.7 */
+  @State soloLinkPressed: boolean = false;
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
@@ -268,11 +270,13 @@ export struct FocusHomePage {
       this.isEndingLock = true;
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      const ok = await tearQuickFocus(hostContext, lockSnapshot);
-      if (ok && UserStore.isLoggedIn()) {
+      const endResult = await tearQuickFocus(hostContext, lockSnapshot);
+      if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
         // 已登录：弹耻辱证；游客单人只走登录引导
         queueShameCertificate(lockSnapshot, endedAt, "violator", "tear");
         tryPresentCertificateGuide(this.getUIContext());
+      } else if (endResult.ok && endResult.tooShort) {
+        // 短场无效：提示已写在 statusMessage
       } else {
         afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
       }
@@ -285,8 +289,8 @@ export struct FocusHomePage {
       this.isEndingLock = true;
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      const ok = await tearCovenantWindow(hostContext, lockSnapshot);
-      if (ok) {
+      const endResult = await tearCovenantWindow(hostContext, lockSnapshot);
+      if (endResult.ok && !endResult.tooShort) {
         queueShameCertificate(lockSnapshot, endedAt, "violator", "tear");
         tryPresentCertificateGuide(this.getUIContext());
       }
@@ -428,10 +432,14 @@ export struct FocusHomePage {
         .borderRadius(36)
         .backgroundColor(AppTheme.colors.primarySoft)
         .opacity(1)
-      SymbolGlyph(isLockedState ? $r("sys.symbol.lock_fill") : $r("sys.symbol.timer"))
-        .fontSize(40)
-        .fontColor([AppTheme.colors.primary])
-        .fontWeight(500)
+      if (isLockedState) {
+        SymbolGlyph($r("sys.symbol.lock_fill"))
+          .fontSize(40)
+          .fontColor([AppTheme.colors.primary])
+          .fontWeight(500)
+      } else {
+        UsersIcon({ iconSize: 40, color: AppTheme.colors.primary })
+      }
     }
     .width(120)
     .height(120)
@@ -572,59 +580,75 @@ export struct FocusHomePage {
   }
 
   @Builder
+  private buildSoloFocusLink(): void {
+    Row({ space: 4 }) {
+      SymbolGlyph($r("sys.symbol.bolt"))
+        .fontSize(15)
+        .fontColor([AppTheme.colors.primary])
+      Text("先自己练练？单人专注")
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.primary)
+    }
+    .justifyContent(FlexAlign.Center)
+    .height(40)
+    .padding({ left: 12, right: 12 })
+    .opacity(this.soloLinkPressed ? 0.7 : 1)
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.soloLinkPressed = true;
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.soloLinkPressed = false;
+      }
+    })
+    .onClick(() => {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      if (!ensureSoloFocusAccess(hostContext)) {
+        return;
+      }
+      pushRoute(PageRoutes.QuickStart);
+    });
+  }
+
+  @Builder
   private buildEmptyState(): void {
     Column({ space: 18 }) {
       this.buildStatusIcon(false)
       Column({ space: 10 }) {
-        Text("选择一种专注方式")
+        Text("和搭子一起专注")
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
-        Text("先尝试单人专注，熟悉后再和搭子互督。")
+        Text("双人互督，连坐机制，一人毁约两人失败")
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .textAlign(TextAlign.Center)
       }
       .width("100%")
       .alignItems(HorizontalAlign.Center)
-      AppActionButton({
-        label: "单人专注",
-        onPress: () => {
-          const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-          if (!ensureSoloFocusAccess(hostContext)) {
-            return;
-          }
-          pushRoute(PageRoutes.QuickStart);
-        },
-      })
-      Column({ space: 10 }) {
-        Text("搭子互督：一人毁约，两人连坐")
-          .fontSize(16)
-          .fontColor(AppTheme.colors.textSecondary)
-          .textAlign(TextAlign.Center)
-          .width("100%")
-        Row({ space: 12 }) {
-          this.buildDuoActionButton(
-            "发起互督",
-            $r("sys.symbol.person_badge_plus"),
-            AppTheme.colors.accentBlue,
-            () => {
-              this.ensureLoginThen(PageRoutes.DuoCreate);
-            },
-          )
 
-          this.buildDuoActionButton(
-            "加入互督",
-            $r("sys.symbol.link"),
-            AppTheme.colors.accentOrange,
-            () => {
-              this.ensureLoginThen(PageRoutes.DuoJoin);
-            },
-          )
-        }.width("100%")
-      }
-      .margin({ top: 14 })
+      Row({ space: 12 }) {
+        this.buildDuoActionButton(
+          "发起互督",
+          $r("sys.symbol.person_badge_plus"),
+          AppTheme.colors.accentBlue,
+          () => {
+            this.ensureLoginThen(PageRoutes.DuoCreate);
+          },
+        )
+
+        this.buildDuoActionButton(
+          "加入互督",
+          $r("sys.symbol.link"),
+          AppTheme.colors.accentOrange,
+          () => {
+            this.ensureLoginThen(PageRoutes.DuoJoin);
+          },
+        )
+      }.width("100%")
+
+      this.buildSoloFocusLink()
     }
     .width("100%")
     .padding({ left: 12, right: 12 })
@@ -632,22 +656,21 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildDuoWaitEntry(): void {
-    Button() {
-      Row({ space: 14 }) {
+  private buildDuoWaitBanner(): void {
+    Column() {
+      Row({ space: 12 }) {
         Row() {
-          SymbolGlyph($r("sys.symbol.person_fill"))
-            .fontSize(20)
-            .fontColor([AppTheme.colors.primary])
+          UsersIcon({ iconSize: 18, color: AppTheme.colors.primary })
         }
-        .width(40)
-        .height(40)
+        .width(36)
+        .height(36)
         .justifyContent(FlexAlign.Center)
         .backgroundColor(AppTheme.colors.primarySoft)
-        .borderRadius(20)
-        Column({ space: 4 }) {
+        .borderRadius(18)
+
+        Column({ space: 2 }) {
           Text("等待搭子加入")
-            .fontSize(16)
+            .fontSize(15)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
             .width("100%")
@@ -655,26 +678,38 @@ export struct FocusHomePage {
             .fontSize(12)
             .fontColor(AppTheme.colors.textSecondary)
             .width("100%")
-            .maxLines(2)
+            .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
+
         SymbolGlyph($r("sys.symbol.chevron_right"))
           .fontSize(14)
           .fontColor([AppTheme.colors.textMuted])
       }
       .width("100%")
-      .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.primarySoft })
+      .borderRadius(28)
+      // 对齐 iOS：轻阴影（低透明度 + 大模糊），避免 Button 默认材质阴影发硬
+      .shadow({
+        radius: 16,
+        color: '#14000000',
+        offsetX: 0,
+        offsetY: 4,
+      })
+      .onClick(() => {
+        openDuoWaitPage();
+      })
     }
-    .type(ButtonType.Normal)
     .width("100%")
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.primarySoft })
-    .borderRadius(16)
-    .onClick(() => {
-      openDuoWaitPage();
-    });
+    .padding({
+      left: 20,
+      right: 20,
+      top: this.topSafeInsetVp + 6,
+    })
   }
 
   @Builder
@@ -772,14 +807,10 @@ export struct FocusHomePage {
     } else {
       Column({ space: 24 }) {
         this.buildEmptyState()
-
-        if (this.hasPendingDuoWait()) {
-          this.buildDuoWaitEntry();
-        }
-
         this.buildModePanel()
       }
       .width("100%")
+      .padding({ top: this.hasPendingDuoWait() ? 64 : 0 })
       .alignItems(HorizontalAlign.Start);
     }
   }
@@ -794,6 +825,10 @@ export struct FocusHomePage {
           this.buildHomeContent();
         },
       })
+
+      if (!this.isActiveLocked() && this.hasPendingDuoWait()) {
+        this.buildDuoWaitBanner();
+      }
 
       if (this.isActiveLocked() && this.isDuoFocus()) {
         DuoFocusHeader({

@@ -32,6 +32,14 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.UserAccessToken, '');
   AppStorage.setOrCreate(StoreKeys.UserIsLoggedIn, false);
   AppStorage.setOrCreate(StoreKeys.UserInfo, createEmptyUserInfo());
+  AppStorage.setOrCreate(StoreKeys.BenefitDayDuration, 0);
+  AppStorage.setOrCreate(StoreKeys.BenefitTodayUsed, 0);
+  AppStorage.setOrCreate(StoreKeys.BenefitDuoTodayUsed, 0);
+  AppStorage.setOrCreate(StoreKeys.BenefitIsSubscribed, false);
+  AppStorage.setOrCreate(StoreKeys.BenefitMembershipStatus, 'none');
+  AppStorage.setOrCreate(StoreKeys.BenefitCommunityQrUrl, '');
+  AppStorage.setOrCreate(StoreKeys.BenefitCommunityHint, '');
+  AppStorage.setOrCreate(StoreKeys.BenefitFeatures, '');
   AppStorage.setOrCreate(StoreKeys.InAppMessage, createHiddenInAppMessage());
   AppStorage.setOrCreate(StoreKeys.ScheduledListAll, []);
   AppStorage.setOrCreate(StoreKeys.ScheduledListFilter, 'all');

@@ -13,6 +13,7 @@ import {
 } from './FocusSyncPersistenceService';
 import { HttpService } from './HttpService';
 import { loadAccessToken } from './UserPersistenceService';
+import { resolveCountedActualMin } from '../utils/FocusValidity';
 
 let flushing: boolean = false;
 
@@ -32,12 +33,13 @@ export class FocusSyncService {
     context: common.Context,
     state: ActiveLockState,
     result: FocusSyncResult,
-    endedAt: number = Date.now()
+    endedAt: number = Date.now(),
+    failReason: string = ''
   ): void {
     const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
     const actualMin = result === 'SUCCESS'
       ? durationMin
-      : Math.max(0, Math.round((endedAt - state.startedAt) / 60000));
+      : resolveCountedActualMin(state.startedAt, endedAt);
 
     const pending: FocusSyncPending = {
       kind: 'solo_instant',
@@ -51,7 +53,9 @@ export class FocusSyncService {
       mode: state.mode,
       apps: [...state.selectedTokens],
       participation_mode: resolveParticipationMode(state),
-      fail_reason: result === 'VIOLATION' ? 'tear' : ''
+      fail_reason: failReason.length > 0
+        ? failReason
+        : (result === 'VIOLATION' ? 'tear' : '')
     };
     saveFocusSyncPending(context, pending);
   }
@@ -60,12 +64,13 @@ export class FocusSyncService {
     context: common.Context,
     state: ActiveLockState,
     result: FocusSyncResult,
-    endedAt: number = Date.now()
+    endedAt: number = Date.now(),
+    failReason: string = ''
   ): void {
     const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
     const actualMin = result === 'SUCCESS'
       ? durationMin
-      : Math.max(0, Math.round((endedAt - state.startedAt) / 60000));
+      : resolveCountedActualMin(state.startedAt, endedAt);
 
     const pending: FocusSyncPending = {
       kind: 'session_terminal',
@@ -81,7 +86,9 @@ export class FocusSyncService {
       participation_mode: resolveParticipationMode(state),
       duo_session_id: state.duoSessionId,
       record_id: state.recordId,
-      fail_reason: result === 'VIOLATION' ? 'tear' : ''
+      fail_reason: failReason.length > 0
+        ? failReason
+        : (result === 'VIOLATION' ? 'tear' : '')
     };
     saveFocusSyncPending(context, pending);
   }

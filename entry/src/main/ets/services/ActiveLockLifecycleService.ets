@@ -14,8 +14,14 @@ import {
   markScheduledListStale
 } from './ScheduledCovenantService';
 import { SettingsStore } from '../stores/SettingsStore';
+import { isFocusTooShort } from '../utils/FocusValidity';
 
 let endingLock: boolean = false;
+
+export interface FocusLifecycleResult {
+  ok: boolean;
+  tooShort: boolean;
+}
 
 function notifyDuoBgSync(): void {
   DuoBgSyncService.ensure();
@@ -25,7 +31,8 @@ function saveQuickFocusPending(
   context: common.Context,
   state: ActiveLockState,
   result: FocusSyncResult,
-  endedAt: number = Date.now()
+  endedAt: number = Date.now(),
+  failReason: string = ''
 ): void {
   const sessionId = resolveDuoSessionIdFromLock(state);
   console.info(
@@ -48,13 +55,13 @@ function saveQuickFocusPending(
       participationMode: state.participationMode,
       partnerNickname: state.partnerNickname
     };
-    FocusSyncService.saveSessionTerminalPending(context, enriched, result, endedAt);
+    FocusSyncService.saveSessionTerminalPending(context, enriched, result, endedAt, failReason);
     return;
   }
   if (!UserStore.isLoggedIn()) {
     return;
   }
-  FocusSyncService.saveSoloInstantPending(context, state, result, endedAt);
+  FocusSyncService.saveSoloInstantPending(context, state, result, endedAt, failReason);
 }
 
 export async function endQuickFocus(
@@ -63,15 +70,25 @@ export async function endQuickFocus(
   successMessage: string,
   failurePrefix: string,
   markCompleted: boolean = true
-): Promise<boolean> {
+): Promise<FocusLifecycleResult> {
   if (endingLock || state.kind !== 'quick_focus') {
-    return false;
+    return { ok: false, tooShort: false };
   }
 
   endingLock = true;
   try {
+    const endedAt = Date.now();
+    const tooShort = isFocusTooShort(state.startedAt, endedAt);
+
     if (markCompleted) {
-      saveQuickFocusPending(context, state, 'SUCCESS');
+      if (tooShort) {
+        const sessionId = resolveDuoSessionIdFromLock(state);
+        if (sessionId.length > 0) {
+          saveQuickFocusPending(context, state, 'VIOLATION', endedAt, 'too_short');
+        }
+      } else {
+        saveQuickFocusPending(context, state, 'SUCCESS', endedAt);
+      }
     }
 
     const result = await releaseScreenRestriction(state.selectedTokens, state.mode);
@@ -82,12 +99,14 @@ export async function endQuickFocus(
     }
     SettingsStore.updateStatusMessage(
       context,
-      result.ok ? successMessage : `${failurePrefix}：${result.message}`
+      result.ok
+        ? (tooShort ? '专注不足 30 秒，本次不计时' : successMessage)
+        : `${failurePrefix}：${result.message}`
     );
-    if (result.ok && markCompleted) {
+    if (result.ok && markCompleted && !tooShort) {
       refreshStats();
     }
-    return result.ok;
+    return { ok: result.ok, tooShort };
   } finally {
     endingLock = false;
   }
@@ -96,14 +115,24 @@ export async function endQuickFocus(
 export async function tearQuickFocus(
   context: common.UIAbilityContext,
   state: ActiveLockState
-): Promise<boolean> {
+): Promise<FocusLifecycleResult> {
   if (endingLock || state.kind !== 'quick_focus') {
-    return false;
+    return { ok: false, tooShort: false };
   }
 
   endingLock = true;
   try {
-    saveQuickFocusPending(context, state, 'VIOLATION');
+    const endedAt = Date.now();
+    const tooShort = isFocusTooShort(state.startedAt, endedAt);
+    const sessionId = resolveDuoSessionIdFromLock(state);
+
+    if (tooShort) {
+      if (sessionId.length > 0) {
+        saveQuickFocusPending(context, state, 'VIOLATION', endedAt, 'too_short');
+      }
+    } else {
+      saveQuickFocusPending(context, state, 'VIOLATION', endedAt);
+    }
 
     const result = await releaseScreenRestriction(state.selectedTokens, state.mode);
     await FocusSyncService.flushPending(context);
@@ -113,12 +142,14 @@ export async function tearQuickFocus(
     }
     SettingsStore.updateStatusMessage(
       context,
-      result.ok ? '契约已撕毁' : `撕毁失败：${result.message}`
+      result.ok
+        ? (tooShort ? '专注不足 30 秒，本次不计时' : '契约已撕毁')
+        : `撕毁失败：${result.message}`
     );
-    if (result.ok) {
+    if (result.ok && !tooShort) {
       refreshStats();
     }
-    return result.ok;
+    return { ok: result.ok, tooShort };
   } finally {
     endingLock = false;
   }
@@ -128,35 +159,45 @@ export async function syncScheduledCovenantTerminal(
   context: common.Context,
   state: ActiveLockState,
   result: FocusSyncResult
-): Promise<void> {
+): Promise<boolean> {
   const sessionId = resolveDuoSessionIdFromLock(state);
   if (sessionId.length === 0) {
-    return;
+    return false;
   }
 
-  if (result === 'VIOLATION') {
-    saveQuickFocusPending(context, state, 'VIOLATION');
+  const endedAt = Date.now();
+  const tooShort = isFocusTooShort(state.startedAt, endedAt);
+
+  if (result === 'VIOLATION' || tooShort) {
+    saveQuickFocusPending(
+      context,
+      state,
+      'VIOLATION',
+      endedAt,
+      tooShort ? 'too_short' : ''
+    );
     await FocusSyncService.flushPending(context);
-    return;
+    return tooShort;
   }
 
   await DuoApiService.completeScheduledWindow(sessionId, context);
   if (UserStore.isLoggedIn()) {
     await FocusSyncService.flushPending(context);
   }
+  return false;
 }
 
 export async function tearCovenantWindow(
   context: common.UIAbilityContext,
   state: ActiveLockState
-): Promise<boolean> {
+): Promise<FocusLifecycleResult> {
   if (endingLock || state.kind !== 'covenant') {
-    return false;
+    return { ok: false, tooShort: false };
   }
 
   endingLock = true;
   try {
-    await syncScheduledCovenantTerminal(context, state, 'VIOLATION');
+    const tooShort = await syncScheduledCovenantTerminal(context, state, 'VIOLATION');
     const sessionId = resolveDuoSessionIdFromLock(state);
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
     LockStore.clear(context);
@@ -166,12 +207,14 @@ export async function tearCovenantWindow(
     await restartCycleGuardIfEnabled(context);
     SettingsStore.updateStatusMessage(
       context,
-      stopResult.ok ? '契约已撕毁' : `撕毁失败：${stopResult.message}`
+      stopResult.ok
+        ? (tooShort ? '专注不足 30 秒，本次不计时' : '契约已撕毁')
+        : `撕毁失败：${stopResult.message}`
     );
-    if (stopResult.ok) {
+    if (stopResult.ok && !tooShort) {
       refreshStats();
     }
-    return stopResult.ok;
+    return { ok: stopResult.ok, tooShort };
   } finally {
     endingLock = false;
   }

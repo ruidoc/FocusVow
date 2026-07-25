@@ -23,6 +23,7 @@ struct RegisterPage {
   @State sendingCode: boolean = false;
   @State codeCountdown: number = 0;
   @State agreedToTerms: boolean = false;
+  @State switchLinkPressed: boolean = false;
 
   private countdownTimerId: number = -1;
 
@@ -253,11 +254,18 @@ struct RegisterPage {
           this.agreedToTerms = agreed;
         },
       })
-      Button("已有账号？去登录")
-        .type(ButtonType.Normal)
-        .backgroundColor(Color.Transparent)
-        .fontColor(AppTheme.colors.primary)
+      Text("已有账号？去登录")
         .fontSize(15)
+        .fontColor(AppTheme.colors.primary)
+        .opacity(this.switchLinkPressed ? 0.7 : 1)
+        .padding({ top: 8, bottom: 8 })
+        .onTouch((event: TouchEvent) => {
+          if (event.type === TouchType.Down) {
+            this.switchLinkPressed = true;
+          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+            this.switchLinkPressed = false;
+          }
+        })
         .onClick(() => {
           replaceRoute(PageRoutes.Login);
         })

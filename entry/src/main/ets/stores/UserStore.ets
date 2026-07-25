@@ -7,6 +7,7 @@ import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
 import { clearAllScheduledGuardOnLogout, syncAllScheduledGuardOnLogin } from '../services/ScheduledCovenantService';
 import { PlanStore } from './PlanStore';
 import { CycleGuardStore } from './CycleGuardStore';
+import { BenefitStore } from './BenefitStore';
 import { UmengSdkService } from '../services/UmengSdkService';
 import {
   clearUserSession,
@@ -135,6 +136,7 @@ export class UserStore {
     CycleGuardStore.hydrate(context);
     UmengSdkService.clearUserAlias();
     clearUserSession(context);
+    BenefitStore.reset();
     syncAppStorageValue(StoreKeys.UserAccessToken, '');
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, false);
     syncAppStorageValue(StoreKeys.UserInfo, createEmptyUserInfo());

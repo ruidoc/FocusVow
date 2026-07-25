@@ -17,6 +17,14 @@ export class StoreKeys {
   static readonly UserAccessToken: string = 'user.accessToken';
   static readonly UserIsLoggedIn: string = 'user.isLoggedIn';
   static readonly UserInfo: string = 'user.info';
+  static readonly BenefitDayDuration: string = 'benefit.dayDuration';
+  static readonly BenefitTodayUsed: string = 'benefit.todayUsed';
+  static readonly BenefitDuoTodayUsed: string = 'benefit.duoTodayUsed';
+  static readonly BenefitIsSubscribed: string = 'benefit.isSubscribed';
+  static readonly BenefitMembershipStatus: string = 'benefit.membershipStatus';
+  static readonly BenefitCommunityQrUrl: string = 'benefit.communityQrUrl';
+  static readonly BenefitCommunityHint: string = 'benefit.communityHint';
+  static readonly BenefitFeatures: string = 'benefit.features';
   static readonly AppForegroundAt: string = 'app.foregroundAt';
   static readonly AppIsForeground: string = 'app.isForeground';
   static readonly InAppMessage: string = 'app.inAppMessage';

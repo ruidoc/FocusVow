@@ -1,5 +1,4 @@
 import { common } from '@kit.AbilityKit';
-import { pasteboard } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
@@ -25,19 +24,21 @@ import { StoreKeys } from '../../stores/StoreKeys';
 
 bootstrapStores();
 
+const CODE_LENGTH: number = 6;
+
 @Entry
 @Component
 struct DuoJoinPage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
-  @State tokenInput: string = '';
+  @State code: string = '';
   @State preview: DuoSessionView | null = null;
   @State isLoadingPreview: boolean = false;
   @State isSubmitting: boolean = false;
 
   aboutToDisappear(): void {
-    const token = extractDuoInviteToken(this.tokenInput);
+    const token = this.code.replace(/\D/g, '').slice(0, CODE_LENGTH);
     if (token.length > 0) {
       DuoInviteClipboardService.dismissToken(token);
     }
@@ -54,8 +55,11 @@ struct DuoJoinPage {
 
     const stashedToken = DuoInviteClipboardService.consumeJoinToken();
     if (stashedToken.length > 0) {
-      this.tokenInput = stashedToken;
-      void this.loadPreview();
+      const digits = extractDuoInviteToken(stashedToken).replace(/\D/g, '').slice(0, CODE_LENGTH);
+      if (digits.length === CODE_LENGTH) {
+        this.code = digits;
+        void this.loadPreview();
+      }
     }
   }
 
@@ -63,38 +67,39 @@ struct DuoJoinPage {
     showErrorToast(message, this.getUIContext());
   }
 
-  private async pasteInvite(): Promise<void> {
-    try {
-      const systemPasteboard = pasteboard.getSystemPasteboard();
-      const data = await systemPasteboard.getData();
-      const text = data.getPrimaryText() ?? '';
-      if (text.trim().length === 0) {
-        this.toastError('剪贴板里没有可用口令');
-        return;
-      }
-      this.tokenInput = text;
-      await this.loadPreview();
-    } catch (error) {
-      this.toastError(`读取剪贴板失败：${String(error)}`);
-    }
+  private normalizeCode(raw: string): string {
+    return raw.replace(/\D/g, '').slice(0, CODE_LENGTH);
   }
 
   private async loadPreview(): Promise<void> {
     if (this.isLoadingPreview) {
       return;
     }
-    const token = extractDuoInviteToken(this.tokenInput);
-    if (token.length === 0) {
-      this.toastError('未找到有效口令');
+    const token = this.normalizeCode(this.code);
+    if (token.length !== CODE_LENGTH) {
       return;
     }
     this.isLoadingPreview = true;
     const response = await DuoApiService.getByToken(token);
     this.preview = DuoApiService.parseSession(response);
     if (!this.preview) {
-      this.toastError(response.message ?? '无法识别口令');
+      this.toastError(response.message ?? '口令无效');
+      this.code = '';
     }
     this.isLoadingPreview = false;
+  }
+
+  private resetInput(): void {
+    this.preview = null;
+    this.code = '';
+  }
+
+  private onCodeChange(value: string): void {
+    if (this.isLoadingPreview) {
+      return;
+    }
+    this.code = this.normalizeCode(value);
+    this.preview = null;
   }
 
   private async chooseApps(): Promise<void> {
@@ -142,7 +147,7 @@ struct DuoJoinPage {
     }
 
     this.isSubmitting = true;
-    const token = extractDuoInviteToken(this.tokenInput);
+    const token = this.normalizeCode(this.code);
     const response = this.preview.type === 'scheduled'
       ? await DuoApiService.scheduledJoin(token, [...this.selectedTokens])
       : await DuoApiService.instantJoin(token, this.selectedTokens.length);
@@ -202,153 +207,210 @@ struct DuoJoinPage {
   }
 
   @Builder
-  private buildPreviewCard(): void {
-    if (this.preview !== null) {
-      Column({ space: 10 }) {
-        Text('契约信息')
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
-
-        Text(this.preview.title)
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
-
-        Text(this.preview.type === 'scheduled'
-          ? '定时契约 · 到点一起履约'
-          : `时长 ${this.preview.duration_min} 分钟 · 白名单模式`)
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
-
-        if (this.preview.initiator) {
-          Text(`发起人：${this.preview.initiator.nickname}`)
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width('100%')
-        }
-      }
-      .width('100%')
-      .padding(20)
-      .alignItems(HorizontalAlign.Start)
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: AppTheme.colors.border })
-      .borderRadius(AppTheme.radius.lg)
+  private buildDigitBox(index: number): void {
+    Column() {
+      Text(index < this.code.length ? this.code[index] : '')
+        .fontSize(22)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
     }
+    .width(44)
+    .height(48)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({
+      width: this.code.length === index ? 2 : 1,
+      color: this.code.length === index
+        ? AppTheme.colors.primary
+        : (index < this.code.length ? AppTheme.colors.primarySoft : AppTheme.colors.border)
+    })
+    .borderRadius(16)
   }
 
   @Builder
-  private buildAppCard(): void {
-    Column({ space: 14 }) {
-      Row() {
-        Text('要放行的应用')
-          .layoutWeight(1)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
+  private buildCodeInput(): void {
+    Column({ space: 20 }) {
+      Text('输入搭子分享的 6 位口令')
+        .fontSize(15)
+        .fontColor(AppTheme.colors.textSecondary)
+        .textAlign(TextAlign.Center)
+        .width('100%')
 
-        Text('+ 选择')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.primary)
+      Stack() {
+        Row({ space: 10 }) {
+          ForEach([0, 1, 2, 3, 4, 5], (index: number) => {
+            this.buildDigitBox(index)
+          })
+        }
+        .justifyContent(FlexAlign.Center)
+        .opacity(this.isLoadingPreview ? 0.7 : 1)
+
+        TextInput({ text: this.code, placeholder: '' })
+          .width(314)
+          .height(48)
+          .opacity(0.02)
+          .caretColor(Color.Transparent)
+          .maxLength(CODE_LENGTH)
+          .type(InputType.Number)
+          .enabled(!this.isLoadingPreview)
+          .onChange((value: string) => {
+            this.onCodeChange(value);
+          })
+      }
+      .width(314)
+      .height(48)
+      .alignContent(Alignment.Center)
+
+      Button(this.isLoadingPreview ? '识别中' : '识别口令')
+        .width(280)
+        .height(48)
+        .type(ButtonType.Capsule)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .enabled(!this.isLoadingPreview && this.code.length === CODE_LENGTH)
+        .opacity(!this.isLoadingPreview && this.code.length === CODE_LENGTH ? 1 : 0.55)
+        .onClick(() => {
+          void this.loadPreview();
+        })
+    }
+    .width('100%')
+    .padding({ top: 24 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  private buildPreviewSection(): void {
+    if (this.preview !== null) {
+      Column({ space: 14 }) {
+        Column({ space: 12 }) {
+          Row() {
+            Text('识别结果')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.primary)
+
+            Blank()
+
+            Text(this.code)
+              .fontSize(13)
+              .fontColor(AppTheme.colors.textMuted)
+              .letterSpacing(2)
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+
+          Column({ space: 6 }) {
+            Text(this.preview.title)
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.colors.textPrimary)
+              .width('100%')
+
+            Text(this.preview.type === 'scheduled'
+              ? '定时契约 · 到点一起履约'
+              : `时长 ${this.preview.duration_min} 分钟 · 白名单模式`)
+              .fontSize(14)
+              .fontColor(AppTheme.colors.textSecondary)
+              .width('100%')
+
+            if (this.preview.initiator) {
+              Text(`发起人：${this.preview.initiator.nickname}`)
+                .fontSize(14)
+                .fontColor(AppTheme.colors.textSecondary)
+                .width('100%')
+            }
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
+        .width('100%')
+        .padding(16)
+        .alignItems(HorizontalAlign.Start)
+        .backgroundColor(AppTheme.colors.surface)
+        .borderRadius(AppTheme.radius.lg)
+
+        Column({ space: 14 }) {
+          Row() {
+            Text('要放行的应用')
+              .layoutWeight(1)
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+
+            Text('+ 选择')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.primary)
+              .onClick(() => {
+                void this.chooseApps();
+              })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+
+          if (this.selectedAppCount === 0) {
+            Text('未选择应用')
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textMuted)
+              .width('100%')
+          } else {
+            Text(`已选 ${this.selectedAppCount} 个应用`)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textSecondary)
+              .width('100%')
+          }
+        }
+        .width('100%')
+        .padding(20)
+        .alignItems(HorizontalAlign.Start)
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .borderRadius(AppTheme.radius.lg)
+
+        if (this.preview.type !== 'scheduled') {
+          Text('建议确认发起人已打开 App 后再加入，以便同时开始。')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.warning)
+            .width('100%')
+        }
+
+        Button(this.preview.type === 'scheduled' ? '确认加入' : '确认加入并开始')
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Capsule)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .backgroundColor(AppTheme.colors.primary)
+          .fontColor('#FFFFFF')
+          .enabled(!this.isSubmitting)
+          .opacity(this.isSubmitting ? 0.55 : 1)
           .onClick(() => {
-            void this.chooseApps();
+            void this.confirmJoin();
+          })
+
+        Text('口令不对？重新输入')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textMuted)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 4, bottom: 4 })
+          .onClick(() => {
+            this.resetInput();
           })
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      if (this.selectedAppCount === 0) {
-        Text('未选择应用')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textMuted)
-          .width('100%')
-      } else {
-        Text(`已选 ${this.selectedAppCount} 个应用`)
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
-      }
+      .alignItems(HorizontalAlign.Start)
     }
-    .width('100%')
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
   }
 
   @Builder
   private buildPageBody(): void {
-    Column({ space: 18 }) {
-      Text('粘贴或输入搭子的口令，确认契约信息后加入')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-
-      Column({ space: 12 }) {
-        TextInput({ text: this.tokenInput, placeholder: '粘贴口令，例如 $12345678$' })
-          .width('100%')
-          .height(44)
-          .onChange((value: string) => {
-            this.tokenInput = value;
-            this.preview = null;
-          })
-
-        Row({ space: 12 }) {
-          Button('粘贴口令')
-            .layoutWeight(1)
-            .height(44)
-            .type(ButtonType.Capsule)
-            .backgroundColor(AppTheme.colors.surfaceRaised)
-            .fontColor(AppTheme.colors.textPrimary)
-            .border({ width: 1, color: AppTheme.colors.border })
-            .onClick(() => {
-              void this.pasteInvite();
-            })
-
-          Button(this.isLoadingPreview ? '识别中...' : '识别口令')
-            .layoutWeight(1)
-            .height(44)
-            .type(ButtonType.Capsule)
-            .backgroundColor(AppTheme.colors.primary)
-            .fontColor('#FFFFFF')
-            .enabled(!this.isLoadingPreview)
-            .opacity(this.isLoadingPreview ? 0.55 : 1)
-            .onClick(() => {
-              void this.loadPreview();
-            })
-        }
-        .width('100%')
+    Column({ space: 14 }) {
+      if (this.preview === null) {
+        this.buildCodeInput()
+      } else {
+        this.buildPreviewSection()
       }
-      .width('100%')
-
-      this.buildPreviewCard()
-      this.buildAppCard()
-
-      if (this.preview !== null && this.preview.type !== 'scheduled') {
-        Text('建议确认发起人已打开 App 后再加入，以便同时开始。')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.warning)
-          .width('100%')
-      }
-
-      Button(this.preview?.type === 'scheduled' ? '确认加入' : '确认加入并开始')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Capsule)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
-        .enabled(!this.isSubmitting && this.preview !== null)
-        .opacity(!this.isSubmitting && this.preview !== null ? 1 : 0.55)
-        .onClick(() => {
-          void this.confirmJoin();
-        })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

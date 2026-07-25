@@ -16,6 +16,7 @@ struct LoginPage {
   @State password: string = '';
   @State loading: boolean = false;
   @State agreedToTerms: boolean = false;
+  @State switchLinkPressed: boolean = false;
 
   private isFormValid(): boolean {
     return EMAIL_PATTERN.test(this.email.trim()) &&
@@ -119,11 +120,18 @@ struct LoginPage {
         }
       })
 
-      Button('还没有账号？去注册')
-        .type(ButtonType.Normal)
-        .backgroundColor(Color.Transparent)
-        .fontColor(AppTheme.colors.primary)
+      Text('还没有账号？去注册')
         .fontSize(15)
+        .fontColor(AppTheme.colors.primary)
+        .opacity(this.switchLinkPressed ? 0.7 : 1)
+        .padding({ top: 8, bottom: 8 })
+        .onTouch((event: TouchEvent) => {
+          if (event.type === TouchType.Down) {
+            this.switchLinkPressed = true;
+          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+            this.switchLinkPressed = false;
+          }
+        })
         .onClick(() => {
           replaceRoute(PageRoutes.Register);
         })

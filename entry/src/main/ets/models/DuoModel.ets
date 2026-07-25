@@ -132,6 +132,8 @@ export interface DuoPushPayload {
   duration_min?: string;
   active_at?: string;
   end_at?: string;
+  /** '1' 表示短场无效 */
+  too_short?: string;
 }
 
 export interface PushDispatchOptions {

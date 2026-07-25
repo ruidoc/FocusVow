@@ -30,6 +30,7 @@ export class PageRoutes {
   static readonly Feedback: string = 'pages/settings/FeedbackPage';
   static readonly Login: string = 'pages/login/LoginPage';
   static readonly Register: string = 'pages/login/RegisterPage';
+  static readonly Redeem: string = 'pages/user/RedeemPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {

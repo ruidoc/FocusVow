@@ -9,6 +9,7 @@ import {
 import { ActiveLockState } from '../models/ActiveLockModel';
 import { DuoShameRecord, DuoTimelineRecord, getDuoPartnerDisplayName } from '../models/DuoModel';
 import { UserInfo } from '../models/UserModel';
+import { resolveCountedActualMin } from '../utils/FocusValidity';
 
 function formatIsoFromMs(ms: number): string {
   const date = new Date(ms);
@@ -32,7 +33,8 @@ function getElapsedMinutesFromLock(lock: ActiveLockState, endedAt: number): numb
   if (lock.startedAt <= 0) {
     return 1;
   }
-  return Math.max(1, Math.round((endedAt - lock.startedAt) / 60000));
+  const counted = resolveCountedActualMin(lock.startedAt, endedAt);
+  return counted > 0 ? counted : 1;
 }
 
 function getLockTitle(lock: ActiveLockState): string {

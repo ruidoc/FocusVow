@@ -19,6 +19,7 @@
     "pages/settings/AboutPage",
     "pages/settings/FeedbackPage",
     "pages/login/LoginPage",
-    "pages/login/RegisterPage"
+    "pages/login/RegisterPage",
+    "pages/user/RedeemPage"
   ]
 }

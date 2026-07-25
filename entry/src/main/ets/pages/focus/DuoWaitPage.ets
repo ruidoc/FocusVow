@@ -19,15 +19,18 @@ import { UserStore } from "../../stores/UserStore";
 
 bootstrapStores();
 
-/** 取件码分组：前 4 + 后 4 */
+/** 取件码分组：前 3 + 后 3（兼容旧版 8 位） */
 function splitPickupCode(token: string): string[] {
   const digits = token.replace(/\D/g, "");
+  if (digits.length === 6) {
+    return [digits.slice(0, 3), digits.slice(3)];
+  }
   if (digits.length === 8) {
     return [digits.slice(0, 4), digits.slice(4)];
   }
   const trimmed = token.trim();
   if (trimmed.length === 0) {
-    return ["····", "····"];
+    return ["···", "···"];
   }
   return [trimmed];
 }
@@ -454,7 +457,7 @@ struct DuoWaitPage {
           (part: string, index: number) => `${index}-${part}`,
         )
       }
-      Text("搭子在「加入互督」中输入这 8 位数字即可")
+      Text("搭子在「加入互督」中输入这 6 位数字即可")
         .fontSize(12)
         .fontColor(AppTheme.colors.textMuted)
         .textAlign(TextAlign.Center)

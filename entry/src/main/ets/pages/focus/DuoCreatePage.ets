@@ -206,13 +206,13 @@ struct DuoCreatePage {
   private buildPageBody(): void {
     Column({ space: 18 }) {
       Column({ space: 8 }) {
-        Text('和搭子一起立约')
+        Text('邀请搭子一起开始')
           .fontSize(24)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .width('100%')
 
-        Text('对方加入后双方同时开始。一人撕毁，两人都会记为失败。')
+        Text('对方加入后同时开始；一人撕毁，两人失败。')
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
@@ -255,7 +255,7 @@ struct DuoCreatePage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '搭子互督',
+        title: '发起互督',
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

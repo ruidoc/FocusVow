@@ -4,6 +4,7 @@ import { common } from '@kit.AbilityKit';
 import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
+import { BenefitStore } from '../../stores/BenefitStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -14,8 +15,17 @@ bootstrapStores();
 /** 娱乐限额入口暂时隐藏，恢复时改为 true */
 const SHOW_CYCLE_GUARD_MENU: boolean = false;
 
-/** 顶部「消息」入口暂时隐藏，恢复时改为 true */
-const SHOW_MESSAGE_ACTION: boolean = false;
+/** 会员卡片暂时隐藏，恢复时改为 true */
+const SHOW_MEMBERSHIP_CARD: boolean = false;
+
+function formatMinutesLabel(min: number): string {
+  if (min >= 60) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m > 0 ? `${h}小时${m}分钟` : `${h}小时`;
+  }
+  return `${min}分钟`;
+}
 
 @Component
 export struct ProfilePage {
@@ -24,13 +34,21 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.CycleGuardEnabled) cycleEnabled: boolean = false;
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
+  @StorageLink(StoreKeys.BenefitDayDuration) dayDuration: number = 0;
+  @StorageLink(StoreKeys.BenefitDuoTodayUsed) duoTodayUsed: number = 0;
+  @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
+  @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = 'none';
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.hydrate(hostContext);
     SettingsStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
+    BenefitStore.hydrate(hostContext);
     void UserStore.syncRemoteIfLoggedIn(hostContext);
+    if (UserStore.isLoggedIn()) {
+      void BenefitStore.refresh();
+    }
   }
 
   private getDisplayName(): string {
@@ -57,12 +75,55 @@ export struct ProfilePage {
     pushRoute(PageRoutes.Login);
   }
 
+  private openRedeemPage(): void {
+    if (!this.isLoggedIn) {
+      pushRoute(PageRoutes.Login);
+      return;
+    }
+    pushRoute(PageRoutes.Redeem);
+  }
+
   private getPermissionLabel(): string {
     return this.hasAuthorized ? '已授权' : '未授权';
   }
 
   private getCycleStatusLabel(): string {
     return this.cycleEnabled ? '生效中' : '未生效';
+  }
+
+  private isMembershipActive(): boolean {
+    return this.isSubscribed || this.membershipStatus === 'active';
+  }
+
+  private isMembershipPending(): boolean {
+    return !this.isMembershipActive() && this.membershipStatus === 'pending';
+  }
+
+  private getMemberTitle(): string {
+    if (this.isMembershipActive()) {
+      return 'Pro 会员';
+    }
+    if (this.isMembershipPending()) {
+      return '已兑换 · 待激活';
+    }
+    return 'Pro 会员';
+  }
+
+  private getMemberDesc(): string {
+    if (this.isMembershipActive()) {
+      return '每日搭子互督不限额度';
+    }
+    if (this.isMembershipPending()) {
+      return '加群后完成激活，即可解锁无限互督';
+    }
+    return '兑换会员，解锁每日无限搭子互督';
+  }
+
+  private getQuotaProgress(): number {
+    if (this.dayDuration <= 0) {
+      return 0;
+    }
+    return Math.min(this.duoTodayUsed / this.dayDuration, 1);
   }
 
   @Builder
@@ -117,6 +178,77 @@ export struct ProfilePage {
   }
 
   @Builder
+  private buildMembershipCard(): void {
+    if (this.isLoggedIn) {
+      Column({ space: 12 }) {
+        Row() {
+          Column({ space: 4 }) {
+            Text(this.getMemberTitle())
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#D4A44A')
+              .width('100%')
+
+            Text(this.getMemberDesc())
+              .fontSize(12)
+              .fontColor('#8A8A9890')
+              .width('100%')
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          if (!this.isMembershipActive()) {
+            Button(this.isMembershipPending() ? '去激活' : '兑换')
+              .height(32)
+              .padding({ left: 14, right: 14 })
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#461702')
+              .backgroundColor('#D4A44A')
+              .borderRadius(16)
+              .onClick(() => {
+                this.openRedeemPage();
+              })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        if (!this.isMembershipActive() && this.dayDuration > 0) {
+          Column({ space: 6 }) {
+            Row() {
+              Text('今日互督时长')
+                .fontSize(12)
+                .fontColor(AppTheme.colors.textSecondary)
+              Blank()
+              Text(`${formatMinutesLabel(this.duoTodayUsed)} / ${formatMinutesLabel(this.dayDuration)}`)
+                .fontSize(12)
+                .fontColor(this.duoTodayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.textSecondary)
+            }
+            .width('100%')
+
+            Progress({ value: this.getQuotaProgress() * 100, total: 100, type: ProgressType.Linear })
+              .width('100%')
+              .height(4)
+              .color(this.duoTodayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.primary)
+              .backgroundColor('#EEF1F6')
+          }
+          .width('100%')
+        }
+      }
+      .width('100%')
+      .padding(18)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: '#F1F3F8' })
+      .borderRadius(24)
+      .onClick(() => {
+        this.openRedeemPage();
+      })
+    }
+  }
+
+  @Builder
   private buildMenuRow(title: string, symbol: Resource, value: string, showDivider: boolean, onPress: () => void): void {
     Button() {
       Column({ space: 0 }) {
@@ -167,6 +299,9 @@ export struct ProfilePage {
   private buildProfileContent(): void {
     Column({ space: 18 }) {
       this.buildProfileCard()
+      if (SHOW_MEMBERSHIP_CARD) {
+        this.buildMembershipCard()
+      }
 
       Column({ space: 0 }) {
         if (SHOW_CYCLE_GUARD_MENU) {
@@ -200,14 +335,9 @@ export struct ProfilePage {
   build() {
     SystemNavPage({
       title: '我的',
-      showAction: SHOW_MESSAGE_ACTION,
-      actionLabel: '消息',
-      actionIcon: $r('sys.symbol.bell'),
-      horizontalPadding: 14,
-      contentSpace: 18,
-      content: (): void => {
-        this.buildProfileContent();
-      }
-    })
+      showBack: false
+    }) {
+      this.buildProfileContent()
+    }
   }
 }

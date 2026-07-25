@@ -154,17 +154,17 @@ struct MainTabPage {
     const lockSnapshot = normalizeActiveLockState(this.activeLock);
     const endedAt = Date.now();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const ok = await endQuickFocus(
+    const endResult = await endQuickFocus(
       hostContext,
       lockSnapshot,
       "契约已履行",
       "专注已结束，但解除限制失败",
     );
-    if (ok && UserStore.isLoggedIn()) {
+    if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
       // 已登录：弹荣誉证；游客单人只走登录引导
       queueHonorCertificate(lockSnapshot, endedAt);
       tryPresentCertificateGuide(this.getUIContext());
-    } else {
+    } else if (!(endResult.ok && endResult.tooShort)) {
       afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
     }
     this.isEndingLock = false;
