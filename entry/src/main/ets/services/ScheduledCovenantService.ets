@@ -66,9 +66,6 @@ export function buildGuardSnapshotFromSession(session: DuoSessionView): Schedule
     return null;
   }
   const apps = parseStringArray(session.my_apps);
-  if (apps.length === 0) {
-    return null;
-  }
   const startTime = session.schedule_start && session.schedule_start.length > 0
     ? session.schedule_start
     : String(session.schedule_json?.['start'] ?? '09:00');
@@ -78,7 +75,10 @@ export function buildGuardSnapshotFromSession(session: DuoSessionView): Schedule
   const repeatRaw = session.schedule_repeat && session.schedule_repeat.length > 0
     ? session.schedule_repeat
     : String(session.schedule_json?.['repeat'] ?? '1,2,3,4,5');
-  const modeValue = session.mode === 'shield' ? 'shield' : 'allow';
+  // 空 apps（换机未重选）仍挂策略；强制 allow = 全锁，不可跳过不执行
+  const modeValue = apps.length === 0
+    ? 'allow'
+    : (session.mode === 'shield' ? 'shield' : 'allow');
 
   return {
     sessionId: session.session_id,
@@ -98,7 +98,7 @@ export async function syncGuardForSession(
   const snapshot = buildGuardSnapshotFromSession(session);
   if (!snapshot) {
     await removeGuardForSession(context, session.session_id);
-    return { ok: true, data: true, message: '未选择应用，已移除屏时策略' };
+    return { ok: false, data: false, message: '契约无效，无法同步屏时策略' };
   }
 
   saveScheduledGuardSnapshot(context, snapshot);

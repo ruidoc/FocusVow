@@ -295,16 +295,29 @@ export async function syncScheduledSessionGuardStrategy(
   snapshot: ScheduledGuardSnapshot
 ): Promise<GuardResult<boolean>> {
   const strategyName = `session_${snapshot.sessionId}`;
-  if (snapshot.selectedTokens.length === 0) {
-    await stopPlanGuardStrategy(strategyName);
-    await removePlanGuardStrategyInternal(strategyName);
-    return { ok: true, data: true, message: '未选择应用，已移除屏时策略' };
-  }
+  // 空 selectedTokens + allow = 全锁（TRUSTLIST 为空）；仍须注册并 start，不可移除
+  const effectiveSnapshot: ScheduledGuardSnapshot = snapshot.selectedTokens.length === 0
+    ? {
+      sessionId: snapshot.sessionId,
+      title: snapshot.title,
+      startTime: snapshot.startTime,
+      endTime: snapshot.endTime,
+      repeatDays: snapshot.repeatDays,
+      selectedTokens: [],
+      mode: 'allow'
+    }
+    : snapshot;
 
   try {
-    await addOrUpdateScheduledGuardStrategy(snapshot);
+    await addOrUpdateScheduledGuardStrategy(effectiveSnapshot);
     await startPlanGuardStrategy(strategyName);
-    return { ok: true, data: true, message: '屏时策略已注册' };
+    return {
+      ok: true,
+      data: true,
+      message: effectiveSnapshot.selectedTokens.length === 0
+        ? '屏时策略已注册（全锁兜底）'
+        : '屏时策略已注册'
+    };
   } catch (error) {
     logGuardError(`syncScheduledSessionGuardStrategy(${strategyName})`, error as Object);
     return {

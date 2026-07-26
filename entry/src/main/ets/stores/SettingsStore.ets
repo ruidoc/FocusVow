@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { SettingsState, createDefaultSettingsState } from '../models/PermissionModel';
 import { loadPersistedSettings, savePersistedSettings } from '../services/SettingsPersistenceService';
+import { UserAppApiService } from '../services/UserAppApiService';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
@@ -57,6 +58,8 @@ export class SettingsStore {
     AppStorage.setOrCreate(StoreKeys.SettingsSelectedAppCount, selectedTokens.length);
     AppStorage.setOrCreate(StoreKeys.SettingsStatusMessage, statusMessage);
     persistCurrentSettings(context);
+    // 新逻辑：双写统一表（失败不影响本机）
+    void UserAppApiService.upsertSelectedTokens(selectedTokens);
   }
 
   static updateStatusMessage(context: common.UIAbilityContext, statusMessage: string): void {
