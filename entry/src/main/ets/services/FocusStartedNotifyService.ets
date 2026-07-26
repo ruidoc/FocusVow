@@ -21,8 +21,9 @@ export interface FocusStartedReportParams {
 
 /**
  * 开始锁机后上报飞书运营通知（静默、不阻塞主流程）。
- * - 即时单人：客户端锁机成功后调用
- * - 定时锁机 / 互督：由服务端 activate / instantJoin 推送，勿在此重复报
+ * - 即时单人：LockStore 锁机成功后调用
+ * - 即时互督：DuoInstantLockService 锁机成功后调用（带设备头）
+ * - 定时锁机：由服务端 activate 推送，勿在此重复报
  */
 export class FocusStartedNotifyService {
   static reportSoloStarted(

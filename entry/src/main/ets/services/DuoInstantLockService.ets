@@ -7,6 +7,7 @@ import { DuoSessionView, resolveDuoCounterpartName } from '../models/DuoModel';
 import { returnToMainTab } from '../router/PageRoutes';
 import { LockStore } from '../stores/LockStore';
 import { DuoBgSyncService } from './DuoBgSyncService';
+import { FocusStartedNotifyService } from './FocusStartedNotifyService';
 import { applyScreenRestriction } from './ScreenTimeService';
 import { clearDuoWaitContext } from './DuoWaitContextService';
 
@@ -199,6 +200,15 @@ export async function startOrAlignInstantDuoFocus(
     : buildDuoFullDurationOptions(session, options?.title);
   const durationMin = session.duration_min > 0 ? session.duration_min : 25;
   LockStore.startQuickFocus(context, selectedTokens, durationMin, 'allow', focusOptions);
+
+  // 即时互督飞书通知改由客户端上报（带设备头）；与 rn-expo 对齐
+  FocusStartedNotifyService.report(context, {
+    scene: alignToServerEnd ? 'duo_initiate_start' : 'duo_join_start',
+    durationMin: durationMin,
+    sessionId: session.session_id,
+    sessionType: 'instant',
+    title: focusOptions.title
+  });
 
   if (options?.clearWait !== false) {
     clearDuoWaitContext();
