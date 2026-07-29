@@ -17,6 +17,8 @@ export interface FocusStartedReportParams {
   sessionType?: FocusSessionType;
   /** 用户输入的专注标题 */
   title?: string;
+  /** countdown | countup */
+  timerMode?: string;
 }
 
 /**
@@ -29,13 +31,15 @@ export class FocusStartedNotifyService {
   static reportSoloStarted(
     context: common.Context | undefined,
     durationMin: number,
-    title?: string
+    title?: string,
+    timerMode?: string
   ): void {
     const params: FocusStartedReportParams = {
       scene: 'solo_start',
       durationMin: durationMin,
       sessionType: 'solo_once',
-      title: title
+      title: title,
+      timerMode: timerMode
     };
     FocusStartedNotifyService.report(context, params);
   }
@@ -68,6 +72,9 @@ export class FocusStartedNotifyService {
     }
     if (params.sessionType !== undefined) {
       body['session_type'] = params.sessionType;
+    }
+    if (params.timerMode !== undefined && params.timerMode.length > 0) {
+      body['timer_mode'] = params.timerMode;
     }
     const focusTitle = (params.title ?? '').trim();
     if (focusTitle.length > 0) {

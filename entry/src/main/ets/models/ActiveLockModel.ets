@@ -1,3 +1,5 @@
+import { isCountupMode, resolveInstantLockMinutes } from '../utils/TimerMode';
+
 export type RestrictionMode = 'shield' | 'allow';
 
 export type LockKind = 'none' | 'covenant' | 'cycle_guard' | 'quick_focus';
@@ -14,6 +16,10 @@ export interface QuickFocusOptions {
   startedAtMs?: number;
   /** 服务端权威结束时刻（ms）；搭子互督应对齐 end_at */
   endAtMs?: number;
+  /** countdown | countup；默认 countdown */
+  timerMode?: string;
+  /** 正计时最短时长（分钟）；倒计时为 0 */
+  minDurationMin?: number;
 }
 
 export const CYCLE_GUARD_STRATEGY_NAME: string = 'cycle_quota_strategy';
@@ -33,6 +39,10 @@ export interface ActiveLockState {
   recordId: string;
   participationMode: 'solo' | 'duo' | '';
   partnerNickname: string;
+  /** countdown | countup；默认 countdown */
+  timerMode: string;
+  /** 正计时最短时长（分钟）；倒计时为 0 */
+  minDurationMin: number;
 }
 
 export function createIdleLockState(): ActiveLockState {
@@ -50,7 +60,9 @@ export function createIdleLockState(): ActiveLockState {
     duoSessionId: '',
     recordId: '',
     participationMode: '',
-    partnerNickname: ''
+    partnerNickname: '',
+    timerMode: 'countdown',
+    minDurationMin: 0
   };
 }
 
@@ -74,7 +86,9 @@ export function normalizeActiveLockState(state?: Partial<ActiveLockState> | null
     duoSessionId: state.duoSessionId ?? idle.duoSessionId,
     recordId: state.recordId ?? idle.recordId,
     participationMode: state.participationMode ?? idle.participationMode,
-    partnerNickname: state.partnerNickname ?? idle.partnerNickname
+    partnerNickname: state.partnerNickname ?? idle.partnerNickname,
+    timerMode: state.timerMode === 'countup' ? 'countup' : 'countdown',
+    minDurationMin: state.minDurationMin ?? idle.minDurationMin
   };
 }
 
@@ -96,12 +110,18 @@ export function withLockPartnerNickname(state: ActiveLockState, partnerNickname:
     duoSessionId: state.duoSessionId,
     recordId: state.recordId,
     participationMode: state.participationMode,
-    partnerNickname: partnerNickname.trim().length > 0 ? partnerNickname.trim() : '搭子'
+    partnerNickname: partnerNickname.trim().length > 0 ? partnerNickname.trim() : '搭子',
+    timerMode: state.timerMode,
+    minDurationMin: state.minDurationMin
   });
 }
 
 export function isLocked(state: ActiveLockState): boolean {
   return state.kind !== 'none';
+}
+
+export function isCountupLock(state: ActiveLockState): boolean {
+  return isCountupMode(state.timerMode);
 }
 
 export function resolveDuoSessionIdFromLock(lock: ActiveLockState): string {
@@ -133,8 +153,19 @@ export function getRemainingSeconds(state: ActiveLockState, nowAt: number): numb
   return Math.ceil(remainMs / 1000);
 }
 
+export function getElapsedSeconds(state: ActiveLockState, nowAt: number): number {
+  if (!isLocked(state) || state.startedAt <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.floor((nowAt - state.startedAt) / 1000));
+}
+
 export function isTimedLockFinished(state: ActiveLockState, nowAt: number): boolean {
   if (state.kind !== 'covenant' && state.kind !== 'quick_focus') {
+    return false;
+  }
+  // 正计时不因到点自动完成
+  if (state.kind === 'quick_focus' && isCountupLock(state)) {
     return false;
   }
 
@@ -179,14 +210,20 @@ export function createQuickFocusLockState(
   participationMode: 'solo' | 'duo' | '' = '',
   partnerNickname: string = '',
   startedAtMs?: number,
-  endAtMs?: number
+  endAtMs?: number,
+  timerMode: string = 'countdown',
+  minDurationMin: number = 0
 ): ActiveLockState {
-  const safeDuration = durationMinutes > 0 ? durationMinutes : 25;
+  const normalizedMode = timerMode === 'countup' ? 'countup' : 'countdown';
+  const lockMinutes = resolveInstantLockMinutes(durationMinutes, normalizedMode);
+  const resolvedMin = normalizedMode === 'countup'
+    ? (minDurationMin > 0 ? minDurationMin : durationMinutes)
+    : 0;
   const hasServerEnd = endAtMs !== undefined && endAtMs > 0;
-  const endAt = hasServerEnd ? endAtMs : nowAt + safeDuration * 60 * 1000;
+  const endAt = hasServerEnd ? endAtMs : nowAt + lockMinutes * 60 * 1000;
   const startedAt = startedAtMs !== undefined && startedAtMs > 0
     ? startedAtMs
-    : (hasServerEnd ? endAt - safeDuration * 60 * 1000 : nowAt);
+    : (hasServerEnd ? endAt - lockMinutes * 60 * 1000 : nowAt);
 
   return {
     kind: 'quick_focus',
@@ -202,7 +239,9 @@ export function createQuickFocusLockState(
     duoSessionId,
     recordId,
     participationMode,
-    partnerNickname
+    partnerNickname,
+    timerMode: normalizedMode,
+    minDurationMin: resolvedMin
   };
 }
 
@@ -233,7 +272,9 @@ export function createCovenantLockState(
     duoSessionId,
     recordId,
     participationMode,
-    partnerNickname
+    partnerNickname,
+    timerMode: 'countdown',
+    minDurationMin: 0
   };
 }
 
@@ -256,6 +297,8 @@ export function createCycleGuardLockState(
     duoSessionId: '',
     recordId: '',
     participationMode: '',
-    partnerNickname: ''
+    partnerNickname: '',
+    timerMode: 'countdown',
+    minDurationMin: 0
   };
 }

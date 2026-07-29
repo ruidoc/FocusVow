@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { QuickFocusOptions } from '../../models/ActiveLockModel';
 import { showErrorToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import { TimerModeSegmented } from '../../components/focus/TimerModeSegmented';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute, returnToMainTab } from '../../router/PageRoutes';
 import {
@@ -14,6 +15,7 @@ import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { TimerMode } from '../../utils/TimerMode';
 
 bootstrapStores();
 
@@ -24,6 +26,7 @@ struct QuickStartPage {
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State durationMinutes: number = 15;
+  @State timerMode: TimerMode = 'countdown';
   @State mode: 'shield' | 'allow' = 'allow';
   @State title: string = '';
 
@@ -66,6 +69,9 @@ struct QuickStartPage {
   }
 
   private durationCardTitle(): string {
+    if (this.timerMode === 'countup') {
+      return '最短时长';
+    }
     return this.mode === 'shield' ? '锁定时长' : '放行时长';
   }
 
@@ -135,7 +141,9 @@ struct QuickStartPage {
       title: taskTitle,
       duoSessionId: '',
       recordId: '',
-      participationMode: 'solo'
+      participationMode: 'solo',
+      timerMode: this.timerMode,
+      minDurationMin: this.timerMode === 'countup' ? this.durationMinutes : 0
     };
     LockStore.startQuickFocus(hostContext, this.selectedTokens, this.durationMinutes, this.mode, focusOptions);
     returnToMainTab('focus');
@@ -234,6 +242,13 @@ struct QuickStartPage {
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
 
+      if (this.timerMode === 'countup') {
+        Text('满最短时长后可随时正常结束。')
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+      }
+
       Text(this.durationLabel())
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
@@ -284,6 +299,18 @@ struct QuickStartPage {
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
+
+      Row() {
+        Blank()
+        TimerModeSegmented({
+          value: this.timerMode,
+          onChange: (mode: TimerMode) => {
+            this.timerMode = mode;
+          }
+        })
+        Blank()
+      }
+      .width('100%')
 
       TextInput({ text: this.title, placeholder: '今天要完成什么？' })
         .width('100%')

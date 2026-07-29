@@ -17,18 +17,28 @@ import { ApiEnvelope } from '../models/UserModel';
 import { HttpService } from './HttpService';
 
 export class DuoApiService {
-  static async instantStart(title: string, durationMin: number): Promise<ApiEnvelope> {
+  static async instantStart(
+    title: string,
+    durationMin: number,
+    timerMode: string = 'countdown'
+  ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {
       'title': title,
-      'duration_min': durationMin
+      'duration_min': durationMin,
+      'timer_mode': timerMode === 'countup' ? 'countup' : 'countdown'
     };
     return HttpService.post('/duo/instant/start', body);
   }
 
-  static async instantCreate(title: string, durationMin: number): Promise<ApiEnvelope> {
+  static async instantCreate(
+    title: string,
+    durationMin: number,
+    timerMode: string = 'countdown'
+  ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {
       'title': title,
-      'duration_min': durationMin
+      'duration_min': durationMin,
+      'timer_mode': timerMode === 'countup' ? 'countup' : 'countdown'
     };
     return HttpService.post('/duo/instant/create', body);
   }

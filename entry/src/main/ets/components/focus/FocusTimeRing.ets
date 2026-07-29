@@ -16,6 +16,9 @@ export struct FocusTimeRing {
   @Prop @Watch('onRingDataChange') progressValue: number = 0;
   @Prop isDuo: boolean = false;
   @Prop useCompactTime: boolean = false;
+  @Prop isCountup: boolean = false;
+  /** 正计时最短时长（分钟），用于副文案 */
+  @Prop minDurationMinutes: number = 0;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private context: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
@@ -78,7 +81,7 @@ export struct FocusTimeRing {
         })
 
       Column({ space: 12 }) {
-        Text('剩余时间 (分钟)')
+        Text(this.isCountup ? '已专注时间' : '剩余时间 (分钟)')
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textSecondary)
@@ -94,7 +97,13 @@ export struct FocusTimeRing {
             .fontSize(15)
             .fontColor(['#7A5AF8'])
 
-          Text(this.isDuo ? `已共同专注 ${this.elapsedMinutes} 分钟` : `已专注 ${this.elapsedMinutes} 分钟`)
+          Text(
+            this.isCountup
+              ? (this.isDuo
+                ? `共同最短 ${this.minDurationMinutes} 分钟`
+                : `最短 ${this.minDurationMinutes} 分钟`)
+              : (this.isDuo ? `已共同专注 ${this.elapsedMinutes} 分钟` : `已专注 ${this.elapsedMinutes} 分钟`)
+          )
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor('#858699')

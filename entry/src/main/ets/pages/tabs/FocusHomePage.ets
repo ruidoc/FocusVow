@@ -10,22 +10,27 @@ import { UsersIcon } from "../../components/common/UsersIcon";
 import {
   ActiveLockState,
   createIdleLockState,
+  getElapsedSeconds,
   getRemainingSeconds,
+  isCountupLock,
   isLocked,
   minutesToHours,
   normalizeActiveLockState,
   resolveDuoSessionIdFromLock,
 } from "../../models/ActiveLockModel";
+import { isPastCountupMinimum } from "../../utils/TimerMode";
 import { FocusPlan } from "../../models/PlanModel";
 import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from "../../models/DuoModel";
 import { PageRoutes, pushRoute } from "../../router/PageRoutes";
 import {
   endCycleGuardLock,
+  endQuickFocus,
   tearCovenantWindow,
   tearQuickFocus,
 } from "../../services/ActiveLockLifecycleService";
 import { DuoApiService } from "../../services/DuoApiService";
 import {
+  queueHonorCertificate,
   queueShameCertificate,
   tryPresentCertificateGuide,
 } from "../../services/CertificatePendingService";
@@ -224,6 +229,8 @@ export struct FocusHomePage {
         recordId: currentState.recordId,
         participationMode: currentState.participationMode,
         partnerNickname,
+        timerMode: currentState.timerMode,
+        minDurationMin: currentState.minDurationMin,
       }),
     );
     this.duoPartnerSyncSessionId = sessionId;
@@ -242,13 +249,24 @@ export struct FocusHomePage {
 
   private getTearConfirmMessage(): string {
     if (this.activeLock.participationMode === "duo") {
-      return "撕毁后本次专注立即失败，搭子也会因连坐记为失败。撕毁契约后无法撤销，你与搭子都将记为失败。";
+      return "撕毁后本次专注立即失败，搭子也会因连坐记为失败。撕毁契约后无法撤销。";
     }
     return "撕毁后本次专注记为违约，会生成耻辱证。撕毁契约后无法撤销，本次将记入耻辱柱。";
   }
 
+  private isPastCountupMin(): boolean {
+    return isCountupLock(this.activeLock) &&
+      isPastCountupMinimum(this.activeLock.startedAt, this.activeLock.minDurationMin);
+  }
+
   private async endCurrentLock(): Promise<void> {
     if (this.isEndingLock || !this.isActiveLocked()) {
+      return;
+    }
+
+    // 正计时过最短：正常结束
+    if (this.activeLock.kind === "quick_focus" && this.isPastCountupMin()) {
+      this.confirmCompleteFocus();
       return;
     }
 
@@ -258,6 +276,53 @@ export struct FocusHomePage {
     }
 
     await this.performEndLock();
+  }
+
+  private confirmCompleteFocus(): void {
+    const isDuo = this.activeLock.participationMode === "duo";
+    this.getUIContext().showAlertDialog({
+      title: "结束专注？",
+      message: isDuo
+        ? "已满最短时长。结束后你与搭子都将记为成功完成。"
+        : "已满最短时长，确认结束本次专注？",
+      primaryButton: {
+        value: "确认结束",
+        action: () => {
+          void this.performCompleteLock();
+        }
+      },
+      secondaryButton: {
+        value: "继续专注",
+        action: () => {}
+      }
+    });
+  }
+
+  private async performCompleteLock(): Promise<void> {
+    if (this.isEndingLock || this.activeLock.kind !== "quick_focus") {
+      return;
+    }
+    const lockSnapshot = normalizeActiveLockState(this.activeLock);
+    const endedAt = Date.now();
+    this.isEndingLock = true;
+    this.clearTimer();
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const endResult = await endQuickFocus(
+      hostContext,
+      lockSnapshot,
+      "契约已履行",
+      "专注已结束，但解除限制失败",
+      true
+    );
+    if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
+      queueHonorCertificate(lockSnapshot, endedAt);
+      tryPresentCertificateGuide(this.getUIContext());
+    } else if (!(endResult.ok && endResult.tooShort)) {
+      afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
+    }
+    this.remainingLabel = LockStore.getRemainingLabel();
+    this.isEndingLock = false;
+    this.startTimer();
   }
 
   private async performTearLock(): Promise<void> {
@@ -334,13 +399,13 @@ export struct FocusHomePage {
 
   private getFocusKindLabel(): string {
     if (this.isDuoFocus()) {
-      return "搭子互督";
+      return isCountupLock(this.activeLock) ? "搭子互督 · 正计时" : "搭子互督";
     }
     if (this.activeLock.kind === "covenant") {
       return "单人定时契约";
     }
     if (this.activeLock.kind === "quick_focus") {
-      return "单人即时契约";
+      return isCountupLock(this.activeLock) ? "单人即时 · 正计时" : "单人即时契约";
     }
     return "专注中";
   }
@@ -363,6 +428,13 @@ export struct FocusHomePage {
 
   private getFocusSubtitle(): string {
     const kindLabel = this.getFocusKindLabel();
+    if (isCountupLock(this.activeLock)) {
+      const minMin = this.activeLock.minDurationMin;
+      if (minMin > 0) {
+        return `${kindLabel} · 最短 ${minutesToHours(minMin)}`;
+      }
+      return kindLabel;
+    }
     const totalMinutes = this.getTotalDurationMinutes();
     if (totalMinutes > 0) {
       return `${kindLabel} · 共 ${minutesToHours(totalMinutes)}`;
@@ -371,7 +443,15 @@ export struct FocusHomePage {
   }
 
   private getProgressValue(): number {
-    if (this.activeLock.endAt <= 0 || this.activeLock.startedAt <= 0) {
+    if (this.activeLock.startedAt <= 0) {
+      return 0;
+    }
+    if (isCountupLock(this.activeLock)) {
+      const totalMs = Math.max(1, this.activeLock.minDurationMin) * 60 * 1000;
+      const elapsedMs = Math.max(0, Date.now() - this.activeLock.startedAt);
+      return Math.min(Math.max((elapsedMs / totalMs) * 100, 0), 100);
+    }
+    if (this.activeLock.endAt <= 0) {
       return 0;
     }
     const totalMs = this.activeLock.endAt - this.activeLock.startedAt;
@@ -384,7 +464,13 @@ export struct FocusHomePage {
   }
 
   private getElapsedMinutes(): number {
-    if (this.activeLock.endAt <= 0 || this.activeLock.startedAt <= 0) {
+    if (this.activeLock.startedAt <= 0) {
+      return 0;
+    }
+    if (isCountupLock(this.activeLock)) {
+      return Math.max(Math.floor(getElapsedSeconds(this.activeLock, Date.now()) / 60), 0);
+    }
+    if (this.activeLock.endAt <= 0) {
       return 0;
     }
     const totalSeconds = Math.floor((this.activeLock.endAt - this.activeLock.startedAt) / 1000);
@@ -405,6 +491,9 @@ export struct FocusHomePage {
   }
 
   private getEndLockButtonLabel(): string {
+    if (this.activeLock.kind === "quick_focus" && this.isPastCountupMin()) {
+      return "结束专注";
+    }
     if (this.activeLock.kind === "quick_focus" || this.activeLock.kind === "covenant") {
       return "撕毁契约";
     }
@@ -436,9 +525,9 @@ export struct FocusHomePage {
         SymbolGlyph($r("sys.symbol.lock_fill"))
           .fontSize(40)
           .fontColor([AppTheme.colors.primary])
-          .fontWeight(500)
+          .fontWeight(500);
       } else {
-        UsersIcon({ iconSize: 40, color: AppTheme.colors.primary })
+        UsersIcon({ iconSize: 40, color: AppTheme.colors.primary });
       }
     }
     .width(120)
@@ -452,7 +541,7 @@ export struct FocusHomePage {
       Text(this.getEndLockButtonLabel())
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textMuted)
+        .fontColor(this.isPastCountupMin() ? AppTheme.colors.primary : AppTheme.colors.textMuted)
     }
     .height(40)
     .padding({ left: 20, right: 20 })
@@ -460,7 +549,10 @@ export struct FocusHomePage {
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
+    .border({
+      width: 1,
+      color: this.isPastCountupMin() ? AppTheme.colors.primary : AppTheme.colors.border
+    })
     .borderRadius(20)
     .opacity(this.isEndingLock ? 0.5 : 1)
     .enabled(!this.isEndingLock)
@@ -499,6 +591,8 @@ export struct FocusHomePage {
         progressValue: this.getProgressValue(),
         isDuo: this.isDuoFocus(),
         useCompactTime: this.shouldUseCompactTime(),
+        isCountup: isCountupLock(this.activeLock),
+        minDurationMinutes: this.activeLock.minDurationMin,
       })
 
       this.buildLockStatusChip()
@@ -627,7 +721,6 @@ export struct FocusHomePage {
       }
       .width("100%")
       .alignItems(HorizontalAlign.Center)
-
       Row({ space: 12 }) {
         this.buildDuoActionButton(
           "发起互督",
@@ -667,7 +760,6 @@ export struct FocusHomePage {
         .justifyContent(FlexAlign.Center)
         .backgroundColor(AppTheme.colors.primarySoft)
         .borderRadius(18)
-
         Column({ space: 2 }) {
           Text("等待搭子加入")
             .fontSize(15)
@@ -683,7 +775,6 @@ export struct FocusHomePage {
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-
         SymbolGlyph($r("sys.symbol.chevron_right"))
           .fontSize(14)
           .fontColor([AppTheme.colors.textMuted])
@@ -696,7 +787,7 @@ export struct FocusHomePage {
       // 对齐 iOS：轻阴影（低透明度 + 大模糊），避免 Button 默认材质阴影发硬
       .shadow({
         radius: 16,
-        color: '#14000000',
+        color: "#14000000",
         offsetX: 0,
         offsetY: 4,
       })
@@ -709,7 +800,7 @@ export struct FocusHomePage {
       left: 20,
       right: 20,
       top: this.topSafeInsetVp + 6,
-    })
+    });
   }
 
   @Builder

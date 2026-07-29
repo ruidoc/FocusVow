@@ -23,12 +23,13 @@ import { readStoredString, removeStoredKey, writeStoredString } from './Preferen
 import { LockStore } from '../stores/LockStore';
 import { refreshStats } from '../stores/StatsStore';
 import { SettingsStore } from '../stores/SettingsStore';
-import { queueShameCertificate } from './CertificatePendingService';
+import { queueHonorCertificate, queueShameCertificate } from './CertificatePendingService';
 import { bootstrapStores } from '../stores/StoreBootstrap';
 
 bootstrapStores();
 
 const handledBreachSessionIds: Set<string> = new Set();
+const handledCompleteSessionIds: Set<string> = new Set();
 const PENDING_BREACH_KEY: string = 'duo.push.pendingBreach';
 
 type PushMessageHandler = (
@@ -101,7 +102,7 @@ export class DuoPushHandler {
     }
   }
 
-  /** 冷启动或推送唤醒时，处理上次未完成的撕毁解除 */
+  /** 冷启动或推送唤醒时，处理上次未完成的撕毁/完成解除 */
   static async processPendingBreach(context: common.UIAbilityContext): Promise<void> {
     const raw = readStoredString(context, PENDING_BREACH_KEY, '');
     if (raw.length === 0) {
@@ -110,11 +111,15 @@ export class DuoPushHandler {
 
     try {
       const payload = JSON.parse(raw) as DuoPushPayload;
-      if (payload.type !== 'duo_breach') {
-        DuoPushHandler.clearPendingBreach(context);
+      if (payload.type === 'duo_breach') {
+        await DuoPushHandler.handleDuoBreach(context, payload, { isForeground: false });
         return;
       }
-      await DuoPushHandler.handleDuoBreach(context, payload, { isForeground: false });
+      if (payload.type === 'duo_complete') {
+        await DuoPushHandler.handleDuoComplete(context, payload, { isForeground: false });
+        return;
+      }
+      DuoPushHandler.clearPendingBreach(context);
     } catch {
       DuoPushHandler.clearPendingBreach(context);
     }
@@ -143,20 +148,35 @@ export class DuoPushHandler {
 
     const response = await DuoApiService.getSession(sessionId);
     const session = DuoApiService.parseSession(response);
-    if (!session || session.status !== 'breached') {
+    if (!session) {
       return;
     }
 
-    const violatorName = session.breached_by_name && session.breached_by_name.length > 0
-      ? session.breached_by_name
-      : '搭子';
-    const breachPayload: DuoPushPayload = {
-      type: 'duo_breach',
-      session_id: sessionId,
-      violator_name: violatorName,
-      message: `由于你的搭子 ${violatorName} 撕毁了契约，本次专注已中止`
-    };
-    await DuoPushHandler.handleDuoBreach(context, breachPayload, options);
+    if (session.status === 'breached') {
+      const violatorName = session.breached_by_name && session.breached_by_name.length > 0
+        ? session.breached_by_name
+        : '搭子';
+      const breachPayload: DuoPushPayload = {
+        type: 'duo_breach',
+        session_id: sessionId,
+        violator_name: violatorName,
+        message: `由于你的搭子 ${violatorName} 撕毁了契约，本次专注已中止`
+      };
+      await DuoPushHandler.handleDuoBreach(context, breachPayload, options);
+      return;
+    }
+
+    if (session.status === 'completed') {
+      if (handledCompleteSessionIds.has(sessionId)) {
+        return;
+      }
+      const completePayload: DuoPushPayload = {
+        type: 'duo_complete',
+        session_id: sessionId,
+        message: '搭子已正常结束，本次互督完成'
+      };
+      await DuoPushHandler.handleDuoComplete(context, completePayload, options);
+    }
   }
 
   /**
@@ -248,6 +268,8 @@ export class DuoPushHandler {
         return DuoPushHandler.handleDuoStart;
       case 'duo_breach':
         return DuoPushHandler.handleDuoBreach;
+      case 'duo_complete':
+        return DuoPushHandler.handleDuoComplete;
       case 'duo_scheduled_joined':
         return DuoPushHandler.handleDuoScheduledJoined;
       case 'duo_partner_left':
@@ -510,6 +532,58 @@ export class DuoPushHandler {
 
     if (options?.isForeground) {
       InAppMessageService.dismiss();
+    }
+  }
+
+  private static async handleDuoComplete(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    const sessionId = payload.session_id ?? '';
+    if (sessionId.length === 0 || handledCompleteSessionIds.has(sessionId)) {
+      DuoPushHandler.clearPendingBreach(context);
+      return;
+    }
+
+    DuoPushHandler.persistPendingBreach(context, payload);
+    const state = DuoPushHandler.resolveActiveLockState(context);
+    const activeSessionId = resolveDuoSessionIdFromLock(state);
+    if (activeSessionId.length === 0 || activeSessionId !== sessionId) {
+      return;
+    }
+
+    handledCompleteSessionIds.add(sessionId);
+
+    const message = payload.message && payload.message.length > 0
+      ? payload.message
+      : '搭子已正常结束，本次互督完成';
+    SettingsStore.hydrate(context);
+
+    const lockSnapshot = withLockPartnerNickname(
+      state,
+      state.partnerNickname.length > 0 ? state.partnerNickname : '搭子'
+    );
+
+    if (isLocked(state)) {
+      if (state.kind === 'quick_focus') {
+        await releaseScreenRestriction(state.selectedTokens, state.mode);
+      } else if (state.kind === 'covenant') {
+        await stopPlanGuardStrategyForWindow(state.planId);
+      }
+    }
+
+    queueHonorCertificate(lockSnapshot, Date.now());
+    LockStore.clear(context);
+    markScheduledListStale(context);
+    refreshStats();
+    clearScheduledActivationTracking(sessionId);
+    SettingsStore.updateStatusMessage(context, message);
+    DuoPushHandler.clearPendingBreach(context);
+    DuoBgSyncService.ensure(context);
+
+    if (options?.isForeground) {
+      InAppMessageService.show('互督完成', message, 'duo_complete');
     }
   }
 }

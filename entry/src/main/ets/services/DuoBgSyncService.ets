@@ -84,6 +84,16 @@ function elapsedProgress(remainSec: number, totalSec: number): number {
 function buildStatusCopy(context: common.Context): StatusCopy {
   if (isFocusLockActive(context)) {
     const state = LockStore.getState();
+    if (state.timerMode === 'countup') {
+      const elapsed = Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000));
+      const totalSec = Math.max(1, state.minDurationMin) * 60;
+      return {
+        title: '专注进行中',
+        text: `已专注 ${formatRemainingSeconds(elapsed)}`,
+        progress: Math.min(100, Math.round((elapsed / totalSec) * 100)),
+        showProgress: true
+      };
+    }
     const remain = getRemainingSeconds(state, Date.now());
     const totalSec = state.endAt > state.startedAt
       ? Math.max(1, Math.ceil((state.endAt - state.startedAt) / 1000))

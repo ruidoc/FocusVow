@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { showErrorToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import { TimerModeSegmented } from '../../components/focus/TimerModeSegmented';
 import { AppTheme } from '../../constants/Theme';
 import { PageRoutes, backRoute, pushRoute, replaceRoute } from '../../router/PageRoutes';
 import {
@@ -14,6 +15,7 @@ import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { TimerMode } from '../../utils/TimerMode';
 
 bootstrapStores();
 
@@ -25,6 +27,7 @@ struct DuoCreatePage {
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State title: string = '';
   @State durationMinutes: number = 45;
+  @State timerMode: TimerMode = 'countdown';
   @State isSubmitting: boolean = false;
 
   private readonly durationMin: number = 5;
@@ -93,7 +96,7 @@ struct DuoCreatePage {
     }
 
     this.isSubmitting = true;
-    const response = await DuoApiService.instantCreate(this.title.trim(), this.durationMinutes);
+    const response = await DuoApiService.instantCreate(this.title.trim(), this.durationMinutes, this.timerMode);
     const session = DuoApiService.parseSession(response);
     if (!session) {
       this.toastError(response.message ?? '创建失败');
@@ -153,11 +156,18 @@ struct DuoCreatePage {
   @Builder
   private buildDurationCard(): void {
     Column({ space: 16 }) {
-      Text('专注时长')
+      Text(this.timerMode === 'countup' ? '最短时长' : '专注时长')
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
+
+      if (this.timerMode === 'countup') {
+        Text('满最短时长后可随时正常结束。')
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+      }
 
       Text(this.durationLabel())
         .fontSize(24)
@@ -206,19 +216,25 @@ struct DuoCreatePage {
   private buildPageBody(): void {
     Column({ space: 18 }) {
       Column({ space: 8 }) {
-        Text('邀请搭子一起开始')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
-
-        Text('对方加入后同时开始；一人撕毁，两人失败。')
+        Text('邀请搭子一起开始；一人撕毁，两人失败。')
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
+
+      Row() {
+        Blank()
+        TimerModeSegmented({
+          value: this.timerMode,
+          onChange: (mode: TimerMode) => {
+            this.timerMode = mode;
+          }
+        })
+        Blank()
+      }
+      .width('100%')
 
       TextInput({ text: this.title, placeholder: '今天要完成什么？' })
         .width('100%')

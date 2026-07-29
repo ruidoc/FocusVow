@@ -113,7 +113,16 @@ export class LockStore {
 
   static getRemainingLabel(nowAt: number = Date.now()): string {
     const state = LockStore.getState();
-    if (!isLocked(state) || state.endAt <= 0) {
+    if (!isLocked(state) || state.startedAt <= 0) {
+      return formatRemainingSeconds(LockStore.getQuickFocusDurationMinutes() * 60);
+    }
+
+    // 正计时展示已专注时长
+    if (state.timerMode === 'countup') {
+      return formatRemainingSeconds(Math.max(0, Math.floor((nowAt - state.startedAt) / 1000)));
+    }
+
+    if (state.endAt <= 0) {
       return formatRemainingSeconds(LockStore.getQuickFocusDurationMinutes() * 60);
     }
 
@@ -137,6 +146,12 @@ export class LockStore {
     mode: RestrictionMode,
     options?: QuickFocusOptions
   ): ActiveLockState {
+    const timerMode = options?.timerMode === 'countup' ? 'countup' : 'countdown';
+    const minDurationMin = timerMode === 'countup'
+      ? (options?.minDurationMin && options.minDurationMin > 0
+        ? options.minDurationMin
+        : durationMinutes)
+      : 0;
     const nextState = createQuickFocusLockState(
       selectedTokens,
       durationMinutes,
@@ -148,9 +163,12 @@ export class LockStore {
       options?.participationMode ?? '',
       options?.partnerNickname ?? '',
       options?.startedAtMs,
-      options?.endAtMs
+      options?.endAtMs,
+      timerMode,
+      minDurationMin
     );
     LockStore.setState(context, nextState);
+    // 偏好记住用户选的分钟（正计时=最短；倒计时=总时长），勿写 23h
     LockStore.setQuickFocusDurationMinutes(context, durationMinutes);
 
     // 互督由服务端推送；客户端只报单人锁机（含未登录）
@@ -162,7 +180,8 @@ export class LockStore {
       FocusStartedNotifyService.reportSoloStarted(
         context,
         durationMinutes,
-        options?.title
+        options?.title,
+        timerMode
       );
     }
 

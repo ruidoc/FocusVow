@@ -16,6 +16,7 @@ export struct ScheduledSessionCard {
     status: 'scheduled',
     title: '',
     duration_min: 0,
+    timer_mode: 'countdown',
     mode: 'allow',
     participation_mode: 'solo'
   };

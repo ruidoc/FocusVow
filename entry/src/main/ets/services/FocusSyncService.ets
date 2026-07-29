@@ -14,6 +14,7 @@ import {
 import { HttpService } from './HttpService';
 import { loadAccessToken } from './UserPersistenceService';
 import { resolveCountedActualMin } from '../utils/FocusValidity';
+import { isCountupMode } from '../utils/TimerMode';
 
 let flushing: boolean = false;
 
@@ -22,6 +23,23 @@ function resolveParticipationMode(state: ActiveLockState): string {
     return 'duo';
   }
   return 'solo';
+}
+
+function resolveDurationAndActual(
+  state: ActiveLockState,
+  result: FocusSyncResult,
+  endedAt: number
+): [number, number] {
+  const countedMin = resolveCountedActualMin(state.startedAt, endedAt);
+  const isCountup = isCountupMode(state.timerMode);
+  // 正计时：计划时长=最短；实际=已过分钟。勿用 23h 锁机窗口。
+  const durationMin = isCountup
+    ? Math.max(1, state.minDurationMin > 0 ? state.minDurationMin : countedMin)
+    : Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
+  const actualMin = result === 'SUCCESS'
+    ? (isCountup ? Math.max(durationMin, countedMin) : durationMin)
+    : countedMin;
+  return [durationMin, actualMin];
 }
 
 export class FocusSyncService {
@@ -36,10 +54,9 @@ export class FocusSyncService {
     endedAt: number = Date.now(),
     failReason: string = ''
   ): void {
-    const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
-    const actualMin = result === 'SUCCESS'
-      ? durationMin
-      : resolveCountedActualMin(state.startedAt, endedAt);
+    const pair = resolveDurationAndActual(state, result, endedAt);
+    const durationMin = pair[0];
+    const actualMin = pair[1];
 
     const pending: FocusSyncPending = {
       kind: 'solo_instant',
@@ -67,10 +84,9 @@ export class FocusSyncService {
     endedAt: number = Date.now(),
     failReason: string = ''
   ): void {
-    const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
-    const actualMin = result === 'SUCCESS'
-      ? durationMin
-      : resolveCountedActualMin(state.startedAt, endedAt);
+    const pair = resolveDurationAndActual(state, result, endedAt);
+    const durationMin = pair[0];
+    const actualMin = pair[1];
 
     const pending: FocusSyncPending = {
       kind: 'session_terminal',

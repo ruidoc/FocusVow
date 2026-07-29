@@ -15,6 +15,8 @@ export interface DuoSessionView {
   status: string;
   title: string;
   duration_min: number;
+  /** countdown | countup；正计时 duration_min 为最短时长 */
+  timer_mode: string;
   mode: string;
   participation_mode: DuoParticipationMode;
   schedule_json?: Record<string, string | number>;
@@ -406,6 +408,7 @@ export function parseDuoSessionView(raw: Record<string, Object> | undefined): Du
     status: String(raw['status'] ?? ''),
     title: String(raw['title'] ?? ''),
     duration_min: Number(raw['duration_min'] ?? 0),
+    timer_mode: String(raw['timer_mode'] ?? 'countdown') === 'countup' ? 'countup' : 'countdown',
     mode: String(raw['mode'] ?? 'allow'),
     participation_mode: (String(raw['participation_mode'] ?? 'solo') as DuoParticipationMode),
     schedule_json: raw['schedule_json'] as Record<string, string | number> | undefined,

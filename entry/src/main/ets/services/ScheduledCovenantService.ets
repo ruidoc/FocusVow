@@ -298,7 +298,9 @@ function enrichLockFromSession(lock: ActiveLockState, session: DuoSessionView): 
     participationMode: session.participation_mode === 'duo' ? 'duo' : lock.participationMode,
     partnerNickname: session.participation_mode === 'duo'
       ? resolveDuoCounterpartName(session)
-      : lock.partnerNickname
+      : lock.partnerNickname,
+    timerMode: lock.timerMode,
+    minDurationMin: lock.minDurationMin
   };
 }
 
