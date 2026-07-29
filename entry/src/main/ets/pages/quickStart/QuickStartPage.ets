@@ -1,21 +1,22 @@
-import { common } from '@kit.AbilityKit';
-import { QuickFocusOptions } from '../../models/ActiveLockModel';
-import { showErrorToast } from '../../common/Toast';
-import { SystemNavPage } from '../../components/common/SystemNavPage';
-import { TimerModeSegmented } from '../../components/focus/TimerModeSegmented';
-import { AppTheme } from '../../constants/Theme';
-import { backRoute, returnToMainTab } from '../../router/PageRoutes';
+import { common } from "@kit.AbilityKit";
+import { QuickFocusOptions } from "../../models/ActiveLockModel";
+import { showErrorToast } from "../../common/Toast";
+import { SystemNavPage } from "../../components/common/SystemNavPage";
+import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
+import { AppTheme } from "../../constants/Theme";
+import { backRoute, returnToMainTab } from "../../router/PageRoutes";
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
-  requestScreenTimeAuthorization
-} from '../../services/ScreenTimeService';
-import { ensureSoloFocusAccess } from '../../services/GuestSoloFocusService';
-import { LockStore } from '../../stores/LockStore';
-import { SettingsStore } from '../../stores/SettingsStore';
-import { bootstrapStores } from '../../stores/StoreBootstrap';
-import { StoreKeys } from '../../stores/StoreKeys';
-import { TimerMode } from '../../utils/TimerMode';
+  requestScreenTimeAuthorization,
+} from "../../services/ScreenTimeService";
+import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
+import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
+import { LockStore } from "../../stores/LockStore";
+import { SettingsStore } from "../../stores/SettingsStore";
+import { bootstrapStores } from "../../stores/StoreBootstrap";
+import { StoreKeys } from "../../stores/StoreKeys";
+import { TimerMode } from "../../utils/TimerMode";
 
 bootstrapStores();
 
@@ -26,9 +27,9 @@ struct QuickStartPage {
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State durationMinutes: number = 15;
-  @State timerMode: TimerMode = 'countdown';
-  @State mode: 'shield' | 'allow' = 'allow';
-  @State title: string = '';
+  @State timerMode: TimerMode = "countdown";
+  @State mode: "shield" | "allow" = "allow";
+  @State title: string = "";
 
   private readonly durationMin: number = 5;
   private readonly durationMax: number = 180;
@@ -65,14 +66,14 @@ struct QuickStartPage {
   }
 
   private appCardTitle(): string {
-    return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
+    return this.mode === "shield" ? "要锁定的应用" : "要放行的应用";
   }
 
   private durationCardTitle(): string {
-    if (this.timerMode === 'countup') {
-      return '最短时长';
+    if (this.timerMode === "countup") {
+      return "最短时长";
     }
-    return this.mode === 'shield' ? '锁定时长' : '放行时长';
+    return this.mode === "shield" ? "锁定时长" : "放行时长";
   }
 
   private toastError(message: string): void {
@@ -109,17 +110,21 @@ struct QuickStartPage {
     if (!ensureSoloFocusAccess(hostContext)) {
       return;
     }
+    const needMinutes = this.timerMode === 'countup' ? 0 : this.durationMinutes;
+    if (!(await ensureDailyFocusQuota(this.getUIContext(), needMinutes))) {
+      return;
+    }
     if (LockStore.isLocked()) {
-      this.toastError('当前已有进行中的锁定，请先回首页结束后再开始新的专注');
+      this.toastError("当前已有进行中的锁定，请先回首页结束后再开始新的专注");
       return;
     }
 
     if (this.selectedTokens.length === 0) {
-      this.toastError('请先选择至少 1 个应用');
+      this.toastError("请先选择至少 1 个应用");
       return;
     }
     if (this.title.trim().length === 0) {
-      this.toastError('请先填写本次契约要做什么');
+      this.toastError("请先填写本次契约要做什么");
       return;
     }
 
@@ -139,14 +144,20 @@ struct QuickStartPage {
     const taskTitle = this.title.trim();
     const focusOptions: QuickFocusOptions = {
       title: taskTitle,
-      duoSessionId: '',
-      recordId: '',
-      participationMode: 'solo',
+      duoSessionId: "",
+      recordId: "",
+      participationMode: "solo",
       timerMode: this.timerMode,
-      minDurationMin: this.timerMode === 'countup' ? this.durationMinutes : 0
+      minDurationMin: this.timerMode === "countup" ? this.durationMinutes : 0,
     };
-    LockStore.startQuickFocus(hostContext, this.selectedTokens, this.durationMinutes, this.mode, focusOptions);
-    returnToMainTab('focus');
+    LockStore.startQuickFocus(
+      hostContext,
+      this.selectedTokens,
+      this.durationMinutes,
+      this.mode,
+      focusOptions,
+    );
+    returnToMainTab("focus");
   }
 
   private onDurationSliderChange(value: number): void {
@@ -159,37 +170,40 @@ struct QuickStartPage {
   @Builder
   buildModeSegment(): void {
     Row({ space: 0 }) {
-      Text('锁定模式')
+      Text("锁定模式")
         .layoutWeight(1)
         .fontSize(15)
-        .fontColor(this.mode === 'shield' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
-        .fontWeight(this.mode === 'shield' ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(
+          this.mode === "shield" ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary,
+        )
+        .fontWeight(this.mode === "shield" ? FontWeight.Medium : FontWeight.Regular)
         .textAlign(TextAlign.Center)
         .padding({ top: 10, bottom: 10 })
         .borderRadius(20)
-        .backgroundColor(this.mode === 'shield' ? AppTheme.colors.surfaceRaised : Color.Transparent)
+        .backgroundColor(this.mode === "shield" ? AppTheme.colors.surfaceRaised : Color.Transparent)
         .onClick(() => {
-          this.mode = 'shield';
+          this.mode = "shield";
         })
-
-      Text('放行模式')
+      Text("放行模式")
         .layoutWeight(1)
         .fontSize(15)
-        .fontColor(this.mode === 'allow' ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary)
-        .fontWeight(this.mode === 'allow' ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(
+          this.mode === "allow" ? AppTheme.colors.textPrimary : AppTheme.colors.textSecondary,
+        )
+        .fontWeight(this.mode === "allow" ? FontWeight.Medium : FontWeight.Regular)
         .textAlign(TextAlign.Center)
         .padding({ top: 10, bottom: 10 })
         .borderRadius(20)
-        .backgroundColor(this.mode === 'allow' ? AppTheme.colors.surfaceRaised : Color.Transparent)
+        .backgroundColor(this.mode === "allow" ? AppTheme.colors.surfaceRaised : Color.Transparent)
         .onClick(() => {
-          this.mode = 'allow';
+          this.mode = "allow";
         })
     }
-    .width('80%')
+    .width("80%")
     .padding(4)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(999)
+    .borderRadius(999);
   }
 
   @Builder
@@ -201,8 +215,7 @@ struct QuickStartPage {
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
-
-        Text('+ 选择')
+        Text("+ 选择")
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.primary)
@@ -210,27 +223,24 @@ struct QuickStartPage {
             this.chooseApps();
           })
       }
-      .width('100%')
+      .width("100%")
       .alignItems(VerticalAlign.Center)
 
       if (this.selectedAppCount === 0) {
-        Text('未选择应用')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textMuted)
-          .width('100%')
+        Text("未选择应用").fontSize(15).fontColor(AppTheme.colors.textMuted).width("100%");
       } else {
         Text(`已选 ${this.selectedAppCount} 个应用`)
           .fontSize(15)
           .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+          .width("100%");
       }
     }
-    .width('100%')
+    .width("100%")
     .padding(20)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
+    .borderRadius(AppTheme.radius.lg);
   }
 
   @Builder
@@ -240,30 +250,28 @@ struct QuickStartPage {
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
+        .width("100%")
 
-      if (this.timerMode === 'countup') {
-        Text('满最短时长后可随时正常结束。')
+      if (this.timerMode === "countup") {
+        Text("满最短时长后可随时正常结束。")
           .fontSize(13)
           .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+          .width("100%");
       }
-
       Text(this.durationLabel())
         .fontSize(24)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.colors.primary)
-        .width('100%')
+        .width("100%")
         .textAlign(TextAlign.Center)
-
       Slider({
         value: this.durationMinutes,
         min: this.durationMin,
         max: this.durationMax,
         step: this.durationStep,
-        style: SliderStyle.OutSet
+        style: SliderStyle.OutSet,
       })
-        .width('100%')
+        .width("100%")
         .blockColor(AppTheme.colors.primary)
         .trackColor(AppTheme.colors.border)
         .selectedColor(AppTheme.colors.primary)
@@ -272,91 +280,83 @@ struct QuickStartPage {
         .onChange((v: number) => {
           this.onDurationSliderChange(v);
         })
-
       Row() {
-        Text('5 分钟')
+        Text("5 分钟")
           .fontSize(12)
           .fontColor(AppTheme.colors.textMuted)
         Blank()
-        Text('3 小时')
+        Text("3 小时")
           .fontSize(12)
           .fontColor(AppTheme.colors.textMuted)
-      }
-      .width('100%')
+      }.width("100%")
     }
-    .width('100%')
+    .width("100%")
     .padding(20)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
+    .borderRadius(AppTheme.radius.lg);
   }
 
   @Builder
   buildQuickBody(): void {
     Column({ space: 18 }) {
-      Text('先自己履约一次，新手推荐从 15 分钟开始。')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-
       Row() {
         Blank()
         TimerModeSegmented({
           value: this.timerMode,
           onChange: (mode: TimerMode) => {
             this.timerMode = mode;
-          }
+          },
         })
         Blank()
-      }
-      .width('100%')
-
-      TextInput({ text: this.title, placeholder: '今天要完成什么？' })
-        .width('100%')
+      }.width("100%")
+      // 锁定/放行模式切换暂时隐藏
+      // this.buildModeSegment()
+      TextInput({ text: this.title, placeholder: "今天要完成什么？" })
+        .width("100%")
         .height(44)
         .enterKeyType(EnterKeyType.Done)
         .onChange((value: string) => {
           this.title = value;
         })
         .onSubmit(() => {
-          focusControl.requestFocus('');
+          focusControl.requestFocus("");
         })
 
       this.buildAppCard()
       this.buildDurationCard()
-
-      Button('开始单人专注')
-        .width('100%')
+      Button("开始单人专注")
+        .width("100%")
         .height(52)
         .type(ButtonType.Capsule)
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
         .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
+        .fontColor("#FFFFFF")
         .margin({ top: 8 })
         .onClick(() => {
           this.startFocus();
         })
     }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
+    .width("100%")
+    .alignItems(HorizontalAlign.Start);
   }
 
   build() {
     Stack() {
       SystemNavPage({
-        title: '单人专注',
+        title: "单人专注",
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildQuickBody();
-        }
+        },
       })
     }
-    .width('100%')
-    .height('100%')
+    .width("100%")
+    .height("100%");
   }
 }

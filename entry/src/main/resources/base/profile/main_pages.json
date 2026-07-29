@@ -20,6 +20,8 @@
     "pages/settings/FeedbackPage",
     "pages/login/LoginPage",
     "pages/login/RegisterPage",
-    "pages/user/RedeemPage"
+    "pages/user/RedeemPage",
+    "pages/user/ProfileEditPage",
+    "pages/user/AvatarCropPage"
   ]
 }

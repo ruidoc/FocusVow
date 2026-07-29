@@ -43,6 +43,8 @@ import {
   afterGuestSoloFocusEnded,
   ensureSoloFocusAccess,
 } from "../../services/GuestSoloFocusService";
+import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
+import { BenefitStore } from "../../stores/BenefitStore";
 import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
 import { SettingsStore } from "../../stores/SettingsStore";
@@ -76,9 +78,13 @@ export struct FocusHomePage {
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
+    BenefitStore.hydrate(hostContext);
     this.syncRemainingLabel();
     void this.reconcileDuoWait();
     void this.syncDuoPartnerDisplay();
+    if (UserStore.isLoggedIn()) {
+      void BenefitStore.refresh();
+    }
     this.startTimer();
     this.loadTopSafeInset(hostContext);
   }
@@ -255,8 +261,10 @@ export struct FocusHomePage {
   }
 
   private isPastCountupMin(): boolean {
-    return isCountupLock(this.activeLock) &&
-      isPastCountupMinimum(this.activeLock.startedAt, this.activeLock.minDurationMin);
+    return (
+      isCountupLock(this.activeLock) &&
+      isPastCountupMinimum(this.activeLock.startedAt, this.activeLock.minDurationMin)
+    );
   }
 
   private async endCurrentLock(): Promise<void> {
@@ -287,14 +295,16 @@ export struct FocusHomePage {
         : "已满最短时长，确认结束本次专注？",
       primaryButton: {
         value: "确认结束",
+        fontColor: AppTheme.colors.danger,
         action: () => {
           void this.performCompleteLock();
-        }
+        },
       },
       secondaryButton: {
         value: "继续专注",
-        action: () => {}
-      }
+        fontColor: "#0A59F7",
+        action: () => {},
+      },
     });
   }
 
@@ -312,7 +322,7 @@ export struct FocusHomePage {
       lockSnapshot,
       "契约已履行",
       "专注已结束，但解除限制失败",
-      true
+      true,
     );
     if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
       queueHonorCertificate(lockSnapshot, endedAt);
@@ -429,10 +439,7 @@ export struct FocusHomePage {
   private getFocusSubtitle(): string {
     const kindLabel = this.getFocusKindLabel();
     if (isCountupLock(this.activeLock)) {
-      const minMin = this.activeLock.minDurationMin;
-      if (minMin > 0) {
-        return `${kindLabel} · 最短 ${minutesToHours(minMin)}`;
-      }
+      // 正计时：对齐 RN，副标题只保留类型，不挂「最短 xx」
       return kindLabel;
     }
     const totalMinutes = this.getTotalDurationMinutes();
@@ -551,7 +558,7 @@ export struct FocusHomePage {
     .backgroundColor(AppTheme.colors.surface)
     .border({
       width: 1,
-      color: this.isPastCountupMin() ? AppTheme.colors.primary : AppTheme.colors.border
+      color: this.isPastCountupMin() ? AppTheme.colors.primary : AppTheme.colors.border,
     })
     .borderRadius(20)
     .opacity(this.isEndingLock ? 0.5 : 1)
@@ -631,6 +638,18 @@ export struct FocusHomePage {
       pushRoute(PageRoutes.Login);
       return;
     }
+    // 仅发起互督进页前校验；加入互督放宽不校验
+    if (route === PageRoutes.DuoCreate) {
+      void this.ensureQuotaThenNavigate(route);
+      return;
+    }
+    pushRoute(route);
+  }
+
+  private async ensureQuotaThenNavigate(route: string): Promise<void> {
+    if (!(await ensureDailyFocusQuota(this.getUIContext()))) {
+      return;
+    }
     pushRoute(route);
   }
 
@@ -700,8 +719,17 @@ export struct FocusHomePage {
       if (!ensureSoloFocusAccess(hostContext)) {
         return;
       }
-      pushRoute(PageRoutes.QuickStart);
+      void this.openSoloQuickStart();
     });
+  }
+
+  private async openSoloQuickStart(): Promise<void> {
+    if (UserStore.isLoggedIn()) {
+      if (!(await ensureDailyFocusQuota(this.getUIContext()))) {
+        return;
+      }
+    }
+    pushRoute(PageRoutes.QuickStart);
   }
 
   @Builder

@@ -31,6 +31,8 @@ export class PageRoutes {
   static readonly Login: string = 'pages/login/LoginPage';
   static readonly Register: string = 'pages/login/RegisterPage';
   static readonly Redeem: string = 'pages/user/RedeemPage';
+  static readonly ProfileEdit: string = 'pages/user/ProfileEditPage';
+  static readonly AvatarCrop: string = 'pages/user/AvatarCropPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {
@@ -40,6 +42,17 @@ function logRouteError(actionName: string, error: BusinessError): void {
 export function pushRoute(url: string): void {
   router.pushUrl({ url }).catch((error: BusinessError) => {
     logRouteError('pushRoute', error);
+  });
+}
+
+export function pushAvatarCrop(uri: string): void {
+  router.pushUrl({
+    url: PageRoutes.AvatarCrop,
+    params: {
+      uri: uri
+    }
+  }).catch((error: BusinessError) => {
+    logRouteError('pushAvatarCrop', error);
   });
 }
 

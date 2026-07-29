@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { createEmptyUserInfo, parseUserInfo, UserInfo } from '../models/UserModel';
 import { AuthApiService } from '../services/AuthApiService';
+import { compressAvatarForUpload } from '../services/AvatarCompressService';
 import { ExtendApiService } from '../services/ExtendApiService';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
@@ -23,6 +24,20 @@ function syncAppStorageValue<T>(key: string, value: T): void {
   if (!AppStorage.set<T>(key, value)) {
     AppStorage.setOrCreate<T>(key, value);
   }
+}
+
+/** 复制 UserInfo，保证 AppStorage 写入新引用以触发 @StorageLink */
+function cloneUserInfo(source: UserInfo): UserInfo {
+  const cloned: UserInfo = {
+    id: source.id,
+    username: source.username,
+    phone: source.phone,
+    email: source.email,
+    avatar: source.avatar,
+    sex: source.sex,
+    invite_code: source.invite_code
+  };
+  return cloned;
 }
 
 export class UserStore {
@@ -112,7 +127,8 @@ export class UserStore {
     }
 
     savePersistedUserInfo(context, userInfo);
-    syncAppStorageValue(StoreKeys.UserInfo, userInfo);
+    // 新对象引用，保证 @StorageLink 能立刻刷新展示
+    syncAppStorageValue(StoreKeys.UserInfo, cloneUserInfo(userInfo));
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, true);
     UmengSdkService.ensureInitialized(context);
     UmengSdkService.enablePushNotification(context);
@@ -128,6 +144,88 @@ export class UserStore {
     if (errorMessage) {
       console.warn(`UserStore sync skipped: ${errorMessage}`);
     }
+    try {
+      await BenefitStore.refresh();
+    } catch (error) {
+      console.warn(`BenefitStore sync skipped: ${String(error)}`);
+    }
+  }
+
+  /** 用接口返回或请求字段立刻合并本地 UserInfo（对齐 RN，避免等 refresh 才刷新 UI） */
+  private static applyUserInfoPatch(
+    context: common.UIAbilityContext,
+    data: Record<string, Object>,
+    responseData?: Record<string, Object>
+  ): void {
+    const current = UserStore.getUserInfo();
+    const fromServer = parseUserInfo(responseData);
+    let next: UserInfo;
+    if (fromServer !== null) {
+      next = fromServer;
+    } else {
+      next = {
+        id: current.id,
+        username: data['username'] !== undefined ? String(data['username']) : current.username,
+        phone: current.phone,
+        email: current.email,
+        avatar: data['avatar'] !== undefined ? String(data['avatar']) : current.avatar,
+        sex: data['sex'] !== undefined ? Number(data['sex']) : current.sex,
+        invite_code: current.invite_code
+      };
+    }
+    savePersistedUserInfo(context, next);
+    // 始终写入新对象引用，确保 @StorageLink 触发重绘
+    syncAppStorageValue(StoreKeys.UserInfo, cloneUserInfo(next));
+  }
+
+  /** 更新用户资料（用户名 / 性别 / 头像 URL） */
+  static async updateUser(
+    context: common.UIAbilityContext,
+    data: Record<string, Object>
+  ): Promise<string | null> {
+    const response = await AuthApiService.updateUser(data);
+    if (response.statusCode !== 200) {
+      return response.message ?? '更新失败';
+    }
+    UserStore.applyUserInfoPatch(context, data, response.data);
+    // 后台再拉一次完整资料；失败不影响已合并的本地展示
+    const refreshed = await UserStore.refreshUserInfo(context);
+    if (refreshed) {
+      console.warn(`UserStore refresh after update skipped: ${refreshed}`);
+    }
+    return null;
+  }
+
+  /** 选图后压缩到缓存再上传（相册临时 URI 不可直接上传） */
+  static async uploadAvatar(
+    context: common.UIAbilityContext,
+    fileUri: string
+  ): Promise<string | null> {
+    let absolutePath: string;
+    try {
+      const packed = await compressAvatarForUpload(context, fileUri);
+      absolutePath = packed.absolutePath;
+    } catch (error) {
+      console.warn(`Avatar compress failed: ${String(error)}`);
+      return '头像处理失败，请重试';
+    }
+    return UserStore.uploadPackedAvatar(context, absolutePath);
+  }
+
+  /** 已裁剪并压缩到缓存的文件直接上传 */
+  static async uploadPackedAvatar(
+    context: common.UIAbilityContext,
+    absolutePath: string
+  ): Promise<string | null> {
+    const uploadRes = await AuthApiService.uploadAvatarFile(absolutePath, context);
+    if (uploadRes.statusCode !== 200) {
+      return uploadRes.message ?? '头像上传失败';
+    }
+    const url = String(uploadRes.data?.['url'] ?? '');
+    if (url.length === 0) {
+      return '头像上传失败：未返回地址';
+    }
+    return UserStore.updateUser(context, { 'avatar': url } as Record<string, Object>);
   }
 
   static async logout(context: common.UIAbilityContext): Promise<string | null> {

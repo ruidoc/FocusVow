@@ -2,9 +2,9 @@ export type MembershipStatus = 'none' | 'pending' | 'active';
 
 export interface BenefitState {
   dayDuration: number;
-  /** 今日总专注（兼容） */
+  /** 今日总专注时长 */
   todayUsed: number;
-  /** 今日互督已用（额度进度条，暂不做限制） */
+  /** 今日互督已用（字段保留） */
   duoTodayUsed: number;
   isSubscribed: boolean;
   membershipStatus: MembershipStatus;

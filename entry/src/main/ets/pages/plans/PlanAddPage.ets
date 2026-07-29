@@ -530,6 +530,8 @@ struct PlanAddPage {
   @Builder
   buildContractBody(): void {
     Column({ space: 18 }) {
+      // 锁定/放行模式切换暂时隐藏
+      // this.buildModeSegment()
       this.buildNameCard()
       this.buildTimeCard()
       this.buildParticipationCard()

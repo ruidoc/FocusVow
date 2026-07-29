@@ -213,6 +213,7 @@ export async function startOrAlignInstantDuoFocus(
     return noTokens;
   }
 
+  // 发起互督额度在创建页已校验；加入互督不校验；补锁不再重复拦
   const lockResult = await applyScreenRestriction(selectedTokens, 'allow');
   if (!lockResult.ok) {
     const failed: DuoInstantLockResult = {

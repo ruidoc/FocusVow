@@ -11,8 +11,10 @@ import {
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { setInstantDuoWait } from '../../services/DuoWaitContextService';
+import { ensureDailyFocusQuota } from '../../services/DailyFocusQuotaService';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
+import { BenefitStore } from '../../stores/BenefitStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { TimerMode } from '../../utils/TimerMode';
@@ -37,9 +39,12 @@ struct DuoCreatePage {
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
+    BenefitStore.hydrate(hostContext);
     if (!UserStore.isLoggedIn()) {
       pushRoute(PageRoutes.Login);
+      return;
     }
+    void BenefitStore.refresh();
   }
 
   private normalizeDuration(raw: number): number {
@@ -92,6 +97,11 @@ struct DuoCreatePage {
     }
     if (this.selectedTokens.length === 0) {
       this.toastError('请先选择至少 1 个应用');
+      return;
+    }
+
+    const needMinutes = this.timerMode === 'countup' ? 0 : this.durationMinutes;
+    if (!(await ensureDailyFocusQuota(this.getUIContext(), needMinutes))) {
       return;
     }
 

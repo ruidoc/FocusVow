@@ -1,34 +1,35 @@
-import { common } from '@kit.AbilityKit';
-import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
-import { fileIo } from '@kit.CoreFileKit';
-import { http } from '@kit.NetworkKit';
-import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { showErrorToast, showToast } from '../../common/Toast';
-import { SystemNavPage } from '../../components/common/SystemNavPage';
-import { AppTheme } from '../../constants/Theme';
-import { ApiEnvelope, createEmptyUserInfo, UserInfo } from '../../models/UserModel';
-import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
-import { formatSaveError } from '../../services/CertificateImageService';
-import { HttpService } from '../../services/HttpService';
-import { BenefitStore } from '../../stores/BenefitStore';
-import { StoreKeys } from '../../stores/StoreKeys';
-import { UserStore } from '../../stores/UserStore';
-import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { common } from "@kit.AbilityKit";
+import { pasteboard } from "@kit.BasicServicesKit";
+import { showErrorToast, showToast } from "../../common/Toast";
+import { SystemNavPage } from "../../components/common/SystemNavPage";
+import { AppTheme } from "../../constants/Theme";
+import { ApiEnvelope, createEmptyUserInfo, UserInfo } from "../../models/UserModel";
+import { PageRoutes, backRoute, pushRoute } from "../../router/PageRoutes";
+import { HttpService } from "../../services/HttpService";
+import { BenefitStore } from "../../stores/BenefitStore";
+import { StoreKeys } from "../../stores/StoreKeys";
+import { UserStore } from "../../stores/UserStore";
+import { bootstrapStores } from "../../stores/StoreBootstrap";
 
 bootstrapStores();
+
+const DEVELOPER_WECHAT: string = "ruimsion";
+const ACCENT: string = "#D4A44A";
+const SUCCESS: string = "#16A34A";
+const CARD_BG: string = "#FFFBF0";
+const BORDER: string = "rgba(212,164,74,0.35)";
 
 @Entry
 @Component
 struct RedeemPage {
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
-  @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = 'none';
-  @StorageLink(StoreKeys.BenefitCommunityQrUrl) communityQrUrl: string = '';
-  @StorageLink(StoreKeys.BenefitCommunityHint) communityHint: string = '';
-  @State codeInput: string = '';
+  @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = "none";
+  @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
+  @State codeInput: string = "";
   @State isSubmitting: boolean = false;
-  @State isSavingQr: boolean = false;
-  @State redeemedCode: string = '';
+  @State justRedeemed: boolean = false;
+  @State expiresLabel: string = "";
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -38,26 +39,40 @@ struct RedeemPage {
       pushRoute(PageRoutes.Login);
       return;
     }
-    void this.refreshStatus();
+    void this.refreshMembership();
   }
 
-  private async refreshStatus(): Promise<void> {
+  private formatExpiry(raw: Object | undefined | null): string {
+    if (raw === undefined || raw === null) {
+      return '';
+    }
+    const d = new Date(String(raw));
+    if (Number.isNaN(d.getTime())) {
+      return '';
+    }
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}.${m}.${day}`;
+  }
+
+  private async refreshMembership(): Promise<void> {
     await BenefitStore.refresh();
-    const statusRes: ApiEnvelope = await HttpService.get('/redeem/status');
-    if (statusRes.statusCode === 200 && statusRes.data) {
-      const redemption = statusRes.data['redemption'] as Record<string, Object> | undefined;
-      if (redemption) {
-        this.redeemedCode = String(redemption['code'] ?? '');
-      }
-      const qr = String(statusRes.data['community_qr_url'] ?? '');
-      if (qr.length > 0) {
-        this.communityQrUrl = qr;
-      }
-      const hint = String(statusRes.data['community_hint'] ?? '');
-      if (hint.length > 0) {
-        this.communityHint = hint;
+    const subRes: ApiEnvelope = await HttpService.get('/subscription');
+    if (subRes.statusCode === 200 && subRes.data) {
+      const data = subRes.data as Record<string, Object>;
+      const label = this.formatExpiry(data['expires_at']);
+      if (label.length > 0) {
+        this.expiresLabel = label;
       }
     }
+  }
+
+  private isActive(): boolean {
+    return this.isSubscribed || this.membershipStatus === "active";
+  }
+
+  private showSuccess(): boolean {
+    return this.isActive() || this.justRedeemed;
   }
 
   private async onRedeem(): Promise<void> {
@@ -66,278 +81,180 @@ struct RedeemPage {
     }
     const code = this.codeInput.trim();
     if (code.length === 0) {
-      showToast('请输入兑换码', this.getUIContext());
+      showToast("请输入兑换码", this.getUIContext());
       return;
     }
     this.isSubmitting = true;
-    const response = await HttpService.post('/redeem', { 'code': code } as Record<string, Object>);
+    const body: Record<string, Object> = {
+      'code': code
+    };
+    const response: ApiEnvelope = await HttpService.post('/redeem', body);
     this.isSubmitting = false;
     if (response.statusCode !== 200) {
-      showErrorToast(response.message ?? '兑换失败', this.getUIContext());
+      showErrorToast(response.message ?? "兑换失败", this.getUIContext());
       return;
+    }
+    this.codeInput = "";
+    this.justRedeemed = true;
+    const data = response.data as Record<string, Object> | undefined;
+    if (data) {
+      const redemption = data['redemption'] as Record<string, Object> | undefined;
+      const subscription = data['subscription'] as Record<string, Object> | undefined;
+      const expires = redemption?.['expires_at'] ?? subscription?.['expires_at'];
+      const label = this.formatExpiry(expires);
+      if (label.length > 0) {
+        this.expiresLabel = label;
+      }
     }
     await BenefitStore.refresh();
-    const status = String(response.data?.['membership_status'] ?? 'pending');
-    const redemption = response.data?.['redemption'] as Record<string, Object> | undefined;
-    if (redemption) {
-      this.redeemedCode = String(redemption['code'] ?? code);
-    }
-    const qr = String(response.data?.['community_qr_url'] ?? '');
-    if (qr.length > 0) {
-      this.communityQrUrl = qr;
-    }
-    this.codeInput = '';
-    showToast(
-      status === 'active' ? '兑换成功，会员已激活' : '兑换成功，待激活',
-      this.getUIContext()
-    );
+    showToast("兑换成功", this.getUIContext());
   }
 
-  private onCopyUid(): void {
-    const uid = this.userInfo.id;
-    if (uid.length === 0) {
-      showToast('暂无 UID', this.getUIContext());
-      return;
-    }
+  private onCopyWechat(): void {
     try {
-      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, uid);
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, DEVELOPER_WECHAT);
       pasteboard.getSystemPasteboard().setData(data);
-      showToast('UID 已复制', this.getUIContext());
+      showToast("微信号已复制", this.getUIContext());
     } catch (_e) {
-      showErrorToast('复制失败', this.getUIContext());
-    }
-  }
-
-  private async onSaveQr(): Promise<void> {
-    if (this.communityQrUrl.length === 0) {
-      showToast('二维码暂未配置', this.getUIContext());
-      return;
-    }
-    if (this.isSavingQr) {
-      return;
-    }
-    this.isSavingQr = true;
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const req = http.createHttp();
-    try {
-      const res = await req.request(this.communityQrUrl, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        connectTimeout: 15000,
-        readTimeout: 15000
-      });
-      const buffer = res.result as ArrayBuffer;
-      if (!buffer || buffer.byteLength === 0) {
-        showErrorToast('下载二维码失败', this.getUIContext());
-        return;
-      }
-      const helper = photoAccessHelper.getPhotoAccessHelper(hostContext);
-      const uri = await helper.createAsset(photoAccessHelper.PhotoType.IMAGE, 'png');
-      const file = await fileIo.open(uri, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
-      try {
-        await fileIo.write(file.fd, buffer);
-      } finally {
-        await fileIo.close(file.fd);
-      }
-      showToast('二维码已保存到相册', this.getUIContext());
-    } catch (error) {
-      const message = formatSaveError(error as BusinessError);
-      showErrorToast(message, this.getUIContext());
-    } finally {
-      req.destroy();
-      this.isSavingQr = false;
+      showErrorToast("复制失败", this.getUIContext());
     }
   }
 
   @Builder
-  private buildSaveQrButton(): void {
-    if (this.isSavingQr) {
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.arrow_down'))
+  private buildWechatHint(hint: string): void {
+    Column({ space: 6 }) {
+      Text(hint)
+        .fontSize(13)
+        .fontColor('#7B8494')
+        .width("100%")
+        .textAlign(TextAlign.Center)
+      Row({ space: 5 }) {
+        SymbolGlyph($r("sys.symbol.doc_plaintext"))
+          .fontSize(13)
+          .fontColor(['#7B8494'])
+        Text("复制微信号")
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#7B8494')
+      }
+      .onClick(() => {
+        this.onCopyWechat();
+      })
+    }
+    .width("100%")
+    .alignItems(HorizontalAlign.Center);
+  }
+
+  @Builder
+  private buildSuccessCards(): void {
+    Column({ space: 16 }) {
+      Column({ space: 14 }) {
+        Text("兑换成功")
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
-          .fontColor([AppTheme.colors.primary])
-
-        Text('保存中...')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.primary)
-      }
-      .width('100%')
-      .height(50)
-      .justifyContent(FlexAlign.Center)
-      .backgroundColor(AppTheme.colors.primarySoft)
-      .opacity(0.7)
-      .borderRadius(AppTheme.radius.pill)
-    } else {
-      SaveButton({
-        icon: SaveIconStyle.FULL_FILLED,
-        text: SaveDescription.SAVE_TO_GALLERY,
-        buttonType: ButtonType.Capsule
-      })
-        .width('100%')
-        .height(50)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.primary)
-        .iconColor(AppTheme.colors.primary)
-        .iconSize(18)
-        .textIconSpace(8)
-        .layoutDirection(SecurityComponentLayoutDirection.HORIZONTAL)
-        .backgroundColor(AppTheme.colors.primarySoft)
-        .onClick(async (_event: ClickEvent, result: SaveButtonOnClickResult) => {
-          if (result === SaveButtonOnClickResult.SUCCESS) {
-            await this.onSaveQr();
-          } else {
-            showErrorToast('未获得相册保存授权', this.getUIContext());
-          }
-        })
-    }
-  }
-
-  @Builder
-  private buildPendingCard(): void {
-    Column({ space: 12 }) {
-      Text('已兑换 · 待激活')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#D4A44A')
-        .width('100%')
-
-      if (this.redeemedCode.length > 0) {
-        Text(`兑换码 ${this.redeemedCode}`)
-          .fontSize(13)
+          .fontColor(SUCCESS)
+          .width("100%")
+        Text("每日专注时长已不限额度。")
+          .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+          .width("100%")
+        if (this.expiresLabel.length > 0) {
+          Text(`到期时间 ${this.expiresLabel}`)
+            .fontSize(13)
+            .fontColor('#A16207')
+            .width("100%")
+            .margin({ top: 2 })
+        }
       }
-
-      Text(this.communityHint.length > 0
-        ? this.communityHint
-        : '扫码加入用户群后，@管理员并发送你的 UID，即可完成会员激活')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-
-      if (this.communityQrUrl.length > 0) {
-        Image(this.communityQrUrl)
-          .width(200)
-          .height(200)
-          .objectFit(ImageFit.Contain)
-          .backgroundColor(Color.White)
-          .borderRadius(12)
-          .alignSelf(ItemAlign.Center)
+      .width("100%")
+      .padding(20)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor(CARD_BG)
+      .border({ width: 1, color: BORDER })
+      .borderRadius(20)
+      Column() {
+        this.buildWechatHint("加作者微信进搭子匹配站群，快速找搭子")
       }
-
-      if (this.userInfo.id.length > 0) {
-        Text(`你的 UID：${this.userInfo.id}`)
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textMuted)
-          .width('100%')
-          .textAlign(TextAlign.Center)
-      }
-
-      this.buildSaveQrButton()
-
-      Button('复制 UID')
-        .width('100%')
-        .height(48)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#461702')
-        .backgroundColor('#D4A44A')
-        .borderRadius(24)
-        .onClick(() => {
-          this.onCopyUid();
-        })
-    }
-    .width('100%')
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor('#FFFBF0')
-    .border({ width: 1, color: 'rgba(212,164,74,0.35)' })
-    .borderRadius(20)
-  }
-
-  @Builder
-  private buildActiveCard(): void {
-    Column({ space: 10 }) {
-      Text('会员已激活')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#D4A44A')
-        .width('100%')
-
-      Text('搭子互督时长已不限额度。可在个人中心查看会员信息。')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-    }
-    .width('100%')
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor('#FFFBF0')
-    .border({ width: 1, color: 'rgba(212,164,74,0.35)' })
-    .borderRadius(20)
+      .width("100%")
+      .padding({ left: 4, right: 4 })
+      .margin({ top: 24 })
+    }.width("100%");
   }
 
   @Builder
   private buildRedeemForm(): void {
-    Column({ space: 14 }) {
-      Text('输入兑换码')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-
-      Text('兑换会员后可解锁每日无限搭子互督。兑换成功后需加群完成激活。')
-        .fontSize(13)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-
-      TextInput({ placeholder: '请输入兑换码', text: this.codeInput })
-        .height(48)
-        .width('100%')
-        .type(InputType.Normal)
-        .onChange((value: string) => {
-          this.codeInput = value;
-        })
-
-      Button(this.isSubmitting ? '兑换中…' : '立即兑换')
-        .width('100%')
-        .height(48)
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .backgroundColor(AppTheme.colors.primary)
-        .borderRadius(24)
-        .enabled(!this.isSubmitting)
-        .opacity(this.isSubmitting ? 0.55 : 1)
-        .onClick(() => {
-          void this.onRedeem();
-        })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
+    Column({ space: 16 }) {
+      Column({ space: 16 }) {
+        Text("输入兑换码")
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width("100%")
+        Text("兑换会员后可解锁每日无限专注时长。")
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width("100%")
+        TextInput({ placeholder: "请输入兑换码", text: this.codeInput })
+          .height(52)
+          .width("100%")
+          .fontSize(17)
+          .fontColor(AppTheme.colors.textPrimary)
+          .placeholderColor("#A89B88")
+          .padding({ left: 16, right: 16 })
+          .backgroundColor(Color.White)
+          .border({ width: 1.5, color: "rgba(212,164,74,0.45)" })
+          .borderRadius(12)
+          .type(InputType.Normal)
+          .onChange((value: string) => {
+            this.codeInput = value;
+          })
+        Button(this.isSubmitting ? "兑换中…" : "立即兑换")
+          .width("100%")
+          .height(48)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor("#461702")
+          .backgroundColor(ACCENT)
+          .borderRadius(24)
+          .enabled(!this.isSubmitting)
+          .opacity(this.isSubmitting ? 0.55 : 1)
+          .onClick(() => {
+            void this.onRedeem();
+          })
+      }
+      .width("100%")
+      .padding(20)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor(CARD_BG)
+      .border({ width: 1, color: BORDER })
+      .borderRadius(20)
+      Column() {
+        this.buildWechatHint("没有兑换码？添加开发者微信获取")
+      }
+      .width("100%")
+      .padding({ left: 4, right: 4 })
+      .margin({ top: 24 })
+    }.width("100%");
   }
 
   @Builder
   private buildPageBody(): void {
-    Column({ space: 18 }) {
-      if (this.membershipStatus === 'active') {
-        this.buildActiveCard()
-      } else if (this.membershipStatus === 'pending') {
-        this.buildPendingCard()
+    Column({ space: 0 }) {
+      if (this.showSuccess()) {
+        this.buildSuccessCards();
       } else {
-        this.buildRedeemForm()
+        this.buildRedeemForm();
       }
     }
-    .width('100%')
+    .width("100%")
     .padding({ left: 4, right: 4, top: 8, bottom: 8 })
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(HorizontalAlign.Start);
   }
 
   build() {
     Stack() {
       SystemNavPage({
-        title: '兑换会员',
+        title: "兑换会员",
         showBack: true,
         usePageScroll: true,
         horizontalPadding: 20,
@@ -346,10 +263,10 @@ struct RedeemPage {
         },
         content: (): void => {
           this.buildPageBody();
-        }
+        },
       })
     }
-    .width('100%')
-    .height('100%')
+    .width("100%")
+    .height("100%");
   }
 }

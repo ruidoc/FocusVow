@@ -15,8 +15,8 @@ bootstrapStores();
 /** 娱乐限额入口暂时隐藏，恢复时改为 true */
 const SHOW_CYCLE_GUARD_MENU: boolean = false;
 
-/** 会员卡片暂时隐藏，恢复时改为 true */
-const SHOW_MEMBERSHIP_CARD: boolean = false;
+/** 会员卡片展示兑换入口 */
+const SHOW_MEMBERSHIP_CARD: boolean = true;
 
 function formatMinutesLabel(min: number): string {
   if (min >= 60) {
@@ -35,7 +35,7 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
   @StorageLink(StoreKeys.BenefitDayDuration) dayDuration: number = 0;
-  @StorageLink(StoreKeys.BenefitDuoTodayUsed) duoTodayUsed: number = 0;
+  @StorageLink(StoreKeys.BenefitTodayUsed) todayUsed: number = 0;
   @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = 'none';
 
@@ -55,24 +55,31 @@ export struct ProfilePage {
     if (this.isLoggedIn && this.userInfo.username.length > 0) {
       return this.userInfo.username;
     }
-    return '未登录';
+    if (this.isLoggedIn) {
+      return '用户';
+    }
+    return '请登录';
   }
 
   private getDisplaySubtitle(): string {
-    if (this.isLoggedIn) {
-      if (this.userInfo.email.length > 0) {
-        return this.userInfo.email;
-      }
-      return '账号已登录';
+    if (!this.isLoggedIn) {
+      return '';
     }
-    return '登录后可同步账号数据';
+    if (this.userInfo.email.length > 0) {
+      return this.userInfo.email;
+    }
+    if (this.userInfo.phone.length > 0) {
+      return this.userInfo.phone;
+    }
+    return '账号已登录';
   }
 
-  private openAuthPage(): void {
-    if (this.isLoggedIn) {
+  private openProfileEntry(): void {
+    if (!this.isLoggedIn) {
+      pushRoute(PageRoutes.Login);
       return;
     }
-    pushRoute(PageRoutes.Login);
+    pushRoute(PageRoutes.ProfileEdit);
   }
 
   private openRedeemPage(): void {
@@ -95,86 +102,85 @@ export struct ProfilePage {
     return this.isSubscribed || this.membershipStatus === 'active';
   }
 
-  private isMembershipPending(): boolean {
-    return !this.isMembershipActive() && this.membershipStatus === 'pending';
-  }
-
   private getMemberTitle(): string {
-    if (this.isMembershipActive()) {
-      return 'Pro 会员';
-    }
-    if (this.isMembershipPending()) {
-      return '已兑换 · 待激活';
-    }
     return 'Pro 会员';
   }
 
   private getMemberDesc(): string {
     if (this.isMembershipActive()) {
-      return '每日搭子互督不限额度';
+      return '每日专注不限时长';
     }
-    if (this.isMembershipPending()) {
-      return '加群后完成激活，即可解锁无限互督';
-    }
-    return '兑换会员，解锁每日无限搭子互督';
+    return '兑换会员，解锁每日无限专注';
   }
 
   private getQuotaProgress(): number {
     if (this.dayDuration <= 0) {
       return 0;
     }
-    return Math.min(this.duoTodayUsed / this.dayDuration, 1);
+    return Math.min(this.todayUsed / this.dayDuration, 1);
+  }
+
+  @Builder
+  private buildProfileAvatar(): void {
+    if (this.isLoggedIn && this.userInfo.avatar.length > 0) {
+      Image(this.userInfo.avatar)
+        .width(56)
+        .height(56)
+        .borderRadius(18)
+        .objectFit(ImageFit.Cover)
+        .backgroundColor(AppTheme.colors.surfaceRaised)
+    } else {
+      Image($r('app.media.startIcon'))
+        .width(56)
+        .height(56)
+        .borderRadius(18)
+        .objectFit(ImageFit.Cover)
+        .backgroundColor(AppTheme.colors.surfaceRaised)
+    }
   }
 
   @Builder
   private buildProfileCard(): void {
-    Button() {
+    Row() {
       Row({ space: 14 }) {
-        Row() {
-          Text('FV')
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor('#FFFFFF')
-        }
-        .width(56)
-        .height(56)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(AppTheme.colors.primary)
-        .borderRadius(28)
+        this.buildProfileAvatar()
 
-        Column({ space: 4 }) {
+        Column({ space: 2 }) {
           Text(this.getDisplayName())
             .fontSize(22)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
             .width('100%')
 
-          Text(this.getDisplaySubtitle())
-            .fontSize(13)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width('100%')
+          if (this.isLoggedIn) {
+            Text(this.getDisplaySubtitle())
+              .fontSize(13)
+              .fontColor(AppTheme.colors.textMuted)
+              .width('100%')
+          }
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-
-        if (!this.isLoggedIn) {
-          SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(16)
-            .fontColor([AppTheme.colors.textMuted])
-        }
       }
-      .width('100%')
+      .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.openProfileEntry();
+      })
+
+      if (this.isLoggedIn) {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(20)
+          .fontColor([AppTheme.colors.textMuted])
+          .padding(8)
+          .onClick(() => {
+            this.openProfileEntry();
+          })
+      }
     }
     .width('100%')
-    .type(ButtonType.Normal)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: '#F1F3F8' })
-    .borderRadius(24)
-    .padding({ left: 18, right: 18, top: 16, bottom: 16 })
-    .onClick(() => {
-      this.openAuthPage();
-    })
+    .padding({ left: 4, right: 4, top: 8, bottom: 8 })
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -182,23 +188,36 @@ export struct ProfilePage {
     if (this.isLoggedIn) {
       Column({ space: 12 }) {
         Row() {
-          Column({ space: 4 }) {
-            Text(this.getMemberTitle())
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#D4A44A')
-              .width('100%')
+          Column({ space: 8 }) {
+            Row({ space: 8 }) {
+              Text(this.getMemberTitle())
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.isMembershipActive() ? '#A16207' : '#D4A44A')
+
+              if (this.isMembershipActive()) {
+                Text('生效中')
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#16A34A')
+                  .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+                  .backgroundColor('rgba(22,163,74,0.12)')
+                  .borderRadius(6)
+              }
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
 
             Text(this.getMemberDesc())
               .fontSize(12)
-              .fontColor('#8A8A9890')
+              .fontColor(this.isMembershipActive() ? '#D4A44A' : '#8A8A9890')
               .width('100%')
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
           if (!this.isMembershipActive()) {
-            Button(this.isMembershipPending() ? '去激活' : '兑换')
+            Button('兑换')
               .height(32)
               .padding({ left: 14, right: 14 })
               .fontSize(13)
@@ -209,6 +228,10 @@ export struct ProfilePage {
               .onClick(() => {
                 this.openRedeemPage();
               })
+          } else {
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(16)
+              .fontColor(['#C4A574'])
           }
         }
         .width('100%')
@@ -217,20 +240,20 @@ export struct ProfilePage {
         if (!this.isMembershipActive() && this.dayDuration > 0) {
           Column({ space: 6 }) {
             Row() {
-              Text('今日互督时长')
+              Text('今日专注时长')
                 .fontSize(12)
                 .fontColor(AppTheme.colors.textSecondary)
               Blank()
-              Text(`${formatMinutesLabel(this.duoTodayUsed)} / ${formatMinutesLabel(this.dayDuration)}`)
+              Text(`${formatMinutesLabel(this.todayUsed)} / ${formatMinutesLabel(this.dayDuration)}`)
                 .fontSize(12)
-                .fontColor(this.duoTodayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.textSecondary)
+                .fontColor(AppTheme.colors.textSecondary)
             }
             .width('100%')
 
             Progress({ value: this.getQuotaProgress() * 100, total: 100, type: ProgressType.Linear })
               .width('100%')
               .height(4)
-              .color(this.duoTodayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.primary)
+              .color(this.todayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.primary)
               .backgroundColor('#EEF1F6')
           }
           .width('100%')
@@ -239,8 +262,11 @@ export struct ProfilePage {
       .width('100%')
       .padding(18)
       .alignItems(HorizontalAlign.Start)
-      .backgroundColor('#FFFFFF')
-      .border({ width: 1, color: '#F1F3F8' })
+      .backgroundColor(this.isMembershipActive() ? '#FFFBF0' : '#FFFFFF')
+      .border({
+        width: 1,
+        color: this.isMembershipActive() ? 'rgba(212,164,74,0.35)' : '#F1F3F8'
+      })
       .borderRadius(24)
       .onClick(() => {
         this.openRedeemPage();
@@ -335,7 +361,8 @@ export struct ProfilePage {
   build() {
     SystemNavPage({
       title: '我的',
-      showBack: false
+      showBack: false,
+      showTitleBar: false
     }) {
       this.buildProfileContent()
     }

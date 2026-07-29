@@ -1,43 +1,49 @@
-import { AppTheme } from '../../constants/Theme';
+import {
+  ItemRestriction,
+  SegmentButton,
+  SegmentButtonOptions,
+  SegmentButtonTextItem
+} from '@kit.ArkUI';
 import { TimerMode } from '../../utils/TimerMode';
 
+/** 倒计时 / 正计时：系统原生 SegmentButton（页签样式） */
 @Component
 export struct TimerModeSegmented {
-  @Prop value: TimerMode = 'countdown';
+  @Prop @Watch('syncIndexesFromValue') value: TimerMode = 'countdown';
   onChange?: (mode: TimerMode) => void;
+  @State selectedIndexes: number[] = [0];
+  // SegmentButton.options 是 @ObjectLink，必须用 @State 持有
+  @State options: SegmentButtonOptions = SegmentButtonOptions.tab({
+    buttons: [{ text: '倒计时' }, { text: '正计时' }] as ItemRestriction<SegmentButtonTextItem>,
+    fontSize: 14,
+    selectedFontSize: 14,
+    // 默认上下 padding 仅 4，略增高以贴近 RN 40 高度
+    buttonPadding: { top: 10, right: 8, bottom: 10, left: 8 }
+  });
+
+  aboutToAppear(): void {
+    this.syncIndexesFromValue();
+  }
+
+  private syncIndexesFromValue(): void {
+    const next = this.value === 'countup' ? 1 : 0;
+    if (this.selectedIndexes.length === 1 && this.selectedIndexes[0] === next) {
+      return;
+    }
+    this.selectedIndexes = [next];
+  }
 
   build() {
-    Row({ space: 0 }) {
-      Text('倒计时')
-        .layoutWeight(1)
-        .fontSize(14)
-        .fontColor(this.value === 'countdown' ? '#0F172A' : AppTheme.colors.textSecondary)
-        .fontWeight(this.value === 'countdown' ? FontWeight.Medium : FontWeight.Regular)
-        .textAlign(TextAlign.Center)
-        .padding({ top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor(this.value === 'countdown' ? Color.White : Color.Transparent)
-        .onClick(() => {
-          this.onChange?.('countdown');
-        })
-
-      Text('正计时')
-        .layoutWeight(1)
-        .fontSize(14)
-        .fontColor(this.value === 'countup' ? '#0F172A' : AppTheme.colors.textSecondary)
-        .fontWeight(this.value === 'countup' ? FontWeight.Medium : FontWeight.Regular)
-        .textAlign(TextAlign.Center)
-        .padding({ top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor(this.value === 'countup' ? Color.White : Color.Transparent)
-        .onClick(() => {
-          this.onChange?.('countup');
-        })
+    // SegmentButton 占满可用宽度；外层限宽，避免拉满整行
+    Column() {
+      SegmentButton({
+        options: this.options,
+        selectedIndexes: $selectedIndexes,
+        onItemClicked: (index: number) => {
+          this.onChange?.(index === 1 ? 'countup' : 'countdown');
+        }
+      })
     }
     .width(220)
-    .padding(4)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(999)
   }
 }

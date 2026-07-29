@@ -5,6 +5,9 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {}
+  "dependencies": {
+    "@xinyansoft/oh-crop": "^1.0.4"
+  },
+  "devDependencies": {},
+  "dynamicDependencies": {}
 }
-

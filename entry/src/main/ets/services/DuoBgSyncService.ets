@@ -33,6 +33,11 @@ interface StatusCopy {
   progress: number;
   /** 等待搭子：只要文案；专注中：带进度圆环 */
   showProgress: boolean;
+  /**
+   * 正计时进度已满后：progress 固定为 99（满环观感），切勿写 100。
+   * downloadTemplate 在 100% 会被系统当成「下载完成」并震动；省略 progressValue 则圆环变空。
+   */
+  progressSettled: boolean;
 }
 
 /** 系统实况窗更新字段（与 NotificationSystemLiveViewContent 对齐） */
@@ -87,11 +92,15 @@ function buildStatusCopy(context: common.Context): StatusCopy {
     if (state.timerMode === 'countup') {
       const elapsed = Math.max(0, Math.floor((Date.now() - state.startedAt) / 1000));
       const totalSec = Math.max(1, state.minDurationMin) * 60;
+      const rawProgress = Math.min(100, Math.round((elapsed / totalSec) * 100));
+      const pastMin = rawProgress >= 100;
+      // 过最短后仍显示 mm:ss；进度封顶 99，避免 100% 完成震动 / 去掉进度导致空环
       return {
         title: '专注进行中',
         text: `已专注 ${formatRemainingSeconds(elapsed)}`,
-        progress: Math.min(100, Math.round((elapsed / totalSec) * 100)),
-        showProgress: true
+        progress: pastMin ? 99 : Math.min(99, rawProgress),
+        showProgress: true,
+        progressSettled: pastMin
       };
     }
     const remain = getRemainingSeconds(state, Date.now());
@@ -103,14 +112,16 @@ function buildStatusCopy(context: common.Context): StatusCopy {
         title: '专注进行中',
         text: `剩余 ${formatRemainingSeconds(remain)}`,
         progress: elapsedProgress(remain, totalSec),
-        showProgress: true
+        showProgress: true,
+        progressSettled: false
       };
     }
     return {
       title: '专注进行中',
       text: '契约锁机已开启',
-      progress: 100,
-      showProgress: true
+      progress: 99,
+      showProgress: true,
+      progressSettled: true
     };
   }
 
@@ -125,14 +136,16 @@ function buildStatusCopy(context: common.Context): StatusCopy {
         title: '等待搭子加入',
         text: `剩余 ${formatRemainingSeconds(remainSec)}`,
         progress: 0,
-        showProgress: false
+        showProgress: false,
+        progressSettled: false
       };
     }
     return {
       title: '等待搭子加入',
       text: '邀请即将过期',
       progress: 0,
-      showProgress: false
+      showProgress: false,
+      progressSettled: false
     };
   }
 
@@ -140,7 +153,8 @@ function buildStatusCopy(context: common.Context): StatusCopy {
     title: '专注契约',
     text: '后台同步中',
     progress: 0,
-    showProgress: false
+    showProgress: false,
+    progressSettled: false
   };
 }
 
@@ -159,16 +173,25 @@ export class DuoBgSyncService {
     if (!context) {
       return;
     }
-    if (needsBgSync(context) && !isAppForeground()) {
-      void DuoBgSyncService.start(context);
+    // 会话结束才彻底 stop；前台只停轮询，保留长时任务，
+    // 避免每次回后台都重新 startBackgroundRunning → 系统再震一次。
+    if (!needsBgSync(context)) {
+      void DuoBgSyncService.stop(context);
       return;
     }
-    void DuoBgSyncService.stop(context);
+    if (isAppForeground()) {
+      DuoBgSyncService.stopTicking();
+      return;
+    }
+    void DuoBgSyncService.start(context);
   }
 
   private static async start(context: common.UIAbilityContext): Promise<void> {
     if (running || starting) {
       DuoBgSyncService.startTicking(context);
+      if (running) {
+        void DuoBgSyncService.updateContinuousTaskNotification(context);
+      }
       return;
     }
 
@@ -275,7 +298,7 @@ export class DuoBgSyncService {
       return;
     }
     const copy = buildStatusCopy(context);
-    const fingerprint = `${copy.title}|${copy.text}|${copy.progress}|${copy.showProgress}`;
+    const fingerprint = `${copy.title}|${copy.text}|${copy.progress}|${copy.showProgress}|${copy.progressSettled}`;
     if (fingerprint === lastPublishedText) {
       return;
     }
@@ -292,8 +315,11 @@ export class DuoBgSyncService {
     const templateData: Record<string, Object> = {};
     templateData['title'] = copy.title;
     templateData['fileName'] = copy.text;
+    // 始终带圆环；满进度用 99 而非 100，也不省略——省略会空环，100 会震且像「已结束」
     if (copy.showProgress) {
-      templateData['progressValue'] = copy.progress;
+      templateData['progressValue'] = copy.progressSettled
+        ? 99
+        : Math.min(99, copy.progress);
     }
     const downLoadTemplate: notificationManager.NotificationTemplate = {
       name: 'downloadTemplate',

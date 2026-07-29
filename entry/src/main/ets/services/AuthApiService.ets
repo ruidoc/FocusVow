@@ -1,3 +1,4 @@
+import { common } from '@kit.AbilityKit';
 import { ApiEnvelope } from '../models/UserModel';
 import { HttpService } from './HttpService';
 
@@ -26,5 +27,23 @@ export class AuthApiService {
 
   static fetchSelfInfo(): Promise<ApiEnvelope> {
     return HttpService.get('/user/info/self', true);
+  }
+
+  static updateUser(data: Record<string, Object>): Promise<ApiEnvelope> {
+    return HttpService.post('/user/update', data, true);
+  }
+
+  static uploadAvatarFile(
+    absolutePath: string,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    return HttpService.uploadFile(
+      '/extend/upload-uinfo-file',
+      absolutePath,
+      'file',
+      'avatar.jpg',
+      'image/jpeg',
+      context
+    );
   }
 }
