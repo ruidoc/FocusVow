@@ -47,11 +47,19 @@ export class DuoApiService {
     return HttpService.get(`/duo/instant/by-token/${encodeURIComponent(token)}`);
   }
 
-  static async instantJoin(token: string, appCount: number): Promise<ApiEnvelope> {
+  static async instantJoin(
+    token: string,
+    appCount: number,
+    title?: string
+  ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {
       'token': token,
       'app_count': appCount
     };
+    const trimmed = (title ?? '').trim();
+    if (trimmed.length > 0) {
+      body['title'] = trimmed;
+    }
     return HttpService.post('/duo/instant/join', body);
   }
 
@@ -107,11 +115,19 @@ export class DuoApiService {
     return HttpService.getWithQuery('/duo/scheduled/list', query);
   }
 
-  static async scheduledJoin(token: string, partnerApps: string[]): Promise<ApiEnvelope> {
+  static async scheduledJoin(
+    token: string,
+    partnerApps: string[],
+    title?: string
+  ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {
       'token': token,
       'partner_apps': partnerApps
     };
+    const trimmed = (title ?? '').trim();
+    if (trimmed.length > 0) {
+      body['title'] = trimmed;
+    }
     return HttpService.post('/duo/scheduled/join', body);
   }
 

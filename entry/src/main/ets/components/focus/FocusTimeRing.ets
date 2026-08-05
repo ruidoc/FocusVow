@@ -94,12 +94,8 @@ export struct FocusTimeRing {
             .fontColor(["#7A5AF8"])
           Text(
             this.isCountup
-              ? this.isDuo
-                ? `共同最短 ${this.minDurationMinutes} 分钟`
-                : `最短 ${this.minDurationMinutes} 分钟`
-              : this.isDuo
-                ? `已共同专注 ${this.elapsedMinutes} 分钟`
-                : `已专注 ${this.elapsedMinutes} 分钟`,
+              ? `最短 ${this.minDurationMinutes} 分钟`
+              : `已专注 ${this.elapsedMinutes} 分钟`,
           )
             .fontSize(13)
             .fontWeight(FontWeight.Medium)

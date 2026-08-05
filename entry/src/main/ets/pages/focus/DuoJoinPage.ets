@@ -34,6 +34,7 @@ struct DuoJoinPage {
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State code: string = '';
   @State preview: DuoSessionView | null = null;
+  @State myTitle: string = '';
   @State isLoadingPreview: boolean = false;
   @State isSubmitting: boolean = false;
 
@@ -85,6 +86,9 @@ struct DuoJoinPage {
     if (!this.preview) {
       this.toastError(response.message ?? '口令无效');
       this.code = '';
+      this.myTitle = '';
+    } else {
+      this.myTitle = '';
     }
     this.isLoadingPreview = false;
   }
@@ -92,6 +96,7 @@ struct DuoJoinPage {
   private resetInput(): void {
     this.preview = null;
     this.code = '';
+    this.myTitle = '';
   }
 
   private onCodeChange(value: string): void {
@@ -100,6 +105,7 @@ struct DuoJoinPage {
     }
     this.code = this.normalizeCode(value);
     this.preview = null;
+    this.myTitle = '';
   }
 
   private async chooseApps(): Promise<void> {
@@ -148,9 +154,18 @@ struct DuoJoinPage {
 
     this.isSubmitting = true;
     const token = this.normalizeCode(this.code);
+    const joinTitle = this.myTitle.trim();
     const response = this.preview.type === 'scheduled'
-      ? await DuoApiService.scheduledJoin(token, [...this.selectedTokens])
-      : await DuoApiService.instantJoin(token, this.selectedTokens.length);
+      ? await DuoApiService.scheduledJoin(
+        token,
+        [...this.selectedTokens],
+        joinTitle.length > 0 ? joinTitle : undefined
+      )
+      : await DuoApiService.instantJoin(
+        token,
+        this.selectedTokens.length,
+        joinTitle.length > 0 ? joinTitle : undefined
+      );
     const session = DuoApiService.parseSession(response);
     if (!session) {
       this.toastError(response.message ?? '加入失败');
@@ -328,6 +343,34 @@ struct DuoJoinPage {
         .alignItems(HorizontalAlign.Start)
         .backgroundColor(AppTheme.colors.surface)
         .borderRadius(AppTheme.radius.lg)
+
+        Column({ space: 8 }) {
+          Text('我的任务名称（可选）')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .width('100%')
+
+          TextInput({
+            text: this.myTitle,
+            placeholder: this.preview.title.length > 0
+              ? this.preview.title
+              : '不填则与发起方相同'
+          })
+            .width('100%')
+            .height(48)
+            .fontSize(16)
+            .fontColor(AppTheme.colors.textPrimary)
+            .placeholderColor(AppTheme.colors.textMuted)
+            .backgroundColor(AppTheme.colors.surface)
+            .borderRadius(AppTheme.radius.lg)
+            .padding({ left: 16, right: 16 })
+            .onChange((value: string) => {
+              this.myTitle = value;
+            })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
 
         Column({ space: 14 }) {
           Row() {

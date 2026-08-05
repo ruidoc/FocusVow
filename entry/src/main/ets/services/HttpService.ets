@@ -192,11 +192,14 @@ export class HttpService {
       }, UPLOAD_TIMEOUT_MS);
 
       void (async () => {
+        const appVersion = await getAppVersion();
         const headers: Record<string, string> = {
           'project-tag': ApiConfig.PROJECT_TAG,
           'os': ApiConfig.OS_TAG,
+          'x-platform': ApiConfig.OS_TAG,
           'device-model': getDeviceModel(),
-          'app-version': await getAppVersion()
+          'app-version': appVersion,
+          'x-app-version': appVersion
         };
         const token = loadAccessToken(context);
         if (token.length > 0) {
@@ -278,13 +281,16 @@ export class HttpService {
     contentType: string,
     size: number
   ): Promise<ApiEnvelope> {
+    const appVersion = await getAppVersion();
     const headers: Record<string, string> = {
       // 关键：没有这行时 multiFormDataList 会被忽略
       'Content-Type': 'multipart/form-data',
       'project-tag': ApiConfig.PROJECT_TAG,
       'os': ApiConfig.OS_TAG,
+      'x-platform': ApiConfig.OS_TAG,
       'device-model': getDeviceModel(),
-      'app-version': await getAppVersion()
+      'app-version': appVersion,
+      'x-app-version': appVersion
     };
     const token = loadAccessToken(context);
     if (token.length > 0) {
@@ -330,12 +336,15 @@ export class HttpService {
     requiresAuth: boolean,
     context?: common.Context
   ): Promise<Record<string, string>> {
+    const appVersion = await getAppVersion();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'project-tag': ApiConfig.PROJECT_TAG,
       'os': ApiConfig.OS_TAG,
+      'x-platform': ApiConfig.OS_TAG,
       'device-model': getDeviceModel(),
-      'app-version': await getAppVersion()
+      'app-version': appVersion,
+      'x-app-version': appVersion
     };
 
     if (requiresAuth) {

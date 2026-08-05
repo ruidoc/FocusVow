@@ -544,7 +544,7 @@ export struct StatsPage {
   @Builder
   private buildTimelineSection(): void {
     Column({ space: 12 }) {
-      this.buildSectionHeader('🏆 履约荣誉墙', this.getTimelineCount(), () => {
+      this.buildSectionHeader('履约荣誉墙', this.getTimelineCount(), () => {
         this.openStatsDetail('timeline');
       })
 
@@ -573,7 +573,7 @@ export struct StatsPage {
   @Builder
   private buildShameSection(): void {
     Column({ space: 12 }) {
-      this.buildSectionHeader('💀 违约耻辱柱', this.getShameCount(), () => {
+      this.buildSectionHeader('违约耻辱柱', this.getShameCount(), () => {
         this.openStatsDetail('shame');
       })
 
