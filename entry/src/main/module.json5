@@ -61,11 +61,16 @@
               "entity.system.home"
             ],
             "actions": [
-              "ohos.want.action.home"
+              "ohos.want.action.home",
+              "wxentity.action.open"
             ]
           }
         ]
       }
+    ],
+    "querySchemes": [
+      "weixin",
+      "wxopensdk"
     ],
     "extensionAbilities": [
       {

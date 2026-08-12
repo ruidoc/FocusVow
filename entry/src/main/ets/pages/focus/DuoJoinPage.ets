@@ -130,10 +130,6 @@ struct DuoJoinPage {
     if (this.isSubmitting || !this.preview) {
       return;
     }
-    if (this.selectedTokens.length === 0) {
-      this.toastError('请先选择至少 1 个应用');
-      return;
-    }
 
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (this.preview.type === 'scheduled') {
@@ -279,7 +275,8 @@ struct DuoJoinPage {
       Button(this.isLoadingPreview ? '识别中' : '识别口令')
         .width(280)
         .height(48)
-        .type(ButtonType.Capsule)
+        .type(ButtonType.Normal)
+        .borderRadius(AppTheme.radius.button)
         .backgroundColor(AppTheme.colors.primary)
         .fontColor('#FFFFFF')
         .enabled(!this.isLoadingPreview && this.code.length === CODE_LENGTH)
@@ -420,7 +417,8 @@ struct DuoJoinPage {
         Button(this.preview.type === 'scheduled' ? '确认加入' : '确认加入并开始')
           .width('100%')
           .height(52)
-          .type(ButtonType.Capsule)
+          .type(ButtonType.Normal)
+          .borderRadius(AppTheme.radius.button)
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .backgroundColor(AppTheme.colors.primary)

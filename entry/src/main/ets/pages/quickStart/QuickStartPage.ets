@@ -119,10 +119,6 @@ struct QuickStartPage {
       return;
     }
 
-    if (this.selectedTokens.length === 0) {
-      this.toastError("请先选择至少 1 个应用");
-      return;
-    }
     if (this.title.trim().length === 0) {
       this.toastError("请先填写本次契约要做什么");
       return;
@@ -329,7 +325,8 @@ struct QuickStartPage {
       Button("开始单人专注")
         .width("100%")
         .height(52)
-        .type(ButtonType.Capsule)
+        .type(ButtonType.Normal)
+        .borderRadius(AppTheme.radius.button)
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
         .backgroundColor(AppTheme.colors.primary)

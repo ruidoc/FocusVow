@@ -1,5 +1,11 @@
 import { AppTheme } from '../../constants/Theme';
 
+const QUOTE_RED: string = '#DC2626';
+const FIELD_BG: string = '#F5F7FB';
+
+/**
+ * 底部输入确认半模态，对齐 RN InputConfirmModal（撕毁契约）。
+ */
 @Component
 export struct InputConfirmSheet {
   @Link visible: boolean;
@@ -8,7 +14,7 @@ export struct InputConfirmSheet {
   @Prop requiredText: string = '';
   @Prop confirmText: string = '确认';
   @Prop cancelText: string = '取消';
-  @Prop inputHint: string = '确定要撕毁？请输入以下文字：';
+  @Prop inputHint: string = '请输入以下文字确认：';
   onConfirm?: () => void;
   onCancel?: () => void;
 
@@ -39,68 +45,74 @@ export struct InputConfirmSheet {
 
   @Builder
   sheetContent() {
-    Column({ space: 16 }) {
-      Row() {
-        Blank()
-          .width(32)
+    Column() {
+      // 标题区：警告图标 + 标题居中，关闭在右上
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Column({ space: 14 }) {
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
+              .fontSize(22)
+              .fontColor([QUOTE_RED])
+            Text(this.title)
+              .fontSize(21)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.colors.textPrimary)
+          }
+          .justifyContent(FlexAlign.Center)
+          .width('100%')
 
-        Text(this.title)
-          .layoutWeight(1)
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-          .textAlign(TextAlign.Center)
+          Text(this.message)
+            .fontSize(15)
+            .fontColor(AppTheme.colors.textSecondary)
+            .lineHeight(22)
+            .textAlign(TextAlign.Center)
+            .width('100%')
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 12 })
+        .alignItems(HorizontalAlign.Center)
+        .margin({ bottom: 28 })
 
         Button({ type: ButtonType.Normal }) {
           SymbolGlyph($r('sys.symbol.xmark'))
             .fontSize(18)
-            .fontColor([AppTheme.colors.textSecondary])
+            .fontColor([AppTheme.colors.textMuted])
         }
-          .width(32)
-          .height(32)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .border({ width: 0 })
-          .onClick(() => {
-            this.visible = false;
-          })
+        .width(28)
+        .height(28)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .margin({ top: 0, right: -4 })
+        .onClick(() => {
+          this.visible = false;
+        })
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Text(this.message)
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-        .lineHeight(22)
-        .width('100%')
 
       Text(this.inputHint)
         .fontSize(13)
-        .fontColor(AppTheme.colors.textSecondary)
+        .fontColor(AppTheme.colors.textMuted)
         .width('100%')
+        .margin({ bottom: 10 })
 
-      Column() {
-        Text(this.requiredText)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.warning)
-          .lineHeight(22)
-          .width('100%')
-      }
-      .width('100%')
-      .padding(12)
-      .backgroundColor(AppTheme.colors.surfaceRaised)
-      .borderRadius(AppTheme.radius.sm)
+      Text(this.requiredText)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(QUOTE_RED)
+        .lineHeight(22)
+        .width('100%')
+        .margin({ bottom: 14 })
 
-      TextInput({ text: this.inputText, placeholder: '请在此输入...' })
+      TextInput({ text: this.inputText, placeholder: '在此输入确认文字' })
         .width('100%')
         .height(48)
         .fontSize(15)
         .fontColor(AppTheme.colors.textPrimary)
         .placeholderColor(AppTheme.colors.textMuted)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(AppTheme.radius.sm)
-        .padding({ left: 12, right: 12 })
+        .backgroundColor(FIELD_BG)
+        .borderRadius(14)
+        .padding({ left: 14, right: 14 })
+        .margin({ bottom: 28 })
         .onChange((value: string) => {
           this.inputText = value;
         })
@@ -109,9 +121,12 @@ export struct InputConfirmSheet {
         Button(this.cancelText)
           .layoutWeight(1)
           .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor(AppTheme.colors.border)
-          .fontColor(AppTheme.colors.primary)
+          .type(ButtonType.Normal)
+          .borderRadius(AppTheme.radius.button)
+          .backgroundColor(FIELD_BG)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
           .onClick(() => {
             this.visible = false;
           })
@@ -119,11 +134,14 @@ export struct InputConfirmSheet {
         Button(this.confirmText)
           .layoutWeight(1)
           .height(48)
-          .type(ButtonType.Capsule)
-          .backgroundColor(this.isMatch() ? AppTheme.colors.danger : AppTheme.colors.border)
+          .type(ButtonType.Normal)
+          .borderRadius(AppTheme.radius.button)
+          .backgroundColor(this.isMatch() ? AppTheme.colors.danger : FIELD_BG)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
           .fontColor(this.isMatch() ? '#FFFFFF' : AppTheme.colors.textMuted)
           .enabled(this.isMatch())
-          .opacity(this.isMatch() ? 1 : 0.7)
+          .opacity(this.isMatch() ? 1 : 0.85)
           .onClick(() => {
             this.handleConfirm();
           })
@@ -132,10 +150,10 @@ export struct InputConfirmSheet {
     }
     .width('100%')
     .padding({
-      left: 18,
-      right: 18,
-      top: 24,
-      bottom: 34
+      left: 22,
+      right: 22,
+      top: 20,
+      bottom: 32
     })
   }
 
@@ -148,7 +166,7 @@ export struct InputConfirmSheet {
         preferType: SheetType.BOTTOM,
         showClose: false,
         dragBar: true,
-        backgroundColor: AppTheme.colors.backgroundSoft,
+        backgroundColor: AppTheme.colors.surface,
         onDisappear: () => {
           this.handleDismiss();
         }

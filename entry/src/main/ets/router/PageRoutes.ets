@@ -14,6 +14,9 @@ export class PageRoutes {
   static readonly DuoCreate: string = 'pages/focus/DuoCreatePage';
   static readonly DuoWait: string = 'pages/focus/DuoWaitPage';
   static readonly DuoJoin: string = 'pages/focus/DuoJoinPage';
+  static readonly DuoMatch: string = 'pages/focus/DuoMatchPage';
+  static readonly Welcome: string = 'pages/onboarding/WelcomePage';
+  static readonly Onboarding: string = 'pages/onboarding/OnboardingPage';
   static readonly PlanList: string = 'pages/plans/PlanListPage';
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
@@ -29,10 +32,19 @@ export class PageRoutes {
   static readonly About: string = 'pages/settings/AboutPage';
   static readonly Feedback: string = 'pages/settings/FeedbackPage';
   static readonly Login: string = 'pages/login/LoginPage';
+  static readonly EmailLogin: string = 'pages/login/EmailLoginPage';
   static readonly Register: string = 'pages/login/RegisterPage';
+  static readonly WechatBindEmail: string = 'pages/login/WechatBindEmailPage';
+  static readonly WechatBind: string = 'pages/login/WechatBindPage';
   static readonly Redeem: string = 'pages/user/RedeemPage';
+  static readonly InviteRecord: string = 'pages/user/InviteRecordPage';
   static readonly ProfileEdit: string = 'pages/user/ProfileEditPage';
   static readonly AvatarCrop: string = 'pages/user/AvatarCropPage';
+  static readonly OrgList: string = 'pages/org/OrgListPage';
+  static readonly OrgJoin: string = 'pages/org/OrgJoinPage';
+  static readonly OrgDetail: string = 'pages/org/OrgDetailPage';
+  static readonly OrgMembers: string = 'pages/org/OrgMembersPage';
+  static readonly OrgManage: string = 'pages/org/OrgManagePage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {
@@ -43,6 +55,22 @@ export function pushRoute(url: string): void {
   router.pushUrl({ url }).catch((error: BusinessError) => {
     logRouteError('pushRoute', error);
   });
+}
+
+/** 普通登录入口：清掉欢迎页老用户标记，避免误进补画像 */
+export function pushLogin(): void {
+  AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+  pushRoute(PageRoutes.Login);
+}
+
+export function pushOrgDetail(orgId: string): void {
+  AppStorage.setOrCreate(StoreKeys.OrgDetailId, orgId);
+  pushRoute(PageRoutes.OrgDetail);
+}
+
+export function pushOrgMembers(orgId: string): void {
+  AppStorage.setOrCreate(StoreKeys.OrgDetailId, orgId);
+  pushRoute(PageRoutes.OrgMembers);
 }
 
 export function pushAvatarCrop(uri: string): void {

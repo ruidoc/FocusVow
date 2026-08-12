@@ -5,6 +5,9 @@
     "pages/focus/DuoCreatePage",
     "pages/focus/DuoWaitPage",
     "pages/focus/DuoJoinPage",
+    "pages/focus/DuoMatchPage",
+    "pages/onboarding/WelcomePage",
+    "pages/onboarding/OnboardingPage",
     "pages/plans/PlanListPage",
     "pages/plans/PlanAddPage",
     "pages/plans/PlanDetailPage",
@@ -19,9 +22,18 @@
     "pages/settings/AboutPage",
     "pages/settings/FeedbackPage",
     "pages/login/LoginPage",
+    "pages/login/EmailLoginPage",
     "pages/login/RegisterPage",
+    "pages/login/WechatBindEmailPage",
+    "pages/login/WechatBindPage",
     "pages/user/RedeemPage",
+    "pages/user/InviteRecordPage",
     "pages/user/ProfileEditPage",
-    "pages/user/AvatarCropPage"
+    "pages/user/AvatarCropPage",
+    "pages/org/OrgListPage",
+    "pages/org/OrgJoinPage",
+    "pages/org/OrgDetailPage",
+    "pages/org/OrgMembersPage",
+    "pages/org/OrgManagePage"
   ]
 }

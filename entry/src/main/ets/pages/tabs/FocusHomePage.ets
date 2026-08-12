@@ -1,10 +1,11 @@
 import { common } from "@kit.AbilityKit";
 import { window } from "@kit.ArkUI";
+import { showToast } from "../../common/Toast";
 import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
-import { TEAR_CONFIRM_REQUIRED_TEXT } from "../../constants/TearConfirm";
+import { TEAR_CONFIRM_REQUIRED_TEXT, TEAR_CONFIRM_REQUIRED_TEXT_DUO } from "../../constants/TearConfirm";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { UsersIcon } from "../../components/common/UsersIcon";
 import {
@@ -21,7 +22,7 @@ import {
 import { isPastCountupMinimum } from "../../utils/TimerMode";
 import { FocusPlan } from "../../models/PlanModel";
 import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from "../../models/DuoModel";
-import { PageRoutes, pushRoute } from "../../router/PageRoutes";
+import { PageRoutes, pushLogin, pushRoute } from "../../router/PageRoutes";
 import {
   endCycleGuardLock,
   endQuickFocus,
@@ -44,6 +45,8 @@ import {
   ensureSoloFocusAccess,
 } from "../../services/GuestSoloFocusService";
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
+import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
+import { openTrustListAppForm } from "../../services/ScreenTimeService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
@@ -87,6 +90,18 @@ export struct FocusHomePage {
     }
     this.startTimer();
     this.loadTopSafeInset(hostContext);
+    void this.tryAskNotifyAfterOnboarding(hostContext);
+  }
+
+  onPageShow(): void {
+    // 引导结束 returnToMainTab 时首页可能早已 aboutToAppear，需在回显时再申请
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void this.tryAskNotifyAfterOnboarding(hostContext);
+  }
+
+  private tryAskNotifyAfterOnboarding(hostContext: common.UIAbilityContext): void {
+    // ensureNotifyOnLaunch 内部会跳过未完成引导；完成后才会弹
+    void ensureNotifyOnLaunch(hostContext);
   }
 
   private loadTopSafeInset(hostContext: common.UIAbilityContext): void {
@@ -127,6 +142,19 @@ export struct FocusHomePage {
 
   private hasPendingDuoWait(): boolean {
     return this.duoWaitSessionId.length > 0;
+  }
+
+  private shouldShowOrgEntry(): boolean {
+    return !this.isActiveLocked() && !this.hasPendingDuoWait();
+  }
+
+  private onOrgEntryPress(): void {
+    if (!UserStore.isLoggedIn()) {
+      showToast("请先登录", this.getUIContext());
+      pushLogin();
+      return;
+    }
+    pushRoute(PageRoutes.OrgList);
   }
 
   private getDuoWaitEntryDetail(): string {
@@ -255,9 +283,23 @@ export struct FocusHomePage {
 
   private getTearConfirmMessage(): string {
     if (this.activeLock.participationMode === "duo") {
-      return "撕毁后本次专注立即失败，搭子也会因连坐记为失败。撕毁契约后无法撤销。";
+      return "撕毁后本次立即失败，搭子也会连坐失败，且无法撤销。";
     }
-    return "撕毁后本次专注记为违约，会生成耻辱证。撕毁契约后无法撤销，本次将记入耻辱柱。";
+    return "撕毁后将生成耻辱证，本次专注记为违约，且无法撤销。";
+  }
+
+  private getTearRequiredText(): string {
+    if (this.activeLock.participationMode === "duo") {
+      return TEAR_CONFIRM_REQUIRED_TEXT_DUO;
+    }
+    return TEAR_CONFIRM_REQUIRED_TEXT;
+  }
+
+  private getTearCancelText(): string {
+    if (this.activeLock.participationMode === "duo") {
+      return "继续专注";
+    }
+    return "我再坚持一下";
   }
 
   private isPastCountupMin(): boolean {
@@ -552,7 +594,6 @@ export struct FocusHomePage {
     }
     .height(40)
     .padding({ left: 20, right: 20 })
-    .margin({ top: 10 })
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .backgroundColor(AppTheme.colors.surface)
@@ -589,6 +630,41 @@ export struct FocusHomePage {
     .margin({ bottom: 10 });
   }
 
+  private canOpenWhitelist(): boolean {
+    return this.activeLock.mode === "allow";
+  }
+
+  private async openWhitelistApps(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const result = await openTrustListAppForm(
+      hostContext,
+      this.activeLock.selectedTokens,
+      "点击图标打开应用",
+    );
+    if (!result.ok) {
+      showToast(result.message, this.getUIContext());
+    }
+  }
+
+  @Builder
+  private buildOpenWhitelistButton(): void {
+    Row({ space: 6 }) {
+      SymbolGlyph($r("sys.symbol.square_grid_2x2"))
+        .fontSize(15)
+        .fontColor([AppTheme.colors.primary])
+      Text("打开白名单应用")
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.primary)
+    }
+    .padding({ top: 8, bottom: 8 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      void this.openWhitelistApps();
+    });
+  }
+
   @Builder
   private buildLockedState(): void {
     Column({ space: 24 }) {
@@ -620,9 +696,16 @@ export struct FocusHomePage {
       .width("100%")
       .alignItems(HorizontalAlign.Center)
 
-      if (this.canShowTearButton()) {
-        this.buildWeakTearButton();
+      Column({ space: 12 }) {
+        if (this.canOpenWhitelist()) {
+          this.buildOpenWhitelistButton();
+        }
+        if (this.canShowTearButton()) {
+          this.buildWeakTearButton();
+        }
       }
+      .margin({ top: 48 })
+      .alignItems(HorizontalAlign.Center)
     }
     .width("100%")
     .padding({
@@ -635,7 +718,7 @@ export struct FocusHomePage {
 
   private ensureLoginThen(route: string): void {
     if (!UserStore.isLoggedIn()) {
-      pushRoute(PageRoutes.Login);
+      pushLogin();
       return;
     }
     // 仅发起互督进页前校验；加入互督放宽不校验
@@ -733,26 +816,52 @@ export struct FocusHomePage {
   }
 
   @Builder
+  private buildScheduledLink(): void {
+    Row({ space: 4 }) {
+      SymbolGlyph($r('sys.symbol.calendar'))
+        .fontSize(15)
+        .fontColor([AppTheme.colors.textSecondary])
+      Text('定时契约 · 到点自动开始')
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textSecondary)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([AppTheme.colors.textMuted])
+    }
+    .justifyContent(FlexAlign.Center)
+    .height(40)
+    .margin({ top: 8 })
+    .onClick(() => {
+      this.onSelectTab?.('plans');
+    })
+  }
+
+  @Builder
   private buildEmptyState(): void {
-    Column({ space: 18 }) {
-      this.buildStatusIcon(false)
-      Column({ space: 10 }) {
-        Text("和搭子一起专注")
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .textAlign(TextAlign.Center)
-        Text("双人互督，连坐机制，一人毁约两人失败")
-          .fontSize(16)
-          .fontColor(AppTheme.colors.textSecondary)
-          .textAlign(TextAlign.Center)
+    Column({ space: 24 }) {
+      Column({ space: 12 }) {
+        this.buildStatusIcon(false)
+        Column({ space: 10 }) {
+          Text('和搭子一起专注')
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
+            .textAlign(TextAlign.Center)
+          Text('双人互督，连坐机制，一人毁约两人失败')
+            .fontSize(16)
+            .fontColor(AppTheme.colors.textSecondary)
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
       }
-      .width("100%")
+      .width('100%')
       .alignItems(HorizontalAlign.Center)
+
       Row({ space: 12 }) {
         this.buildDuoActionButton(
-          "发起互督",
-          $r("sys.symbol.person_badge_plus"),
+          '发起互督',
+          $r('sys.symbol.person_badge_plus'),
           AppTheme.colors.accentBlue,
           () => {
             this.ensureLoginThen(PageRoutes.DuoCreate);
@@ -760,20 +869,45 @@ export struct FocusHomePage {
         )
 
         this.buildDuoActionButton(
-          "加入互督",
-          $r("sys.symbol.link"),
+          '加入互督',
+          $r('sys.symbol.link'),
           AppTheme.colors.accentOrange,
           () => {
             this.ensureLoginThen(PageRoutes.DuoJoin);
           },
         )
-      }.width("100%")
+      }.width('100%')
 
-      this.buildSoloFocusLink()
+      Column({ space: 4 }) {
+        this.buildSoloFocusLink()
+        this.buildScheduledLink()
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
     }
-    .width("100%")
+    .width('100%')
     .padding({ left: 12, right: 12 })
     .alignItems(HorizontalAlign.Center);
+  }
+
+  @Builder
+  private buildOrgEntryButton(): void {
+    Column() {
+      Button({ type: ButtonType.Normal }) {
+        UsersIcon({ iconSize: 22, color: AppTheme.colors.textPrimary })
+      }
+      .width(42)
+      .height(42)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(21)
+      .onClick(() => {
+        this.onOrgEntryPress();
+      })
+    }
+    .width("100%")
+    .padding({ left: 20, right: 20, top: this.topSafeInsetVp + 8 })
+    .alignItems(HorizontalAlign.End)
   }
 
   @Builder
@@ -832,88 +966,6 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildModeEntry(
-    title: string,
-    value: string,
-    detail: string,
-    symbol: Resource,
-    onPress: () => void,
-  ): void {
-    Button() {
-      Row({ space: 14 }) {
-        Row() {
-          SymbolGlyph(symbol)
-            .fontSize(20)
-            .fontColor([AppTheme.colors.primary])
-        }
-        .width(40)
-        .height(40)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(AppTheme.colors.primarySoft)
-        .borderRadius(20)
-        Column({ space: 4 }) {
-          Text(title)
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-            .width("100%")
-          Text(detail)
-            .fontSize(12)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width("100%")
-            .maxLines(2)
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        Text(value)
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-          .visibility(value.length > 0 ? Visibility.Visible : Visibility.None)
-        SymbolGlyph($r("sys.symbol.chevron_right"))
-          .fontSize(14)
-          .fontColor([AppTheme.colors.textMuted])
-          .visibility(value.length > 0 ? Visibility.None : Visibility.Visible)
-      }.width("100%")
-    }
-    .width("100%")
-    .type(ButtonType.Normal)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .padding(16)
-    .onClick(() => {
-      onPress();
-    });
-  }
-
-  @Builder
-  private buildModePanel(): void {
-    Column({ space: 12 }) {
-      Column({ space: 4 }) {
-        Text("长期专注，定时契约效率更高")
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width("100%")
-          .textAlign(TextAlign.Center)
-      }
-      .width("100%")
-      .alignItems(HorizontalAlign.Center)
-
-      this.buildModeEntry(
-        "创建定时契约",
-        "",
-        "设定开始时间，到点自动进入专注",
-        $r("sys.symbol.calendar"),
-        () => {
-          this.onSelectTab?.("plans");
-        },
-      )
-    }
-    .width("100%")
-    .margin({ top: 18 });
-  }
-
-  @Builder
   private buildHomeContent(): void {
     if (this.isActiveLocked()) {
       Column() {
@@ -924,13 +976,14 @@ export struct FocusHomePage {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center);
     } else {
-      Column({ space: 24 }) {
+      Column() {
         this.buildEmptyState()
-        this.buildModePanel()
       }
       .width("100%")
-      .padding({ top: this.hasPendingDuoWait() ? 64 : 0 })
-      .alignItems(HorizontalAlign.Start);
+      .height("100%")
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .offset({ y: -20 });
     }
   }
 
@@ -939,7 +992,7 @@ export struct FocusHomePage {
       SystemNavPage({
         title: "专注",
         showTitleBar: false,
-        usePageScroll: !this.isActiveLocked(),
+        usePageScroll: false,
         content: (): void => {
           this.buildHomeContent();
         },
@@ -947,6 +1000,10 @@ export struct FocusHomePage {
 
       if (!this.isActiveLocked() && this.hasPendingDuoWait()) {
         this.buildDuoWaitBanner();
+      }
+
+      if (this.shouldShowOrgEntry()) {
+        this.buildOrgEntryButton();
       }
 
       if (this.isActiveLocked() && this.isDuoFocus()) {
@@ -963,10 +1020,10 @@ export struct FocusHomePage {
         visible: this.showTearConfirm,
         title: "撕毁契约",
         message: this.getTearConfirmMessage(),
-        requiredText: TEAR_CONFIRM_REQUIRED_TEXT,
+        requiredText: this.getTearRequiredText(),
         confirmText: "确认撕毁",
-        cancelText: "继续专注",
-        inputHint: "确定要撕毁？请输入以下文字：",
+        cancelText: this.getTearCancelText(),
+        inputHint: "请输入以下文字确认：",
         onConfirm: () => {
           void this.performTearLock();
         },

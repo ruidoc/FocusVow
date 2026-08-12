@@ -8,10 +8,12 @@ import {
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { HonorRecordListSection } from '../../components/stats/HonorRecordListSection';
 import { ShameRecordListSection } from '../../components/stats/ShameRecordListSection';
+import { TaskDurationChart } from '../../components/stats/TaskDurationChart';
 import { AppTheme } from '../../constants/Theme';
 import {
   DuoShameDay,
   DuoShameRecord,
+  DuoStatsTaskItem,
   DuoTimelineDay,
   DuoTimelineRecord
 } from '../../models/DuoModel';
@@ -41,6 +43,7 @@ struct StatsDetailPage {
   @State currentSection: StatsDetailSection = 'timeline';
   @State timeline: DuoTimelineDay[] = [];
   @State shame: DuoShameDay[] = [];
+  @State byTask: DuoStatsTaskItem[] = [];
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
   @State errorMessage: string = '';
@@ -56,30 +59,40 @@ struct StatsDetailPage {
     const storedPeriod = String(AppStorage.get<string>(StoreKeys.StatsDetailPeriod) ?? 'today');
     const storedSection = String(AppStorage.get<string>(StoreKeys.StatsDetailSection) ?? 'timeline');
     this.currentPeriod = storedPeriod === 'week' || storedPeriod === 'month' ? storedPeriod : 'today';
-    this.currentSection = storedSection === 'shame' ? 'shame' : 'timeline';
+    if (storedSection === 'shame') {
+      this.currentSection = 'shame';
+    } else if (storedSection === 'byTask') {
+      this.currentSection = 'byTask';
+    } else {
+      this.currentSection = 'timeline';
+    }
     this.scrollerReady = true;
     void this.reload(false);
   }
 
-  private getAllItems(): HonorRecordItem[] | ShameRecordItem[] {
+  private getAllItemsCount(): number {
     if (this.currentSection === 'timeline') {
-      return flattenTimelineDays(this.timeline);
+      return flattenTimelineDays(this.timeline).length;
     }
-    return flattenShameDays(this.shame);
+    if (this.currentSection === 'shame') {
+      return flattenShameDays(this.shame).length;
+    }
+    return this.byTask.length;
   }
 
   private getVisibleHonorItems(): HonorRecordItem[] {
-    const allItems = flattenTimelineDays(this.timeline);
-    return allItems.slice(0, this.visibleCount);
+    return flattenTimelineDays(this.timeline).slice(0, this.visibleCount);
   }
 
   private getVisibleShameItems(): ShameRecordItem[] {
-    const allItems = flattenShameDays(this.shame);
-    return allItems.slice(0, this.visibleCount);
+    return flattenShameDays(this.shame).slice(0, this.visibleCount);
   }
 
   private hasMoreItems(): boolean {
-    return this.visibleCount < this.getAllItems().length;
+    if (this.currentSection === 'byTask') {
+      return false;
+    }
+    return this.visibleCount < this.getAllItemsCount();
   }
 
   private loadMore(): void {
@@ -103,6 +116,7 @@ struct StatsDetailPage {
       this.errorMessage = `登录后可查看${getStatsDetailPageTitle(this.currentPeriod, this.currentSection)}`;
       this.timeline = [];
       this.shame = [];
+      this.byTask = [];
       this.isLoading = false;
       this.isRefreshing = false;
       return;
@@ -119,7 +133,7 @@ struct StatsDetailPage {
       }
       const timelineData = DuoApiService.parseTimeline(timelineRes);
       this.timeline = timelineData?.items ?? [];
-    } else {
+    } else if (this.currentSection === 'shame') {
       const shameRes = await DuoApiService.getStatsShame(this.currentPeriod);
       if (requestVersion !== this.reloadVersion) {
         return;
@@ -130,6 +144,17 @@ struct StatsDetailPage {
       }
       const shameData = DuoApiService.parseShame(shameRes);
       this.shame = shameData?.items ?? [];
+    } else {
+      const byTaskRes = await DuoApiService.getStatsByTask(this.currentPeriod);
+      if (requestVersion !== this.reloadVersion) {
+        return;
+      }
+      if (byTaskRes.statusCode !== 200) {
+        this.errorMessage = byTaskRes.message ?? '任务分布加载失败';
+        showErrorToast(this.errorMessage, this.getUIContext());
+      }
+      const byTaskData = DuoApiService.parseByTask(byTaskRes);
+      this.byTask = byTaskData?.items ?? [];
     }
 
     this.isLoading = false;
@@ -166,7 +191,7 @@ struct StatsDetailPage {
 
   @Builder
   private buildListFooter(): void {
-    if (this.isLoading || this.getAllItems().length === 0) {
+    if (this.currentSection === 'byTask' || this.isLoading || this.getAllItemsCount() === 0) {
       Blank()
     } else if (this.hasMoreItems()) {
       Text('上拉加载更多')
@@ -194,12 +219,17 @@ struct StatsDetailPage {
           this.openHonorRecord(item.record, item.day);
         }
       })
-    } else {
+    } else if (this.currentSection === 'shame') {
       ShameRecordListSection({
         items: this.getVisibleShameItems(),
         onItemPress: (item: ShameRecordItem) => {
           this.openShameRecord(item.record, item.day);
         }
+      })
+    } else {
+      TaskDurationChart({
+        data: this.byTask,
+        visibleLimit: 100
       })
     }
   }

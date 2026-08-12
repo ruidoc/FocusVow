@@ -77,8 +77,9 @@ struct PermissionPage {
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const result = await requestScreenTimeAuthorization(hostContext);
       SettingsStore.updateAuthorization(hostContext, result.ok, result.message);
-      this.hasAuthorized = result.ok;
-      if (!result.ok) {
+      // 再读一次系统状态，避免 promise 先结束、授权状态滞后
+      this.hasAuthorized = result.ok || (await checkScreenTimeAuthorized());
+      if (!this.hasAuthorized) {
         showToast(result.message, this.getUIContext());
       }
     } finally {

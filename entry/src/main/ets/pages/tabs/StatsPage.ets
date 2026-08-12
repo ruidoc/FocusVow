@@ -5,23 +5,29 @@ import {
   openShameCertificatePreview
 } from '../../services/CertificateNavigationService';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import {
+  ContractFulfillment,
+  ContractFulfillmentChart
+} from '../../components/stats/ContractFulfillmentChart';
 import { HonorRecordListSection } from '../../components/stats/HonorRecordListSection';
+import { MixedDuration } from '../../components/stats/MixedDuration';
 import { ShameRecordListSection } from '../../components/stats/ShameRecordListSection';
+import { TaskDurationChart } from '../../components/stats/TaskDurationChart';
 import { AppTheme } from '../../constants/Theme';
 import {
   DuoShameDay,
   DuoShameRecord,
   DuoStatsSummary,
+  DuoStatsTaskItem,
   DuoTimelineDay,
   DuoTimelineRecord
 } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
-  countDuoBlast,
   flattenShameDays,
   flattenTimelineDays,
-  getContractWinRateHint,
+  formatSuccessDurationLabel,
   getDuoBlastReputationHint,
   getStatsPeriodLabel,
   HONOR_SECTION_BORDER_COLOR,
@@ -29,6 +35,7 @@ import {
   SHAME_SECTION_BORDER_COLOR,
   ShameRecordItem,
   STATS_RECORD_SECTION_BG_COLOR,
+  StatsDetailSection,
   StatsPeriod
 } from '../../services/StatsRecordUtil';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -49,8 +56,6 @@ import {
 
 bootstrapStores();
 
-type StatsDetailSection = 'timeline' | 'shame';
-
 const STATS_SHARE_BOTTOM_PADDING: number = 24;
 
 @Component
@@ -59,6 +64,7 @@ export struct StatsPage {
   @State summary: DuoStatsSummary | null = null;
   @State timeline: DuoTimelineDay[] = [];
   @State shame: DuoShameDay[] = [];
+  @State byTask: DuoStatsTaskItem[] = [];
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
   @State errorMessage: string = '';
@@ -91,6 +97,7 @@ export struct StatsPage {
       this.summary = null;
       this.timeline = [];
       this.shame = [];
+      this.byTask = [];
       this.isLoading = false;
       this.isRefreshing = false;
       return;
@@ -100,61 +107,71 @@ export struct StatsPage {
     const responses = await Promise.all([
       DuoApiService.getStatsSummary(period),
       DuoApiService.getStatsTimeline(period),
-      DuoApiService.getStatsShame(period)
+      DuoApiService.getStatsShame(period),
+      DuoApiService.getStatsByTask(period)
     ]);
     const summaryRes = responses[0];
     const timelineRes = responses[1];
     const shameRes = responses[2];
+    const byTaskRes = responses[3];
 
     if (requestVersion !== this.reloadVersion) {
       return;
     }
 
-    if (summaryRes.statusCode !== 200 || timelineRes.statusCode !== 200 || shameRes.statusCode !== 200) {
-      this.errorMessage = summaryRes.message ?? timelineRes.message ?? shameRes.message ?? '统计加载失败';
+    const errors: string[] = [];
+    if (summaryRes.statusCode !== 200) {
+      errors.push(summaryRes.message ?? '统计摘要加载失败');
+    }
+    if (timelineRes.statusCode !== 200) {
+      errors.push(timelineRes.message ?? '荣誉墙加载失败');
+    }
+    if (shameRes.statusCode !== 200) {
+      errors.push(shameRes.message ?? '耻辱柱加载失败');
+    }
+    if (byTaskRes.statusCode !== 200) {
+      errors.push(byTaskRes.message ?? '任务分布加载失败');
+    }
+    if (errors.length > 0) {
+      this.errorMessage = errors[0];
       showErrorToast(this.errorMessage, this.getUIContext());
     }
 
     this.summary = DuoApiService.parseSummary(summaryRes);
     const timelineData = DuoApiService.parseTimeline(timelineRes);
     const shameData = DuoApiService.parseShame(shameRes);
+    const byTaskData = DuoApiService.parseByTask(byTaskRes);
     this.timeline = timelineData?.items ?? [];
     this.shame = shameData?.items ?? [];
+    this.byTask = byTaskData?.items ?? [];
     this.isLoading = false;
     this.isRefreshing = false;
   }
 
-  private getSuccessMinutes(): number {
-    return this.summary?.actual_mins ?? 0;
-  }
-
-  private getSuccessDurationLabel(): string {
-    const minutes = this.getSuccessMinutes();
-    if (minutes < 60) {
-      return `${minutes} 分钟`;
+  private getDurationHint(): string {
+    if (this.currentPeriod === 'week') {
+      return '本周成功专注';
     }
-    const hours = Math.floor(minutes / 60);
-    const remainMinutes = minutes % 60;
-    if (remainMinutes === 0) {
-      return `${hours} 小时`;
+    if (this.currentPeriod === 'month') {
+      return '本月成功专注';
     }
-    return `${hours} 小时 ${remainMinutes} 分钟`;
+    return '今日成功专注';
   }
 
-  private getCompletedCount(): number {
-    return this.summary?.completed_count ?? 0;
+  private getFulfillment(): ContractFulfillment {
+    return {
+      solo_completed_count: this.summary?.solo_completed_count ?? 0,
+      solo_failed_count: this.summary?.solo_failed_count ?? 0,
+      duo_completed_count: this.summary?.duo_completed_count ?? 0,
+      duo_violator_count: this.summary?.duo_violator_count ?? 0,
+      duo_cohort_count: this.summary?.duo_cohort_count ?? 0
+    };
   }
 
-  private getFailedCount(): number {
-    return this.summary?.failed_count ?? 0;
-  }
-
-  private getContractWinRate(): number {
-    return this.summary?.success_rate ?? 0;
-  }
-
-  private getDuoBlastCount(): number {
-    return countDuoBlast(this.shame);
+  private hasFulfillmentRecords(): boolean {
+    const completed = this.summary?.completed_count ?? 0;
+    const failed = this.summary?.failed_count ?? 0;
+    return completed + failed > 0;
   }
 
   private getTimelineCount(): number {
@@ -179,14 +196,6 @@ export struct StatsPage {
 
   private getShamePreviewItems(limit: number = 5): ShameRecordItem[] {
     return flattenShameDays(this.shame).slice(0, limit);
-  }
-
-  private getContractWinRateHint(): string {
-    return getContractWinRateHint(
-      this.summary?.success_rate ?? 0,
-      this.summary?.completed_count ?? 0,
-      this.summary?.failed_count ?? 0
-    );
   }
 
   private openStatsDetail(section: StatsDetailSection): void {
@@ -320,8 +329,6 @@ export struct StatsPage {
   @Builder
   private buildLoadingState(): void {
     Column({ space: 18 }) {
-      this.buildLoadingCard(112, AppTheme.colors.surface, AppTheme.colors.border)
-
       Row({ space: 12 }) {
         Column() {
           this.buildLoadingCard(118, AppTheme.colors.surface, AppTheme.colors.border)
@@ -340,6 +347,8 @@ export struct StatsPage {
       }
       .width('100%')
 
+      this.buildLoadingCard(160, AppTheme.colors.surface, AppTheme.colors.border)
+      this.buildLoadingCard(180, AppTheme.colors.surface, AppTheme.colors.border)
       this.buildLoadingCard(132, STATS_RECORD_SECTION_BG_COLOR, HONOR_SECTION_BORDER_COLOR)
       this.buildLoadingCard(132, STATS_RECORD_SECTION_BG_COLOR, SHAME_SECTION_BORDER_COLOR)
     }
@@ -347,145 +356,67 @@ export struct StatsPage {
   }
 
   @Builder
-  private buildSuccessCard(): void {
-    Column({ space: 10 }) {
-      Text(`${getStatsPeriodLabel(this.currentPeriod)}成功专注`)
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-      Text(this.getSuccessDurationLabel())
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
-
-      Row({ space: 2 }) {
-        Text('完成')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-        Text(`${this.getCompletedCount()}`)
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.success)
-        Text('次，放弃')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-        Text(`${this.getFailedCount()}`)
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.danger)
-        Text('次')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-        Text('（失败碎裂时间不计入）')
-        .fontSize(12)
-        .fontColor(AppTheme.colors.textMuted)
-        .lineHeight(18)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .width('100%')
-
-      
-    }
-    .width('100%')
-    .padding(20)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(AppTheme.radius.lg)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private buildCompactMetricCard(
-    title: string,
-    value: string,
-    hint: string,
-    backgroundColor: string = AppTheme.colors.surface,
-    borderColor: string = AppTheme.colors.border,
-    valueColor: string = AppTheme.colors.textPrimary,
-    hintColor: string = AppTheme.colors.textMuted
-  ): void {
+  private buildCompactMetricCard(title: string, value: string, hint: string): void {
     Column({ space: 6 }) {
       Text(title)
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
-      Text(value)
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(valueColor)
-        .width('100%')
+        .maxLines(1)
+      MixedDuration({
+        text: value,
+        color: AppTheme.colors.textPrimary,
+        numberSize: 20,
+        unitSize: 11
+      })
       Text(hint)
         .fontSize(11)
-        .fontColor(hintColor)
+        .fontColor(AppTheme.colors.textMuted)
         .width('100%')
-        .lineHeight(18)
+        .lineHeight(16)
         .maxLines(2)
     }
     .padding(14)
-    .backgroundColor(backgroundColor)
+    .backgroundColor(AppTheme.colors.surface)
     .borderRadius(AppTheme.radius.md)
-    .border({ width: 1, color: borderColor })
+    .border({ width: 1, color: AppTheme.colors.border })
     .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .constraintSize({ minHeight: 100 })
   }
 
   @Builder
-  private buildContractBoard(): void {
-    Column({ space: 12 }) {
-      // Text('契约看板')
-      //   .fontSize(17)
-      //   .fontWeight(FontWeight.Medium)
-      //   .fontColor(AppTheme.colors.textPrimary)
-      //   .width('100%')
-
-      Row({ space: 12 }) {
-        Column() {
-          this.buildCompactMetricCard(
-            '连续专注',
-            `${this.summary?.streak_days ?? 0} 天`,
-            `历史最长 ${this.summary?.best_streak_days ?? 0} 天`,
-            AppTheme.colors.surface,
-            AppTheme.colors.border,
-            AppTheme.colors.textPrimary
-          )
-        }
-        .layoutWeight(1)
-
-        Column() {
-          this.buildCompactMetricCard(
-            '契约总胜率',
-            `${this.getContractWinRate()}%`,
-            this.getContractWinRateHint(),
-            AppTheme.colors.surface,
-            AppTheme.colors.border,
-            AppTheme.colors.textPrimary
-          )
-        }
-        .layoutWeight(1)
-
-        Column() {
-          this.buildCompactMetricCard(
-            '连累搭子',
-            `${this.getDuoBlastCount()} 次`,
-            getDuoBlastReputationHint(this.getDuoBlastCount()),
-            AppTheme.colors.surface,
-            AppTheme.colors.border,
-            AppTheme.colors.textPrimary,
-          )
-        }
-        .layoutWeight(1)
+  private buildMetricBoard(): void {
+    Row({ space: 12 }) {
+      Column() {
+        this.buildCompactMetricCard(
+          '连续专注',
+          `${this.summary?.streak_days ?? 0} 天`,
+          `历史最长 ${this.summary?.best_streak_days ?? 0} 天`
+        )
       }
-      .width('100%')
+      .layoutWeight(1)
+
+      Column() {
+        this.buildCompactMetricCard(
+          '履约总时长',
+          formatSuccessDurationLabel(this.summary?.actual_mins ?? 0),
+          this.getDurationHint()
+        )
+      }
+      .layoutWeight(1)
+
+      Column() {
+        this.buildCompactMetricCard(
+          '违约次数',
+          `${this.summary?.duo_violator_count ?? 0} 次`,
+          getDuoBlastReputationHint(this.summary?.duo_violator_count ?? 0)
+        )
+      }
+      .layoutWeight(1)
     }
     .width('100%')
-  }
-
-  @Builder
-  private buildSectionTitle(title: string): void {
-    Text(title)
-      .fontSize(17)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(AppTheme.colors.textPrimary)
-      .width('100%')
+    .alignItems(VerticalAlign.Top)
   }
 
   @Builder
@@ -616,8 +547,18 @@ export struct StatsPage {
       if (this.isLoading) {
         this.buildLoadingState()
       } else {
-        this.buildSuccessCard()
-        this.buildContractBoard()
+        this.buildMetricBoard()
+        TaskDurationChart({
+          data: this.byTask,
+          onViewAll: () => {
+            this.openStatsDetail('byTask');
+          }
+        })
+        if (this.hasFulfillmentRecords()) {
+          ContractFulfillmentChart({
+            data: this.getFulfillment()
+          })
+        }
         this.buildTimelineSection()
         this.buildShameSection()
       }

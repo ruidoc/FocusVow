@@ -6,7 +6,8 @@
   "author": "",
   "license": "",
   "dependencies": {
-    "@xinyansoft/oh-crop": "^1.0.4"
+    "@xinyansoft/oh-crop": "^1.0.4",
+    "@tencent/wechat_open_sdk": "1.0.14"
   },
   "devDependencies": {},
   "dynamicDependencies": {}

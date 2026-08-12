@@ -46,6 +46,14 @@ export class StoreKeys {
   static readonly ScheduledListDirty: string = 'scheduled.list.dirty';
   static readonly StatsDetailPeriod: string = 'stats.detail.period';
   static readonly StatsDetailSection: string = 'stats.detail.section';
+  static readonly OrgDetailId: string = 'org.detail.id';
+  static readonly OrgList: string = 'org.list';
+  static readonly OrgDefaults: string = 'org.defaults';
+  static readonly OrgMine: string = 'org.mine';
+  static readonly OrgLoading: string = 'org.loading';
+  static readonly OnboardingViaOldUser: string = 'onboarding.via_old_user';
+  static readonly LoginFrom: string = 'login.from';
+  static readonly WxPendingInfo: string = 'user.wxPendingInfo';
   static readonly CertificateKind: string = 'certificate.kind';
   static readonly CertificateHonor: string = 'certificate.honor';
   static readonly CertificateShame: string = 'certificate.shame';

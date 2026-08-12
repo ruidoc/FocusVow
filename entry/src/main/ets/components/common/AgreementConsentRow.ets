@@ -1,8 +1,13 @@
 import { AppTheme } from "../../constants/Theme";
-import { pushPrivacyPolicy, pushUserAgreement } from "../../router/PageRoutes";
+import { pushPrivacyPolicy } from "../../router/PageRoutes";
+
+/**
+ * 对齐 RN Privicy：短文案「已阅读并同意《隐私政策》」，默认水平居中。
+ */
 @Component
 export struct AgreementConsentRow {
   @Prop agreed: boolean = false;
+  @Prop centered: boolean = true;
   onAgreedChange?: (agreed: boolean) => void;
 
   private setAgreed(agreed: boolean): void {
@@ -10,7 +15,7 @@ export struct AgreementConsentRow {
   }
 
   build() {
-    Row({ space: 3 }) {
+    Row({ space: 4 }) {
       Checkbox()
         .select(this.agreed)
         .selectedColor(AppTheme.colors.primary)
@@ -19,36 +24,21 @@ export struct AgreementConsentRow {
         .onChange((checked: boolean) => {
           this.setAgreed(checked);
         })
-      Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
-        Text("我已阅读并同意")
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textSecondary)
-          .onClick(() => {
-            this.setAgreed(!this.agreed);
-          })
-        Text("《隐私政策》")
-          .fontSize(12)
-          .fontColor(AppTheme.colors.primary)
-          .onClick(() => {
-            pushPrivacyPolicy();
-          })
-        Text("和")
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textSecondary)
-          .onClick(() => {
-            this.setAgreed(!this.agreed);
-          })
-        Text("《用户协议》")
-          .fontSize(12)
-          .fontColor(AppTheme.colors.primary)
-          .onClick(() => {
-            pushUserAgreement();
-          })
-      }
-      .layoutWeight(1)
-      .margin({ top: 1 })
+      Text("已阅读并同意")
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textSecondary)
+        .onClick(() => {
+          this.setAgreed(!this.agreed);
+        })
+      Text("《隐私政策》")
+        .fontSize(14)
+        .fontColor(AppTheme.colors.primary)
+        .onClick(() => {
+          pushPrivacyPolicy();
+        })
     }
-    .width("100%")
+    .width('100%')
+    .justifyContent(this.centered ? FlexAlign.Center : FlexAlign.Start)
     .alignItems(VerticalAlign.Center);
   }
 }

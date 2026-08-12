@@ -204,15 +204,7 @@ export async function startOrAlignInstantDuoFocus(
     return busy;
   }
 
-  if (selectedTokens.length === 0) {
-    const noTokens: DuoInstantLockResult = {
-      ok: false,
-      message: 'no_selected_tokens',
-      alreadyLocked: false
-    };
-    return noTokens;
-  }
-
+  // 空 selectedTokens + allow = 全锁（对齐 RN）；不拦截
   // 发起互督额度在创建页已校验；加入互督不校验；补锁不再重复拦
   const lockResult = await applyScreenRestriction(selectedTokens, 'allow');
   if (!lockResult.ok) {

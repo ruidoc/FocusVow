@@ -24,6 +24,8 @@ class ThemeRadius {
   sm: number = 14;
   md: number = 18;
   lg: number = 22;
+  /** 主按钮圆角，对齐 RN Button rounded-[30px] */
+  button: number = 30;
   pill: number = 999;
 }
 

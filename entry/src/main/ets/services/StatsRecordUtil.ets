@@ -13,7 +13,7 @@ export const SHAME_SECTION_BORDER_COLOR: string = '#F3D6D6';
 export const SHAME_SECTION_DIVIDER_COLOR: string = 'rgba(243, 214, 214, 0.65)';
 
 export type StatsPeriod = 'today' | 'week' | 'month';
-export type StatsDetailSection = 'timeline' | 'shame';
+export type StatsDetailSection = 'timeline' | 'shame' | 'byTask';
 
 export interface HonorRecordItem {
   day: string;
@@ -40,7 +40,25 @@ export function getStatsDetailPageTitle(period: StatsPeriod, section: StatsDetai
   if (section === 'shame') {
     return `${periodLabel}违约耻辱柱`;
   }
+  if (section === 'byTask') {
+    return `${periodLabel}专注时长分布`;
+  }
   return `${periodLabel}履约荣誉墙`;
+}
+
+export function formatSuccessDurationLabel(minutes: number): string {
+  if (minutes <= 0) {
+    return '0 分钟';
+  }
+  if (minutes < 60) {
+    return `${minutes} 分钟`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  if (remainMinutes === 0) {
+    return `${hours} 小时`;
+  }
+  return `${hours} 小时 ${remainMinutes} 分`;
 }
 
 export function formatStatsDateTimeLabel(raw: string, fallbackDate: string): string {

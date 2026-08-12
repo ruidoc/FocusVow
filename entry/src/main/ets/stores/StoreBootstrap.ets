@@ -2,7 +2,7 @@ import { createIdleLockState } from '../models/ActiveLockModel';
 import { createHiddenInAppMessage } from '../models/InAppMessageModel';
 import { createDefaultCycleGuardState } from '../models/CycleGuardModel';
 import { createDefaultSettingsState } from '../models/PermissionModel';
-import { createEmptyUserInfo } from '../models/UserModel';
+import { createEmptyUserInfo, createEmptyWxPendingInfo } from '../models/UserModel';
 import { StoreKeys } from './StoreKeys';
 
 let bootstrapped: boolean = false;
@@ -54,5 +54,13 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.DuoWaitDurationMin, 0);
   AppStorage.setOrCreate(StoreKeys.DuoWaitExpireAtMs, 0);
   AppStorage.setOrCreate(StoreKeys.DuoWaitStartedAtMs, 0);
+  AppStorage.setOrCreate(StoreKeys.OrgDetailId, '');
+  AppStorage.setOrCreate(StoreKeys.OrgList, []);
+  AppStorage.setOrCreate(StoreKeys.OrgDefaults, []);
+  AppStorage.setOrCreate(StoreKeys.OrgMine, []);
+  AppStorage.setOrCreate(StoreKeys.OrgLoading, false);
+  AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+  AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+  AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());
   bootstrapped = true;
 }

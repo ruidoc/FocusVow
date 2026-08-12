@@ -359,10 +359,6 @@ struct PlanDetailPage {
     if (!this.session || this.isSaving) {
       return;
     }
-    if (this.selectedTokens.length === 0) {
-      this.statusMessage = '请先至少选择 1 个应用';
-      return;
-    }
 
     if (this.isInitiator()) {
       const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);

@@ -152,10 +152,6 @@ struct PlanAddPage {
       showErrorToast('请先登录后再创建契约', uiContext);
       return;
     }
-    if (this.selectedTokens.length === 0) {
-      showErrorToast('请先至少选择 1 个应用，再保存契约', uiContext);
-      return;
-    }
     if (this.planName.trim().length === 0) {
       showErrorToast('请先填写本次契约要做什么', uiContext);
       return;

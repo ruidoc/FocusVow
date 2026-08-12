@@ -1,143 +1,189 @@
 import { common } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
 import { showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
-import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute, PageRoutes, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
+import {
+  fetchHasOnboardingProfile,
+  markOnboardingCompleted
+} from '../../services/OnboardingApiService';
+import { backRoute, PageRoutes, pushRoute, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
+import { confirmPrivacyAgreementForAuth } from '../../utils/PrivacyConsentUtil';
 
-const EMAIL_PATTERN: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const WECHAT_GREEN: string = '#07C160';
 
 @Entry
 @Component
 struct LoginPage {
-  @State email: string = '';
-  @State password: string = '';
   @State loading: boolean = false;
   @State agreedToTerms: boolean = false;
-  @State switchLinkPressed: boolean = false;
+  @State loginFrom: string = '';
+  @State bottomInset: number = 12;
 
-  private isFormValid(): boolean {
-    return EMAIL_PATTERN.test(this.email.trim()) &&
-      this.password.length >= 6 &&
-      this.agreedToTerms;
-  }
-
-  private async submitLogin(): Promise<void> {
-    if (!this.agreedToTerms) {
-      showToast('请先阅读并同意《隐私政策》和《用户协议》', this.getUIContext());
-      return;
-    }
-    if (!EMAIL_PATTERN.test(this.email.trim()) || this.password.length < 6) {
-      showToast('请输入有效邮箱和至少 6 位密码', this.getUIContext());
-      return;
-    }
+  aboutToAppear(): void {
+    this.loginFrom = String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '');
+    // 登录页不需要首页悬浮 Tab 的底部留白，否则协议离底太远
+    AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
 
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    this.loading = true;
-    const errorMessage = await UserStore.loginWithEmail(
-      hostContext,
-      this.email,
-      this.password
-    );
-    this.loading = false;
+    const ui = this.getUIContext();
+    window.getLastWindow(hostContext, (err, win) => {
+      if (err.code) {
+        return;
+      }
+      const navAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+      // 对齐 RN getPrivacyBottomPadding：max(bottomInset, 12)
+      this.bottomInset = Math.max(ui.px2vp(navAvoid.bottomRect.height), 12);
+    });
+  }
 
-    if (errorMessage) {
-      showToast(errorMessage, this.getUIContext());
+  private async ensurePrivacy(): Promise<boolean> {
+    if (!this.agreedToTerms) {
+      const accepted = await confirmPrivacyAgreementForAuth(this.getUIContext());
+      if (!accepted) {
+        return false;
+      }
+      this.agreedToTerms = true;
+    }
+    return true;
+  }
+
+  private async afterLoginSuccess(hostContext: common.UIAbilityContext): Promise<void> {
+    showToast('登录成功', this.getUIContext());
+    if (this.loginFrom === 'welcome_old_user') {
+      const hasProfile = await fetchHasOnboardingProfile(hostContext);
+      if (hasProfile) {
+        markOnboardingCompleted(hostContext);
+        AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+        AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+        returnToMainTab('focus');
+        return;
+      }
+      AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+      replaceRoute(PageRoutes.Onboarding);
       return;
     }
-
-    showToast('登录成功', this.getUIContext());
+    AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
     returnToMainTab('focus');
   }
 
-  @Builder
-  private buildInputCard(): void {
-    Column({ space: 14 }) {
-      TextInput({ placeholder: '邮箱', text: this.email })
-        .type(InputType.Email)
-        .height(52)
-        .fontSize(16)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(AppTheme.radius.md)
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
-          this.email = value;
-        })
-
-      TextInput({ placeholder: '密码（至少 6 位）', text: this.password })
-        .type(InputType.Password)
-        .height(52)
-        .fontSize(16)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(AppTheme.radius.md)
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
-          this.password = value;
-        })
+  private async onWechatLogin(): Promise<void> {
+    if (!(await this.ensurePrivacy())) {
+      return;
     }
-    .width('100%')
-    .padding(18)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .alignItems(HorizontalAlign.Start)
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.loading = true;
+    const result = await UserStore.loginWithWechat(hostContext);
+    this.loading = false;
+
+    if (result === UserStore.WECHAT_NEED_BIND) {
+      pushRoute(PageRoutes.WechatBindEmail);
+      return;
+    }
+    if (result) {
+      showToast(result, this.getUIContext());
+      return;
+    }
+    if (!UserStore.isLoggedIn()) {
+      return;
+    }
+    await this.afterLoginSuccess(hostContext);
   }
 
   @Builder
   private buildLoginContent(): void {
-    Column({ space: 18 }) {
-      Column({ space: 8 }) {
-        Text('邮箱登录')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
+    // 对齐 RN：标题+按钮成组垂直居中；协议贴底
+    Column() {
+      Column({ space: 0 }) {
+        Column({ space: 10 }) {
+          Image($r('app.media.startIcon'))
+            .width(72)
+            .height(72)
+            .borderRadius(18)
+            .margin({ bottom: 8 })
 
-        Text('使用邮箱和密码登录 FocusVow 账号')
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
+          Text('登录专注契约')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
 
-      this.buildInputCard()
-
-      AppActionButton({
-        label: this.loading ? '登录中...' : '登录',
-        isEnabled: this.isFormValid() && !this.loading,
-        onPress: () => {
-          void this.submitLogin();
+          Text('微信一键登录，也可使用邮箱账号')
+            .fontSize(14)
+            .fontColor(AppTheme.colors.textSecondary)
         }
-      })
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+        .margin({ bottom: 32 })
+
+        Button() {
+          Row({ space: 8 }) {
+            Image($r('app.media.wechat'))
+              .width(22)
+              .height(22)
+              .objectFit(ImageFit.Contain)
+            Text('微信登录/注册')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Color.White)
+          }
+        }
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Normal)
+        .backgroundColor(WECHAT_GREEN)
+        .borderRadius(AppTheme.radius.button)
+        .enabled(!this.loading)
+        .opacity(this.loading ? 0.7 : 1)
+        .margin({ top: 8, bottom: 4 })
+        .onClick(() => {
+          void this.onWechatLogin();
+        })
+
+        Button() {
+          Row({ space: 8 }) {
+            Image($r('app.media.mail'))
+              .width(20)
+              .height(20)
+              .objectFit(ImageFit.Contain)
+            Text(this.loading ? '请稍候...' : '邮箱登录')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.colors.textPrimary)
+          }
+        }
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Normal)
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 0, color: Color.Transparent })
+        .borderRadius(AppTheme.radius.button)
+        .margin({ top: 8 })
+        .enabled(!this.loading)
+        .onClick(() => {
+          pushRoute(PageRoutes.EmailLogin);
+        })
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ left: 24, right: 24, bottom: 24 })
+      .offset({ y: -20 })
 
       AgreementConsentRow({
         agreed: this.agreedToTerms,
+        centered: true,
         onAgreedChange: (agreed: boolean) => {
           this.agreedToTerms = agreed;
         }
       })
-
-      Text('还没有账号？去注册')
-        .fontSize(15)
-        .fontColor(AppTheme.colors.primary)
-        .opacity(this.switchLinkPressed ? 0.7 : 1)
-        .padding({ top: 8, bottom: 8 })
-        .onTouch((event: TouchEvent) => {
-          if (event.type === TouchType.Down) {
-            this.switchLinkPressed = true;
-          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-            this.switchLinkPressed = false;
-          }
-        })
-        .onClick(() => {
-          replaceRoute(PageRoutes.Register);
-        })
+        .padding({ left: 40, right: 40, bottom: this.bottomInset })
     }
     .width('100%')
-    .alignItems(HorizontalAlign.Start)
+    .height('100%')
   }
 
   build() {
@@ -145,8 +191,9 @@ struct LoginPage {
       SystemNavPage({
         title: '登录',
         showBack: true,
-        usePageScroll: true,
-        horizontalPadding: 16,
+        usePageScroll: false,
+        horizontalPadding: 0,
+        bottomSpacerHeight: 0,
         onBack: () => {
           backRoute();
         },

@@ -24,9 +24,11 @@ struct SettingsPage {
     const guardError = await UserStore.logout(hostContext);
     if (guardError) {
       showToast(`已退出，但屏时策略未完全清除，可能仍无法卸载：${guardError}`, this.getUIContext());
+      backRoute();
       return;
     }
     showToast('已退出登录', this.getUIContext());
+    backRoute();
   }
 
   private confirmLogout(): void {

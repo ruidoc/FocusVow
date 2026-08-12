@@ -9,7 +9,7 @@ import { ApiEnvelope } from '../models/UserModel';
 import { FocusSyncService } from './FocusSyncService';
 import { loadAccessToken } from './UserPersistenceService';
 
-type HttpVerb = 'GET' | 'POST';
+type HttpVerb = 'GET' | 'POST' | 'PATCH';
 
 const LOG_TAG: string = 'HttpService';
 const UPLOAD_TIMEOUT_MS: number = 60000;
@@ -105,6 +105,16 @@ export class HttpService {
     context?: common.Context
   ): Promise<ApiEnvelope> {
     return HttpService.request('POST', path, body, requiresAuth, skipPendingFlush, context);
+  }
+
+  static async patch(
+    path: string,
+    body: Record<string, Object>,
+    requiresAuth: boolean = true,
+    skipPendingFlush: boolean = false,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    return HttpService.request('PATCH', path, body, requiresAuth, skipPendingFlush, context);
   }
 
   /**
@@ -396,14 +406,21 @@ export class HttpService {
     const httpRequest = http.createHttp();
 
     try {
+      // RequestMethod 枚举无 PATCH，字符串写法在运行时可用
+      let method: http.RequestMethod = http.RequestMethod.GET;
+      if (verb === 'POST') {
+        method = http.RequestMethod.POST;
+      } else if (verb === 'PATCH') {
+        method = 'PATCH' as http.RequestMethod;
+      }
       const requestOptions: http.HttpRequestOptions = {
-        method: verb === 'GET' ? http.RequestMethod.GET : http.RequestMethod.POST,
+        method: method,
         header: await HttpService.buildHeaders(requiresAuth, context),
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: ApiConfig.CONNECT_TIMEOUT_MS,
         readTimeout: ApiConfig.READ_TIMEOUT_MS
       };
-      if (verb === 'POST' && body) {
+      if ((verb === 'POST' || verb === 'PATCH') && body) {
         requestOptions.extraData = JSON.stringify(body);
       }
 

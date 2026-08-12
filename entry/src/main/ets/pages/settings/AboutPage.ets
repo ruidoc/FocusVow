@@ -1,3 +1,4 @@
+import { getAppVersion } from '../../common/AppInfo';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { LegalUrls } from '../../constants/LegalUrls';
@@ -6,6 +7,14 @@ import { backRoute, pushWebView } from '../../router/PageRoutes';
 @Entry
 @Component
 struct AboutPage {
+  @State appVersion: string = '';
+
+  aboutToAppear(): void {
+    void getAppVersion().then((version: string) => {
+      this.appVersion = version;
+    });
+  }
+
   @Builder
   private buildBrandSection(): void {
     Column({ space: 8 }) {
@@ -19,6 +28,12 @@ struct AboutPage {
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .letterSpacing(2)
+
+      if (this.appVersion.length > 0) {
+        Text(`版本 v${this.appVersion}`)
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Center)

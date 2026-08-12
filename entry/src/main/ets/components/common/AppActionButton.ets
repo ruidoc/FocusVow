@@ -23,10 +23,12 @@ export struct AppActionButton {
   }
 
   build() {
+    // Capsule 会忽略自定义 borderRadius；须 Normal + 显式圆角才对齐 RN rounded-[30px]
     Button(this.label)
       .width('100%')
       .height(this.buttonHeight)
-      .type(ButtonType.Capsule)
+      .type(ButtonType.Normal)
+      .borderRadius(AppTheme.radius.button)
       .fontSize(17)
       .fontWeight(FontWeight.Bold)
       .backgroundColor(this.getBackgroundColor())

@@ -58,6 +58,16 @@ export interface DuoStatsSummary {
   total_completed_count: number;
   total_actual_mins: number;
   duo_success_rate: number;
+  /** 单人履约：solo + completed */
+  solo_completed_count: number;
+  /** 单人违约：solo + failed */
+  solo_failed_count: number;
+  /** 互督共同履约：duo + completed */
+  duo_completed_count: number;
+  /** 互督己方违约：duo + failed + breach_role = violator */
+  duo_violator_count: number;
+  /** 互督被连累：duo + failed + breach_role = cohort */
+  duo_cohort_count: number;
 }
 
 export interface DuoTimelineRecord {
@@ -95,6 +105,20 @@ export interface DuoStatsTimeline {
 export interface DuoStatsShame {
   period: string;
   items: DuoShameDay[];
+}
+
+export interface DuoStatsTaskItem {
+  title: string;
+  actual_mins: number;
+  task_count: number;
+  success_count: number;
+}
+
+export interface DuoStatsByTask {
+  period: string;
+  start_at: string;
+  end_at: string;
+  items: DuoStatsTaskItem[];
 }
 
 export interface DuoScheduledCreatePayload {
@@ -468,7 +492,12 @@ export function parseDuoStatsSummary(raw: Record<string, Object> | undefined): D
     best_streak_days: Number(raw['best_streak_days'] ?? 0),
     total_completed_count: Number(raw['total_completed_count'] ?? 0),
     total_actual_mins: Number(raw['total_actual_mins'] ?? 0),
-    duo_success_rate: Number(raw['duo_success_rate'] ?? 0)
+    duo_success_rate: Number(raw['duo_success_rate'] ?? 0),
+    solo_completed_count: Number(raw['solo_completed_count'] ?? 0),
+    solo_failed_count: Number(raw['solo_failed_count'] ?? 0),
+    duo_completed_count: Number(raw['duo_completed_count'] ?? 0),
+    duo_violator_count: Number(raw['duo_violator_count'] ?? 0),
+    duo_cohort_count: Number(raw['duo_cohort_count'] ?? 0)
   };
 }
 
@@ -561,6 +590,32 @@ export function parseDuoStatsShame(raw: Record<string, Object> | undefined): Duo
   }
   return {
     period: String(raw['period'] ?? ''),
+    items
+  };
+}
+
+export function parseDuoStatsByTask(raw: Record<string, Object> | undefined): DuoStatsByTask | null {
+  if (!raw) {
+    return null;
+  }
+  const items: DuoStatsTaskItem[] = [];
+  const itemsRaw = raw['items'] as Object[];
+  if (itemsRaw) {
+    for (let i = 0; i < itemsRaw.length; i++) {
+      const record = itemsRaw[i] as Record<string, Object>;
+      const titleRaw = String(record['title'] ?? '').trim();
+      items.push({
+        title: titleRaw.length > 0 ? titleRaw : '未命名任务',
+        actual_mins: Number(record['actual_mins'] ?? 0),
+        task_count: Number(record['task_count'] ?? 0),
+        success_count: Number(record['success_count'] ?? 0)
+      });
+    }
+  }
+  return {
+    period: String(raw['period'] ?? 'today'),
+    start_at: String(raw['start_at'] ?? ''),
+    end_at: String(raw['end_at'] ?? ''),
     items
   };
 }

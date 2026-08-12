@@ -10,6 +10,7 @@ import { DuoPushHandler } from '../services/DuoPushHandler';
 import { UmengPushMessageBody } from '../models/DuoModel';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { UmengSdkService } from '../services/UmengSdkService';
+import { WeChatOpenService } from '../services/WeChatOpenService';
 import { StoreKeys } from '../stores/StoreKeys';
 
 const DOMAIN = 0x0000;
@@ -31,12 +32,14 @@ export default class EntryAbility extends UIAbility {
     });
     this.setupPushAgent();
     UmengSdkService.handleLaunchWant(want, this.context);
+    WeChatOpenService.handleWant(want);
     hilog.info(DOMAIN, TAG, 'preferences storage dir=%{public}s', getPreferencesStorageDir(this.context));
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onCreate');
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     UmengSdkService.handleLaunchWant(want, this.context);
+    WeChatOpenService.handleWant(want);
   }
 
   private setupPushAgent(): void {

@@ -14,13 +14,14 @@ export class AuthApiService {
   static registerWithEmail(
     email: string,
     username: string,
-    password: string
+    password: string,
+    referralCode: string = ''
   ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {
       'email': email,
       'username': username,
       'password': password,
-      'invite_code': ''
+      'referral_code': referralCode
     };
     return HttpService.post('/user/register', body, false);
   }
@@ -45,5 +46,51 @@ export class AuthApiService {
       'image/jpeg',
       context
     );
+  }
+
+  /** App 微信 code 登录；新用户返回 statusCode 20003 + 微信资料 */
+  static loginWithWechatCode(code: string): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'code': code
+    };
+    return HttpService.post('/user/wechat-app', body, false);
+  }
+
+  /** 微信新用户绑定邮箱建号/挂号 */
+  static wechatBindByEmail(
+    email: string,
+    code: string,
+    wxInfo: Record<string, Object>
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'email': email,
+      'code': code,
+      'openid': wxInfo['openid'] ?? '',
+      'unionid': wxInfo['unionid'] ?? '',
+      'avatar': wxInfo['headimgurl'] ?? wxInfo['avatar'] ?? '',
+      'username': wxInfo['nickname'] ?? wxInfo['username'] ?? '',
+      'sex': wxInfo['sex'] ?? 0
+    };
+    return HttpService.post('/user/wechat-bind-by-email', body, false);
+  }
+
+  /** 微信新用户跳过邮箱直接建号 */
+  static wechatCreate(wxInfo: Record<string, Object>): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'openid': wxInfo['openid'] ?? '',
+      'unionid': wxInfo['unionid'] ?? '',
+      'avatar': wxInfo['headimgurl'] ?? wxInfo['avatar'] ?? '',
+      'username': wxInfo['nickname'] ?? wxInfo['username'] ?? '',
+      'sex': wxInfo['sex'] ?? 0
+    };
+    return HttpService.post('/user/wechat-create', body, false);
+  }
+
+  /** 已登录用户绑定微信 */
+  static bindWechatByCode(code: string): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'code': code
+    };
+    return HttpService.post('/user/wechat-bind-code', body, true);
   }
 }

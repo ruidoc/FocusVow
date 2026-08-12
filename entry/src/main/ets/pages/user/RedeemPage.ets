@@ -6,6 +6,10 @@ import { AppTheme } from "../../constants/Theme";
 import { ApiEnvelope, createEmptyUserInfo, UserInfo } from "../../models/UserModel";
 import { PageRoutes, backRoute, pushRoute } from "../../router/PageRoutes";
 import { HttpService } from "../../services/HttpService";
+import {
+  parseReferralProgress,
+  ReferralApiService
+} from "../../services/ReferralApiService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { UserStore } from "../../stores/UserStore";
@@ -18,6 +22,18 @@ const ACCENT: string = "#D4A44A";
 const SUCCESS: string = "#16A34A";
 const CARD_BG: string = "#FFFBF0";
 const BORDER: string = "rgba(212,164,74,0.35)";
+const INVITE_ACCENT: string = '#3B82F6';
+
+interface InviteStep {
+  need: number;
+  days: number;
+}
+
+const INVITE_STEPS: InviteStep[] = [
+  { need: 1, days: 15 },
+  { need: 2, days: 30 },
+  { need: 3, days: 60 }
+];
 
 @Entry
 @Component
@@ -30,6 +46,9 @@ struct RedeemPage {
   @State isSubmitting: boolean = false;
   @State justRedeemed: boolean = false;
   @State expiresLabel: string = "";
+  @State myInviteCode: string = "";
+  @State inviteSuccessCount: number = 0;
+  @State inviteDaysEarned: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -39,7 +58,11 @@ struct RedeemPage {
       pushRoute(PageRoutes.Login);
       return;
     }
+    if (this.userInfo.invite_code.length > 0) {
+      this.myInviteCode = this.userInfo.invite_code;
+    }
     void this.refreshMembership();
+    void this.loadInviteProgress();
   }
 
   private formatExpiry(raw: Object | undefined | null): string {
@@ -67,12 +90,38 @@ struct RedeemPage {
     }
   }
 
+  private async loadInviteProgress(): Promise<void> {
+    const response = await ReferralApiService.progress();
+    if (response.statusCode !== 200) {
+      return;
+    }
+    const progress = parseReferralProgress(response.data);
+    if (!progress) {
+      return;
+    }
+    if (progress.invite_code.length > 0) {
+      this.myInviteCode = progress.invite_code;
+    }
+    this.inviteSuccessCount = progress.successful_count;
+    this.inviteDaysEarned = progress.total_days_earned;
+  }
+
   private isActive(): boolean {
     return this.isSubscribed || this.membershipStatus === "active";
   }
 
   private showSuccess(): boolean {
     return this.isActive() || this.justRedeemed;
+  }
+
+  private inviteFillRatio(): number {
+    if (this.inviteSuccessCount <= 0) {
+      return 0;
+    }
+    if (this.inviteSuccessCount === 1) {
+      return 0.5;
+    }
+    return 1;
   }
 
   private async onRedeem(): Promise<void> {
@@ -115,6 +164,20 @@ struct RedeemPage {
       const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, DEVELOPER_WECHAT);
       pasteboard.getSystemPasteboard().setData(data);
       showToast("微信号已复制", this.getUIContext());
+    } catch (_e) {
+      showErrorToast("复制失败", this.getUIContext());
+    }
+  }
+
+  private onCopyInvite(): void {
+    if (this.myInviteCode.length === 0) {
+      showToast("邀请码加载中，请稍后再试", this.getUIContext());
+      return;
+    }
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.myInviteCode);
+      pasteboard.getSystemPasteboard().setData(data);
+      showToast("邀请码已复制", this.getUIContext());
     } catch (_e) {
       showErrorToast("复制失败", this.getUIContext());
     }
@@ -173,7 +236,7 @@ struct RedeemPage {
       .border({ width: 1, color: BORDER })
       .borderRadius(20)
       Column() {
-        this.buildWechatHint("加作者微信进搭子匹配站群，快速找搭子")
+        this.buildWechatHint("加管理员好友进搭子匹配群，快速找搭子")
       }
       .width("100%")
       .padding({ left: 4, right: 4 })
@@ -229,12 +292,175 @@ struct RedeemPage {
       .border({ width: 1, color: BORDER })
       .borderRadius(20)
       Column() {
-        this.buildWechatHint("没有兑换码？添加开发者微信获取")
+        this.buildWechatHint("没有兑换码？联系管理员免费获取")
       }
       .width("100%")
       .padding({ left: 4, right: 4 })
       .margin({ top: 24 })
     }.width("100%");
+  }
+
+  @Builder
+  private buildInviteStepNode(step: InviteStep): void {
+    Row() {
+      if (this.inviteSuccessCount >= step.need) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(12)
+          .fontColor([Color.White])
+      } else if (this.inviteSuccessCount === step.need - 1) {
+        Row()
+          .width(7)
+          .height(7)
+          .borderRadius(4)
+          .backgroundColor(INVITE_ACCENT)
+      }
+    }
+    .width(20)
+    .height(20)
+    .justifyContent(FlexAlign.Center)
+    .borderRadius(10)
+    .backgroundColor(
+      this.inviteSuccessCount >= step.need
+        ? INVITE_ACCENT
+        : (this.inviteSuccessCount === step.need - 1 ? Color.White : '#E2E8F0')
+    )
+    .border(
+      this.inviteSuccessCount === step.need - 1 && this.inviteSuccessCount < step.need
+        ? { width: 2.5, color: INVITE_ACCENT }
+        : { width: 0 }
+    )
+  }
+
+  @Builder
+  private buildInviteSection(): void {
+    Column({ space: 14 }) {
+      Column({ space: 16 }) {
+        Text(this.showSuccess() ? '邀请搭子，再得60天会员！' : '邀请搭子得60天会员！')
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+        Text('对方填你的邀请码并注册，双方各得 15 天')
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+          .lineHeight(19)
+          .width('100%')
+
+        Column({ space: 12 }) {
+          Stack({ alignContent: Alignment.Center }) {
+            Row()
+              .width('100%')
+              .height(4)
+              .margin({ left: 7, right: 7 })
+              .borderRadius(2)
+              .backgroundColor('#E2EBF7')
+            Row()
+              .width(`${Math.max(0, this.inviteFillRatio() * 100)}%`)
+              .height(4)
+              .margin({ left: 7 })
+              .borderRadius(2)
+              .backgroundColor(INVITE_ACCENT)
+              .align(Alignment.Start)
+            Row() {
+              ForEach(INVITE_STEPS, (step: InviteStep) => {
+                this.buildInviteStepNode(step)
+              }, (step: InviteStep) => `${step.need}`)
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.SpaceBetween)
+          }
+          .width('100%')
+          .height(22)
+
+          Row() {
+            ForEach(INVITE_STEPS, (step: InviteStep, index: number) => {
+              Column({ space: 2 }) {
+                Text(`+${step.days}天`)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(
+                    this.inviteSuccessCount >= step.need || this.inviteSuccessCount === step.need - 1
+                      ? INVITE_ACCENT
+                      : AppTheme.colors.textMuted
+                  )
+                Text(`邀${step.need}人`)
+                  .fontSize(11)
+                  .fontColor(
+                    this.inviteSuccessCount >= step.need || this.inviteSuccessCount === step.need - 1
+                      ? AppTheme.colors.textSecondary
+                      : AppTheme.colors.textMuted
+                  )
+              }
+              .width(64)
+              .alignItems(
+                index === 0
+                  ? HorizontalAlign.Start
+                  : (index === INVITE_STEPS.length - 1 ? HorizontalAlign.End : HorizontalAlign.Center)
+              )
+            }, (step: InviteStep) => `label-${step.need}`)
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.SpaceBetween)
+        }
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+
+        Row() {
+          Text() {
+            Span('邀请码 ')
+              .fontSize(13)
+              .fontColor(AppTheme.colors.textMuted)
+            Span(this.myInviteCode.length > 0 ? this.myInviteCode : '…')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+          }
+          .layoutWeight(1)
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.doc_plaintext'))
+              .fontSize(14)
+              .fontColor([INVITE_ACCENT])
+            Text('复制')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(INVITE_ACCENT)
+          }
+          .onClick(() => {
+            this.onCopyInvite();
+          })
+        }
+        .width('100%')
+        .height(42)
+        .padding({ left: 12, right: 12 })
+        .backgroundColor('#F1F5F9')
+        .borderRadius(12)
+      }
+      .width('100%')
+      .padding(20)
+      .backgroundColor(Color.White)
+      .borderRadius(16)
+
+      Row({ space: 2 }) {
+        Text(
+          this.inviteDaysEarned > 0
+            ? `邀请记录 · 已得 ${this.inviteDaysEarned} 天`
+            : '邀请记录'
+        )
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([AppTheme.colors.textMuted])
+      }
+      .justifyContent(FlexAlign.Center)
+      .width('100%')
+      .onClick(() => {
+        pushRoute(PageRoutes.InviteRecord);
+      })
+    }
+    .width('100%')
+    .margin({ top: 16 })
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
@@ -245,6 +471,7 @@ struct RedeemPage {
       } else {
         this.buildRedeemForm();
       }
+      this.buildInviteSection()
     }
     .width("100%")
     .padding({ left: 4, right: 4, top: 8, bottom: 8 })

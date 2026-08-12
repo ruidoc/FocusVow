@@ -4,11 +4,13 @@ import {
   DuoScheduledListResult,
   DuoScheduledUpdatePayload,
   DuoSessionView,
+  DuoStatsByTask,
   DuoStatsShame,
   DuoStatsSummary,
   DuoStatsTimeline,
   parseDuoSessionView,
   parseDuoScheduledList,
+  parseDuoStatsByTask,
   parseDuoStatsShame,
   parseDuoStatsSummary,
   parseDuoStatsTimeline
@@ -61,6 +63,13 @@ export class DuoApiService {
       body['title'] = trimmed;
     }
     return HttpService.post('/duo/instant/join', body);
+  }
+
+  static async instantOnlineMatch(sessionId: string): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/duo/instant/${encodeURIComponent(sessionId)}/online-match`,
+      {}
+    );
   }
 
   static async getSession(sessionId: string): Promise<ApiEnvelope> {
@@ -232,6 +241,13 @@ export class DuoApiService {
     return HttpService.getWithQuery('/duo/stats/shame', query);
   }
 
+  static async getStatsByTask(period: string): Promise<ApiEnvelope> {
+    const query: Record<string, string> = {
+      'period': period
+    };
+    return HttpService.getWithQuery('/duo/stats/by-task', query);
+  }
+
   static parseSession(envelope: ApiEnvelope): DuoSessionView | null {
     if (envelope.statusCode !== 200) {
       return null;
@@ -258,5 +274,12 @@ export class DuoApiService {
       return null;
     }
     return parseDuoStatsShame(envelope.data as Record<string, Object>);
+  }
+
+  static parseByTask(envelope: ApiEnvelope): DuoStatsByTask | null {
+    if (envelope.statusCode !== 200 || !envelope.data) {
+      return null;
+    }
+    return parseDuoStatsByTask(envelope.data as Record<string, Object>);
   }
 }

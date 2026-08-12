@@ -4,9 +4,10 @@ import { AppActionButton } from "../../components/common/AppActionButton";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { showToast } from "../../common/Toast";
 import { AppTheme } from "../../constants/Theme";
-import { backRoute, PageRoutes, replaceRoute, returnToMainTab } from "../../router/PageRoutes";
+import { backRoute, PageRoutes, replaceRoute } from "../../router/PageRoutes";
 import { ExtendApiService } from "../../services/ExtendApiService";
 import { UserStore } from "../../stores/UserStore";
+import { confirmPrivacyAgreementForAuth } from "../../utils/PrivacyConsentUtil";
 
 const EMAIL_PATTERN: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_COUNTDOWN_SECONDS: number = 60;
@@ -19,6 +20,7 @@ struct RegisterPage {
   @State username: string = "";
   @State password: string = "";
   @State confirmPassword: string = "";
+  @State referralCode: string = "";
   @State loading: boolean = false;
   @State sendingCode: boolean = false;
   @State codeCountdown: number = 0;
@@ -71,8 +73,7 @@ struct RegisterPage {
       this.verifyCode.trim().length >= 6 &&
       this.username.trim().length > 0 &&
       this.password.length >= 6 &&
-      this.password === this.confirmPassword &&
-      this.agreedToTerms
+      this.password === this.confirmPassword
     );
   }
 
@@ -99,10 +100,6 @@ struct RegisterPage {
   }
 
   private async submitRegister(): Promise<void> {
-    if (!this.agreedToTerms) {
-      showToast("请先阅读并同意《隐私政策》和《用户协议》", this.getUIContext());
-      return;
-    }
     if (!EMAIL_PATTERN.test(this.email.trim())) {
       showToast("请输入有效邮箱", this.getUIContext());
       return;
@@ -123,6 +120,13 @@ struct RegisterPage {
       showToast("两次密码输入不一致", this.getUIContext());
       return;
     }
+    if (!this.agreedToTerms) {
+      const accepted = await confirmPrivacyAgreementForAuth(this.getUIContext());
+      if (!accepted) {
+        return;
+      }
+      this.agreedToTerms = true;
+    }
 
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.loading = true;
@@ -132,6 +136,7 @@ struct RegisterPage {
       this.username,
       this.password,
       this.verifyCode,
+      this.referralCode,
     );
     this.loading = false;
 
@@ -141,7 +146,7 @@ struct RegisterPage {
     }
 
     showToast("注册成功", this.getUIContext());
-    returnToMainTab("focus");
+    replaceRoute(PageRoutes.WechatBind);
   }
 
   @Builder
@@ -213,6 +218,15 @@ struct RegisterPage {
         .padding({ left: 16, right: 16 })
         .onChange((value: string) => {
           this.confirmPassword = value;
+        })
+      TextInput({ placeholder: "邀请码（选填）", text: this.referralCode })
+        .height(52)
+        .fontSize(16)
+        .backgroundColor(AppTheme.colors.surfaceRaised)
+        .borderRadius(AppTheme.radius.md)
+        .padding({ left: 16, right: 16 })
+        .onChange((value: string) => {
+          this.referralCode = value;
         })
     }
     .width("100%")

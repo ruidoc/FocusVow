@@ -1,10 +1,12 @@
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { common } from '@kit.AbilityKit';
+import { OrgListItem } from '../../models/OrgModel';
 import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
-import { PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, pushLogin, pushRoute } from '../../router/PageRoutes';
 import { CycleGuardStore } from '../../stores/CycleGuardStore';
 import { BenefitStore } from '../../stores/BenefitStore';
+import { OrgStore } from '../../stores/OrgStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -38,6 +40,7 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.BenefitTodayUsed) todayUsed: number = 0;
   @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = 'none';
+  @StorageLink(StoreKeys.OrgList) orgList: OrgListItem[] = [];
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -45,10 +48,37 @@ export struct ProfilePage {
     SettingsStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     BenefitStore.hydrate(hostContext);
+    OrgStore.hydrate();
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
       void BenefitStore.refresh();
+      void OrgStore.listMine();
     }
+  }
+
+  private hasOwnedOrg(): boolean {
+    for (let i = 0; i < this.orgList.length; i++) {
+      if (this.orgList[i].role === 'owner') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private openOrgList(): void {
+    if (!this.isLoggedIn) {
+      pushLogin();
+      return;
+    }
+    pushRoute(PageRoutes.OrgList);
+  }
+
+  private openOrgManage(): void {
+    if (!this.isLoggedIn) {
+      pushLogin();
+      return;
+    }
+    pushRoute(PageRoutes.OrgManage);
   }
 
   private getDisplayName(): string {
@@ -76,7 +106,7 @@ export struct ProfilePage {
 
   private openProfileEntry(): void {
     if (!this.isLoggedIn) {
-      pushRoute(PageRoutes.Login);
+      pushLogin();
       return;
     }
     pushRoute(PageRoutes.ProfileEdit);
@@ -84,7 +114,7 @@ export struct ProfilePage {
 
   private openRedeemPage(): void {
     if (!this.isLoggedIn) {
-      pushRoute(PageRoutes.Login);
+      pushLogin();
       return;
     }
     pushRoute(PageRoutes.Redeem);
@@ -108,7 +138,7 @@ export struct ProfilePage {
 
   private getMemberDesc(): string {
     if (this.isMembershipActive()) {
-      return '每日专注不限时长';
+      return '邀请搭子加入，再领60天会员！';
     }
     return '兑换会员，解锁每日无限专注';
   }
@@ -333,6 +363,14 @@ export struct ProfilePage {
         if (SHOW_CYCLE_GUARD_MENU) {
           this.buildMenuRow('娱乐限额', $r('sys.symbol.bolt'), this.getCycleStatusLabel(), true, () => {
             pushRoute(PageRoutes.CycleGuardEdit);
+          })
+        }
+        this.buildMenuRow('我的组织', $r('sys.symbol.person_badge_plus'), '', true, () => {
+          this.openOrgList();
+        })
+        if (this.hasOwnedOrg()) {
+          this.buildMenuRow('组织管理', $r('sys.symbol.person_2'), '', true, () => {
+            this.openOrgManage();
           })
         }
         this.buildMenuRow('权限管理', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {

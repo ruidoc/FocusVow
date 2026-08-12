@@ -5,7 +5,7 @@ import { extractDuoInviteToken } from "../../services/DuoInviteClipboardService"
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { AppTheme } from "../../constants/Theme";
 import { DuoSessionView, isDuoWaitPartnerJoined } from "../../models/DuoModel";
-import { backRoute, navigateToMainTab, returnToMainTab } from "../../router/PageRoutes";
+import { backRoute, navigateToMainTab, pushRoute, returnToMainTab, PageRoutes } from "../../router/PageRoutes";
 import { DuoApiService } from "../../services/DuoApiService";
 import {
   DuoInstantLockOptions,
@@ -271,13 +271,11 @@ struct DuoWaitPage {
     );
     if (!result.ok && !result.alreadyLocked) {
       const tip =
-        result.message === "no_selected_tokens"
-          ? "请先选择要限制的应用"
-          : result.message === "session_already_ended"
-            ? "契约已结束"
-            : result.message.length > 0
-              ? result.message
-              : "开启锁机失败";
+        result.message === "session_already_ended"
+          ? "契约已结束"
+          : result.message.length > 0
+            ? result.message
+            : "开启锁机失败";
       this.toastError(tip);
       this.isStarting = false;
       return;
@@ -500,7 +498,8 @@ struct DuoWaitPage {
           Button("发给搭子")
             .layoutWeight(2)
             .height(52)
-            .type(ButtonType.Capsule)
+            .type(ButtonType.Normal)
+            .borderRadius(AppTheme.radius.button)
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .backgroundColor(AppTheme.colors.primary)
@@ -508,23 +507,29 @@ struct DuoWaitPage {
             .onClick(() => {
               void this.shareInvite();
             })
-          Button("复制口令")
+          Button(this.isScheduled ? "复制口令" : "在线匹配")
             .layoutWeight(1)
             .height(52)
-            .type(ButtonType.Capsule)
+            .type(ButtonType.Normal)
+            .borderRadius(AppTheme.radius.button)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .backgroundColor(AppTheme.colors.primarySoft)
             .fontColor(AppTheme.colors.primary)
             .onClick(() => {
-              void this.copyInvite();
+              if (this.isScheduled) {
+                void this.copyInvite();
+                return;
+              }
+              pushRoute(PageRoutes.DuoMatch);
             })
         }.width("100%");
       } else {
         Button("返回计划")
           .width("100%")
           .height(52)
-          .type(ButtonType.Capsule)
+          .type(ButtonType.Normal)
+          .borderRadius(AppTheme.radius.button)
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .backgroundColor(AppTheme.colors.primary)
@@ -536,7 +541,8 @@ struct DuoWaitPage {
       Button(this.isScheduled ? "取消契约" : "取消邀请")
         .width("100%")
         .height(52)
-        .type(ButtonType.Capsule)
+        .type(ButtonType.Normal)
+        .borderRadius(AppTheme.radius.button)
         .backgroundColor(AppTheme.colors.surface)
         .fontColor(AppTheme.colors.textPrimary)
         .border({ width: 1, color: AppTheme.colors.border })

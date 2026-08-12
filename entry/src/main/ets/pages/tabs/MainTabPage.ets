@@ -5,7 +5,7 @@ import {
   createIdleLockState,
   normalizeActiveLockState,
 } from "../../models/ActiveLockModel";
-import { MainTabKey } from "../../router/PageRoutes";
+import { MainTabKey, pushRoute, PageRoutes } from "../../router/PageRoutes";
 import { endQuickFocus } from "../../services/ActiveLockLifecycleService";
 import {
   queueHonorCertificate,
@@ -18,6 +18,8 @@ import {
   afterGuestSoloFocusEnded,
   onCertificateGuideDismissed,
 } from "../../services/GuestSoloFocusService";
+import { isOnboardingCompleted, markOnboardingCompleted } from "../../services/OnboardingApiService";
+import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
 import { warmUpPreferencesStore } from "../../services/PreferencesService";
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
 import { CycleGuardStore } from "../../stores/CycleGuardStore";
@@ -61,6 +63,14 @@ struct MainTabPage {
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
+    if (!isOnboardingCompleted(hostContext)) {
+      // 老用户（已登录或已授权）跳过新引导，避免升版后被强制重走
+      if (UserStore.isLoggedIn() || SettingsStore.getState().hasAuthorized) {
+        markOnboardingCompleted(hostContext);
+      } else {
+        pushRoute(PageRoutes.Welcome);
+      }
+    }
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
       void FocusSyncService.flushPending(hostContext);
@@ -82,6 +92,12 @@ struct MainTabPage {
   aboutToDisappear(): void {
     this.clearTimer();
     AppStorage.set(StoreKeys.MainTabFloatingBar, false);
+  }
+
+  onPageShow(): void {
+    // 引导页压在 MainTab 之上时不弹；回首页后才申请通知
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void ensureNotifyOnLaunch(hostContext);
   }
 
   private clearTimer(): void {

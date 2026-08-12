@@ -196,6 +196,12 @@ async function removePlanGuardStrategyInternal(planId: string): Promise<void> {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 async function getUserAuthGranted(): Promise<boolean> {
   try {
     const authStatus = await guardService.getUserAuthStatus();
@@ -203,6 +209,17 @@ async function getUserAuthGranted(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** 弹框关闭后系统状态可能滞后，短轮询直到授权成功或超时 */
+async function pollUserAuthGranted(maxRetry: number = 30, intervalMs: number = 200): Promise<boolean> {
+  for (let i = 0; i < maxRetry; i++) {
+    if (await getUserAuthGranted()) {
+      return true;
+    }
+    await sleep(intervalMs);
+  }
+  return await getUserAuthGranted();
 }
 
 /** 查询屏时守护系统授权是否已授予 */
@@ -215,14 +232,16 @@ export async function requestScreenTimeAuthorization(
 ): Promise<GuardResult<boolean>> {
   try {
     await guardService.requestUserAuth(context);
-    return { ok: true, data: true, message: '已完成系统授权' };
-  } catch {
-    return {
-      ok: false,
-      data: false,
-      message: toBusinessMessage('系统授权失败，请确认 ACL 权限和 profile 已配置')
-    };
+  } catch (error) {
+    // 部分机型取消会抛错；仍以最终系统状态为准
+    hilog.warn(DOMAIN, TAG, 'requestUserAuth: %{public}s', String(error));
   }
+  const granted = await pollUserAuthGranted();
+  return {
+    ok: granted,
+    data: granted,
+    message: granted ? '已完成系统授权' : '请完成健康使用设备权限授权'
+  };
 }
 
 export async function ensureScreenTimeAuthorization(
@@ -251,6 +270,29 @@ export async function chooseRestrictedApps(
       ok: false,
       data: selectedTokens,
       message: toBusinessMessage('拉起应用选择失败')
+    };
+  }
+}
+
+/** 专注中打开系统「许可应用跳转页」，点击图标可启动白名单应用 */
+export async function openTrustListAppForm(
+  context: common.UIAbilityContext,
+  selectedTokens: string[],
+  subtitle: string = '点击图标打开应用'
+): Promise<GuardResult<boolean>> {
+  try {
+    await appPicker.startAppForm(
+      context,
+      { appTokens: selectedTokens },
+      subtitle,
+      true
+    );
+    return { ok: true, data: true, message: '已打开白名单' };
+  } catch {
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('打开白名单失败')
     };
   }
 }

@@ -26,6 +26,7 @@ struct ProfileEditPage {
   @State usernameDraft: string = '';
   /** 仅保存资料时的 loading，不与头像文案共用 */
   @State isSaving: boolean = false;
+  @State isBindingWechat: boolean = false;
 
   private usernameDialogController: CustomDialogController = new CustomDialogController({
     builder: CustomContentDialog({
@@ -262,6 +263,62 @@ struct ProfileEditPage {
   }
 
   @Builder
+  private buildWechatRow(): void {
+    Column({ space: 0 }) {
+      Row() {
+        Text('微信')
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textPrimary)
+
+        Blank()
+
+        Text(this.userInfo.openid.length > 0 ? '已绑定' : '未绑定')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .margin({ right: 6 })
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([AppTheme.colors.textMuted])
+      }
+      .width('100%')
+      .height(52)
+      .alignItems(VerticalAlign.Center)
+      .opacity(this.isBindingWechat ? 0.6 : 1)
+      .onClick(() => {
+        void this.onWechatRowPress();
+      })
+
+      Divider()
+        .color('#EEF1F6')
+        .strokeWidth(1)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  private async onWechatRowPress(): Promise<void> {
+    if (this.userInfo.openid.length > 0) {
+      showToast('微信已绑定', this.getUIContext());
+      return;
+    }
+    if (this.isBindingWechat || this.isSaving) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.isBindingWechat = true;
+    const errorMessage = await UserStore.bindWechat(hostContext);
+    this.isBindingWechat = false;
+    if (errorMessage) {
+      showErrorToast(errorMessage, this.getUIContext());
+      return;
+    }
+    if (UserStore.getUserInfo().openid.length > 0) {
+      showToast('微信绑定成功', this.getUIContext());
+    }
+  }
+
+  @Builder
   private buildEmailRow(): void {
     Column({ space: 0 }) {
       Row() {
@@ -336,6 +393,7 @@ struct ProfileEditPage {
       Column({ space: 0 }) {
         this.buildUsernameRow()
         this.buildEmailRow()
+        this.buildWechatRow()
         this.buildSexRow()
       }
       .width('100%')
