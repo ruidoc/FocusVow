@@ -289,6 +289,7 @@ struct OnboardingPage {
     if (!UserStore.isLoggedIn()) {
       return;
     }
+    showToast('7 天会员仅限新用户领取', this.getUIContext(), 3000);
     this.continueInviteToPermission();
   }
 
