@@ -22,7 +22,7 @@ import {
 import { isPastCountupMinimum } from "../../utils/TimerMode";
 import { FocusPlan } from "../../models/PlanModel";
 import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from "../../models/DuoModel";
-import { PageRoutes, pushLogin, pushRoute } from "../../router/PageRoutes";
+import { PageRoutes, pushLogin, pushQuickStart, pushRoute } from "../../router/PageRoutes";
 import {
   endCycleGuardLock,
   endQuickFocus,
@@ -46,6 +46,12 @@ import {
 } from "../../services/GuestSoloFocusService";
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
+import {
+  FIRST_FOCUS_MINUTES,
+  FIRST_FOCUS_TITLE,
+  markFirstFocusPromptDone,
+  shouldShowFirstFocusPrompt
+} from "../../services/FirstFocusPromptService";
 import { openTrustListAppForm } from "../../services/ScreenTimeService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { LockStore } from "../../stores/LockStore";
@@ -72,6 +78,7 @@ export struct FocusHomePage {
   @State soloLinkPressed: boolean = false;
 
   private timerId: number = -1;
+  private postOnboardingFlowStarted: boolean = false;
   private isEndingLock: boolean = false;
   private duoWaitPollTick: number = 0;
   private duoPartnerSyncSessionId: string = "";
@@ -90,18 +97,57 @@ export struct FocusHomePage {
     }
     this.startTimer();
     this.loadTopSafeInset(hostContext);
-    void this.tryAskNotifyAfterOnboarding(hostContext);
+    void this.runPostOnboardingHomeFlow(hostContext);
   }
 
   onPageShow(): void {
     // 引导结束 returnToMainTab 时首页可能早已 aboutToAppear，需在回显时再申请
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    void this.tryAskNotifyAfterOnboarding(hostContext);
+    void this.runPostOnboardingHomeFlow(hostContext);
   }
 
-  private tryAskNotifyAfterOnboarding(hostContext: common.UIAbilityContext): void {
-    // ensureNotifyOnLaunch 内部会跳过未完成引导；完成后才会弹
-    void ensureNotifyOnLaunch(hostContext);
+  private async runPostOnboardingHomeFlow(hostContext: common.UIAbilityContext): Promise<void> {
+    if (this.postOnboardingFlowStarted) {
+      return;
+    }
+    this.postOnboardingFlowStarted = true;
+    await ensureNotifyOnLaunch(hostContext);
+    if (this.isActiveLocked() || !shouldShowFirstFocusPrompt(hostContext)) {
+      return;
+    }
+    this.presentFirstFocusPrompt();
+  }
+
+  private presentFirstFocusPrompt(): void {
+    this.getUIContext().showAlertDialog({
+      title: '开启你的第一次专注',
+      message: '时长 5 分钟，可选放行应用，即刻开始',
+      autoCancel: false,
+      primaryButton: {
+        value: '立即开始',
+        fontColor: AppTheme.colors.primary,
+        action: () => {
+          this.onFirstFocusStart();
+        }
+      },
+      secondaryButton: {
+        value: '稍后再说',
+        action: () => {
+          this.onFirstFocusDismiss();
+        }
+      }
+    });
+  }
+
+  private onFirstFocusStart(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    markFirstFocusPromptDone(hostContext);
+    pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES);
+  }
+
+  private onFirstFocusDismiss(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    markFirstFocusPromptDone(hostContext);
   }
 
   private loadTopSafeInset(hostContext: common.UIAbilityContext): void {
@@ -601,7 +647,8 @@ export struct FocusHomePage {
       width: 1,
       color: this.isPastCountupMin() ? AppTheme.colors.primary : AppTheme.colors.border,
     })
-    .borderRadius(20)
+    .borderRadius(AppTheme.radius.button)
+    .clip(true)
     .opacity(this.isEndingLock ? 0.5 : 1)
     .enabled(!this.isEndingLock)
     .onClick(() => {
@@ -766,10 +813,12 @@ export struct FocusHomePage {
     .layoutWeight(1)
     .height(88)
     .type(ButtonType.Normal)
+    .buttonStyle(ButtonStyleMode.NORMAL)
     .padding({ left: 8, right: 8, top: 12, bottom: 12 })
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(18)
+    .clip(true)
     .onClick(() => {
       onPress();
     });

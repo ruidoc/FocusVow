@@ -22,7 +22,7 @@ const BLUE_MAIN: string = '#2E90FA';
 const BLUE_SOFT: string = '#E8F3FE';
 const BLUE_WASH: string = '#E6F0FA';
 const BLUE_RING: string = 'rgba(46, 144, 250, 0.18)';
-const GREEN: string = '#10B981';
+const MATCHED: string = AppTheme.colors.primary;
 
 type MatchPhase = 'searching' | 'starting' | 'failed';
 
@@ -58,7 +58,8 @@ struct DuoMatchPage {
 
   aboutToAppear(): void {
     this.sessionId = String(AppStorage.get<string>(StoreKeys.DuoWaitSessionId) ?? '');
-    this.title = String(AppStorage.get<string>(StoreKeys.DuoWaitTitle) ?? '搭子互督');
+    const storedTitle = String(AppStorage.get<string>(StoreKeys.DuoWaitTitle) ?? '').trim();
+    this.title = storedTitle.length > 0 ? storedTitle : '搭子互督';
     if (this.sessionId.length === 0) {
       backRoute();
       return;
@@ -232,7 +233,7 @@ struct DuoMatchPage {
   }
 
   private accentColor(): string {
-    return this.phase === 'starting' ? GREEN : BLUE_MAIN;
+    return this.phase === 'starting' ? MATCHED : BLUE_MAIN;
   }
 
   private matched(): boolean {
@@ -324,15 +325,28 @@ struct DuoMatchPage {
         .margin({ top: 16 })
 
         Column({ space: 20 }) {
+          if (this.title.trim().length > 0) {
+            Text(this.title.trim())
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .textAlign(TextAlign.Center)
+              .constraintSize({ maxWidth: 280 })
+          }
           if (this.phase === 'searching') {
             Button('取消匹配')
               .height(40)
               .padding({ left: 20, right: 20 })
+              .type(ButtonType.Normal)
+              .buttonStyle(ButtonStyleMode.NORMAL)
               .fontSize(15)
               .fontWeight(FontWeight.Medium)
               .fontColor(AppTheme.colors.textSecondary)
               .backgroundColor(Color.White)
-              .borderRadius(28)
+              .borderRadius(AppTheme.radius.button)
+              .clip(true)
               .onClick(() => {
                 this.cancelMatch();
               })
@@ -346,7 +360,7 @@ struct DuoMatchPage {
         .margin({ top: 48 })
       }
       .width('100%')
-      .padding({ left: 32, right: 32, top: 72, bottom: 24 })
+      .padding({ left: 32, right: 32, top: 112, bottom: 24 })
       .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
@@ -364,6 +378,8 @@ struct DuoMatchPage {
         bottomSpacerHeight: 0,
         topSpacerHeight: 8,
         titleBarBottomPadding: 0,
+        pageBackgroundColor: BLUE_WASH,
+        titleBarBackgroundColor: BLUE_WASH,
         onBack: () => {
           backRoute();
         },

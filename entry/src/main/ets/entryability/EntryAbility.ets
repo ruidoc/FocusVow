@@ -9,6 +9,7 @@ import { DuoBgSyncService } from '../services/DuoBgSyncService';
 import { DuoPushHandler } from '../services/DuoPushHandler';
 import { UmengPushMessageBody } from '../models/DuoModel';
 import { FocusSyncService } from '../services/FocusSyncService';
+import { resolveAppLaunchPage } from '../services/OnboardingApiService';
 import { UmengSdkService } from '../services/UmengSdkService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { StoreKeys } from '../stores/StoreKeys';
@@ -79,7 +80,7 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
 
-    windowStage.loadContent('pages/tabs/MainTabPage', (err) => {
+    windowStage.loadContent(resolveAppLaunchPage(this.context), (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;

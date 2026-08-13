@@ -83,11 +83,13 @@ struct WelcomePage {
           .width('100%')
           .height(52)
           .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(Color.White)
           .backgroundColor(AppTheme.colors.primary)
           .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .onClick(() => {
             this.onStart();
           })

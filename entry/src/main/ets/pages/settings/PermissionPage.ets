@@ -3,7 +3,10 @@ import { showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { backRoute } from '../../router/PageRoutes';
-import { NotificationPermissionService } from '../../services/NotificationPermissionService';
+import {
+  NotificationPermissionService,
+  NotifyStatus
+} from '../../services/NotificationPermissionService';
 import {
   checkScreenTimeAuthorized,
   requestScreenTimeAuthorization
@@ -25,8 +28,11 @@ bootstrapStores();
 @Component
 struct PermissionPage {
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
+  @StorageLink(StoreKeys.AppIsForeground) @Watch('onForegroundChanged') isForeground: boolean = false;
   @State notifyEnabled: boolean = false;
+  @State bannerEnabled: boolean = false;
   private busy: boolean = false;
+  private statusSeq: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -35,8 +41,26 @@ struct PermissionPage {
   }
 
   onPageShow(): void {
-    // 系统弹框关闭后常会走到这里：再拉一次真实权限
     void this.syncFromSystem();
+  }
+
+  private onForegroundChanged(): void {
+    if (this.isForeground) {
+      void this.syncFromSystem();
+    }
+  }
+
+  /** Toggle 无 $$ 时，值没变不会重绘；开关拨一下再拨回，强制对齐系统状态 */
+  private applyNotifyEnabled(enabled: boolean): void {
+    if (this.notifyEnabled === enabled) {
+      this.notifyEnabled = !enabled;
+    }
+    this.notifyEnabled = enabled;
+  }
+
+  private applyStatus(status: NotifyStatus): void {
+    this.applyNotifyEnabled(status.enabled);
+    this.bannerEnabled = status.bannerEnabled;
   }
 
   private async syncFromSystem(): Promise<void> {
@@ -53,11 +77,8 @@ struct PermissionPage {
     } catch (_error) {
       // ignore
     }
-    const enabled = await NotificationPermissionService.isNotifyEnabled();
-    this.notifyEnabled = enabled;
-    if (enabled) {
-      this.busy = false;
-    }
+    this.applyStatus(await NotificationPermissionService.readStatus());
+    this.busy = false;
   }
 
   private async onToggleScreenTime(next: boolean): Promise<void> {
@@ -77,7 +98,6 @@ struct PermissionPage {
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const result = await requestScreenTimeAuthorization(hostContext);
       SettingsStore.updateAuthorization(hostContext, result.ok, result.message);
-      // 再读一次系统状态，避免 promise 先结束、授权状态滞后
       this.hasAuthorized = result.ok || (await checkScreenTimeAuthorized());
       if (!this.hasAuthorized) {
         showToast(result.message, this.getUIContext());
@@ -92,32 +112,28 @@ struct PermissionPage {
       return;
     }
     if (!next) {
-      // 已开不可关
-      this.notifyEnabled = await NotificationPermissionService.isNotifyEnabled();
-      if (this.notifyEnabled) {
+      const enabled = await NotificationPermissionService.isNotifyEnabled();
+      this.applyNotifyEnabled(enabled);
+      if (enabled) {
         showToast('请在系统设置中关闭通知权限', this.getUIContext());
       }
       return;
     }
 
-    // 1) 立刻保持关（抵消 $$ 的瞬时打开）
-    this.notifyEnabled = false;
+    this.applyNotifyEnabled(false);
     this.busy = true;
     try {
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      // 2) 弹系统框，并在框结束后轮询真实权限（绝不因 promise resolve 就开开关）
       const granted = await NotificationPermissionService.requestNotify(hostContext);
-      // 3) 再以系统查询结果为准写一次
-      this.notifyEnabled = granted || (await NotificationPermissionService.isNotifyEnabled());
-      if (this.notifyEnabled) {
+      this.applyStatus(await NotificationPermissionService.readStatus());
+      if (this.notifyEnabled || granted) {
         return;
       }
       showToast('请在系统设置中开启通知权限', this.getUIContext());
-      this.notifyEnabled = await NotificationPermissionService.openSettingsAndRead(hostContext);
+      this.applyStatus(await NotificationPermissionService.openSettingsAndRead(hostContext));
     } finally {
       this.busy = false;
-      // 收尾再读，避免和 onPageShow 竞态
-      this.notifyEnabled = await NotificationPermissionService.isNotifyEnabled();
+      this.applyStatus(await NotificationPermissionService.readStatus());
     }
   }
 
@@ -126,12 +142,25 @@ struct PermissionPage {
       return;
     }
     this.busy = true;
+    const seq = ++this.statusSeq;
+    const previous = await NotificationPermissionService.readStatus();
     try {
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      this.notifyEnabled = await NotificationPermissionService.openSettingsAndRead(hostContext);
+      // 半模态 Promise 可能卡住；最多等一会就放行，避免横幅入口点了没反应
+      await Promise.race([
+        NotificationPermissionService.openSettings(hostContext),
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, 800);
+        })
+      ]);
     } finally {
       this.busy = false;
     }
+    const status = await NotificationPermissionService.pollUntilStatusChanged(previous);
+    if (seq !== this.statusSeq) {
+      return;
+    }
+    this.applyStatus(status);
   }
 
   @Builder
@@ -144,7 +173,7 @@ struct PermissionPage {
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
             .layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: $$this.hasAuthorized })
+          Toggle({ type: ToggleType.Switch, isOn: this.hasAuthorized })
             .selectedColor(AppTheme.colors.primary)
             .enabled(!this.hasAuthorized && !this.busy)
             .opacity(this.hasAuthorized ? 0.4 : 1)
@@ -168,7 +197,7 @@ struct PermissionPage {
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
             .layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: $$this.notifyEnabled })
+          Toggle({ type: ToggleType.Switch, isOn: this.notifyEnabled })
             .selectedColor(AppTheme.colors.primary)
             .enabled(!this.notifyEnabled && !this.busy)
             .opacity(this.notifyEnabled ? 0.4 : 1)
@@ -194,7 +223,7 @@ struct PermissionPage {
               .fontColor(AppTheme.colors.textPrimary)
               .layoutWeight(1)
             Row({ space: 4 }) {
-              Text('打开')
+              Text(this.bannerEnabled ? '打开' : '关闭')
                 .fontSize(14)
                 .fontColor(AppTheme.colors.textMuted)
               SymbolGlyph($r('sys.symbol.chevron_right'))

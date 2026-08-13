@@ -17,6 +17,7 @@ import { WeChatOpenService } from '../services/WeChatOpenService';
 import { PlanStore } from './PlanStore';
 import { CycleGuardStore } from './CycleGuardStore';
 import { BenefitStore } from './BenefitStore';
+import { refreshStats } from './StatsStore';
 import { UmengSdkService } from '../services/UmengSdkService';
 import {
   clearUserSession,
@@ -26,6 +27,7 @@ import {
   savePersistedUserInfo
 } from '../services/UserPersistenceService';
 import { ReferralApiService } from '../services/ReferralApiService';
+import { clearDuoWaitContext } from '../services/DuoWaitContextService';
 import {
   clearPendingReferralCode,
   getPendingReferralCode,
@@ -399,12 +401,14 @@ export class UserStore {
     const guardResult = await clearAllScheduledGuardOnLogout(context);
     CycleGuardStore.hydrate(context);
     UmengSdkService.clearUserAlias();
+    clearDuoWaitContext();
     clearUserSession(context);
     BenefitStore.reset();
     UserStore.setWxPendingInfo(null);
     syncAppStorageValue(StoreKeys.UserAccessToken, '');
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, false);
     syncAppStorageValue(StoreKeys.UserInfo, createEmptyUserInfo());
+    refreshStats();
     if (!guardResult.ok) {
       return guardResult.message;
     }

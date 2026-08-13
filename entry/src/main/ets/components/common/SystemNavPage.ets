@@ -31,6 +31,9 @@ export struct SystemNavPage {
   @Prop hiddenTitleTopPadding: number = 12;
   @Prop contentSpace: number = 16;
   @Prop bottomSpacerHeight: number = 24;
+  @Prop useFloatingTabInset: boolean = true;
+  @Prop pageBackgroundColor: string = AppTheme.colors.background;
+  @Prop titleBarBackgroundColor: string = '#FFFFFF';
   @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
   onBack?: () => void;
   onAction?: () => void;
@@ -103,7 +106,9 @@ export struct SystemNavPage {
   }
 
   private getEffectiveBottomSpacerHeight(): number {
-    const floatingExtra = this.floatingTabBar ? FLOATING_TAB_EXTRA_BOTTOM_VP : 0;
+    const floatingExtra = (this.floatingTabBar && this.useFloatingTabInset)
+      ? FLOATING_TAB_EXTRA_BOTTOM_VP
+      : 0;
     return this.bottomSpacerHeight + floatingExtra;
   }
 
@@ -131,7 +136,7 @@ export struct SystemNavPage {
       .constraintSize({ minHeight: '100%' })
       .justifyContent(FlexAlign.Start)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(AppTheme.colors.background)
+      .backgroundColor(this.pageBackgroundColor)
     }
     .width('100%')
     .height('100%')
@@ -165,7 +170,7 @@ export struct SystemNavPage {
     .height('100%')
     .justifyContent(FlexAlign.Start)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(AppTheme.colors.background)
+    .backgroundColor(this.pageBackgroundColor)
   }
 
   @Builder
@@ -199,7 +204,7 @@ export struct SystemNavPage {
           },
           scrollEffectStyle: {
             backgroundStyle: {
-              backgroundColor: '#FFFFFF'
+              backgroundColor: this.titleBarBackgroundColor
             },
             contentStyle: {
               titleStyle: {
@@ -243,7 +248,7 @@ export struct SystemNavPage {
           }
         }
       })
-      .backgroundColor(AppTheme.colors.background)
+      .backgroundColor(this.pageBackgroundColor)
       .width('100%')
       .height('100%')
     } else {
@@ -267,7 +272,7 @@ export struct SystemNavPage {
           },
           scrollEffectStyle: {
             backgroundStyle: {
-              backgroundColor: '#FFFFFF'
+              backgroundColor: this.titleBarBackgroundColor
             },
             contentStyle: {
               titleStyle: {
@@ -296,7 +301,7 @@ export struct SystemNavPage {
           }
         }
       })
-      .backgroundColor(AppTheme.colors.background)
+      .backgroundColor(this.pageBackgroundColor)
       .width('100%')
       .height('100%')
     }

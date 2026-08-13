@@ -12,11 +12,15 @@ import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
 
+/** 定时契约暂不展示「我发起的 / 我加入的」，默认全部；改 true 可恢复 */
+const SHOW_SCHEDULED_ROLE_FILTER: boolean = false;
+
 @Component
 export struct PlanListContent {
   @Prop @Watch('onIsPageActiveChanged') isPageActive: boolean = true;
 
   onScrollerReady?: (scroller: Scroller) => void;
+  onCreatePlan?: () => void;
 
   private listScroller: Scroller = new Scroller();
   @StorageLink(StoreKeys.ScheduledListDirty) @Watch('onListDirtyChanged') listDirty: boolean = true;
@@ -42,8 +46,9 @@ export struct PlanListContent {
   }
 
   private refreshDisplaySessions(): void {
+    const filter = this.getCurrentFilter();
     const filtered = this.allSessions.filter((session: DuoSessionView) =>
-      this.matchesFilter(session, this.activeFilter));
+      this.matchesFilter(session, filter));
     this.displaySessions = sortScheduledSessions(filtered);
   }
 
@@ -73,6 +78,9 @@ export struct PlanListContent {
   }
 
   private getCurrentFilter(): ScheduledListFilter {
+    if (!SHOW_SCHEDULED_ROLE_FILTER) {
+      return 'all';
+    }
     return this.activeFilter;
   }
 
@@ -134,97 +142,101 @@ export struct PlanListContent {
     pushRoute(PageRoutes.PlanDetail);
   }
 
+  private handleCreatePlan(): void {
+    this.onCreatePlan?.();
+  }
+
   @Builder
   private buildEmptyState(): void {
-    Column({ space: 10 }) {
+    Column({ space: 8 }) {
+      SymbolGlyph($r('sys.symbol.clock'))
+        .fontSize(50)
+        .fontColor([AppTheme.colors.textMuted])
+        .opacity(0.85)
+        .margin({ bottom: 12 })
+
       Text(this.getCurrentFilter() === 'all' ? '还没有契约' : '没有符合筛选的契约')
-        .fontSize(20)
+        .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
+
       Text(this.getCurrentFilter() === 'all'
         ? '创建后会在指定时间自动锁机。'
         : '试试取消筛选，或新建一条契约。')
-        .fontSize(13)
+        .fontSize(14)
         .lineHeight(20)
-        .fontColor(AppTheme.colors.textSecondary)
+        .fontColor(AppTheme.colors.textMuted)
+        .textAlign(TextAlign.Center)
         .width('100%')
 
       if (this.getCurrentFilter() === 'all' || this.getCurrentFilter() === 'initiated') {
         Button('新建契约')
           .width('100%')
           .height(46)
-          .type(ButtonType.Capsule)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .backgroundColor(AppTheme.colors.primary)
           .fontColor('#FFFFFF')
           .fontWeight(FontWeight.Medium)
-          .margin({ top: 4 })
+          .margin({ top: 12 })
           .onClick(() => {
-            pushRoute(PageRoutes.PlanAdd);
+            this.handleCreatePlan();
           })
       }
     }
     .width('100%')
-    .padding(24)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .alignItems(HorizontalAlign.Start)
+    .padding({
+      left: 24,
+      right: 24,
+      top: 72,
+      bottom: 72
+    })
+    .constraintSize({ minHeight: 320 })
+    .alignItems(HorizontalAlign.Center)
   }
 
   build() {
     Refresh({ refreshing: $$this.isRefreshing }) {
       List({ space: 12, scroller: this.listScroller }) {
-        ListItem() {
-          Row({ space: 10 }) {
-            Text('我发起的')
-              .fontSize(13)
-              .fontWeight(this.activeFilter === 'initiated' ? FontWeight.Medium : FontWeight.Regular)
-              .fontColor(this.activeFilter === 'initiated' ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
-              .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-              .backgroundColor(this.activeFilter === 'initiated' ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
-              .borderRadius(AppTheme.radius.pill)
-              .border({
-                width: 1,
-                color: this.activeFilter === 'initiated' ? AppTheme.colors.primary : AppTheme.colors.border
-              })
-              .onClick(() => {
-                this.toggleFilter('initiated');
-              })
-
-            Text('我加入的')
-              .fontSize(13)
-              .fontWeight(this.activeFilter === 'joined' ? FontWeight.Medium : FontWeight.Regular)
-              .fontColor(this.activeFilter === 'joined' ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
-              .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-              .backgroundColor(this.activeFilter === 'joined' ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
-              .borderRadius(AppTheme.radius.pill)
-              .border({
-                width: 1,
-                color: this.activeFilter === 'joined' ? AppTheme.colors.primary : AppTheme.colors.border
-              })
-              .onClick(() => {
-                this.toggleFilter('joined');
-              })
-          }
-          .width('100%')
-          .padding({ top: 16 })
-        }
-        .margin({ bottom: 8 })
-
-        ListItem() {
-          Row() {
-            Text('全部契约')
-              .fontSize(17)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(AppTheme.colors.textPrimary)
-            Blank()
-            if (this.isLoading) {
-              Text('加载中')
+        if (SHOW_SCHEDULED_ROLE_FILTER) {
+          ListItem() {
+            Row({ space: 10 }) {
+              Text('我发起的')
                 .fontSize(13)
-                .fontColor(AppTheme.colors.textMuted)
+                .fontWeight(this.activeFilter === 'initiated' ? FontWeight.Medium : FontWeight.Regular)
+                .fontColor(this.activeFilter === 'initiated' ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
+                .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+                .backgroundColor(this.activeFilter === 'initiated' ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
+                .borderRadius(AppTheme.radius.pill)
+                .border({
+                  width: 1,
+                  color: this.activeFilter === 'initiated' ? AppTheme.colors.primary : AppTheme.colors.border
+                })
+                .onClick(() => {
+                  this.toggleFilter('initiated');
+                })
+
+              Text('我加入的')
+                .fontSize(13)
+                .fontWeight(this.activeFilter === 'joined' ? FontWeight.Medium : FontWeight.Regular)
+                .fontColor(this.activeFilter === 'joined' ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
+                .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+                .backgroundColor(this.activeFilter === 'joined' ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
+                .borderRadius(AppTheme.radius.pill)
+                .border({
+                  width: 1,
+                  color: this.activeFilter === 'joined' ? AppTheme.colors.primary : AppTheme.colors.border
+                })
+                .onClick(() => {
+                  this.toggleFilter('joined');
+                })
             }
+            .width('100%')
+            .padding({ top: 16 })
           }
-          .width('100%')
+          .margin({ bottom: 8 })
         }
 
         if (this.statusMessage.length > 0) {
@@ -256,6 +268,7 @@ export struct PlanListContent {
       }
       .width('100%')
       .height('100%')
+      .padding({ top: SHOW_SCHEDULED_ROLE_FILTER ? 0 : 16 })
       .edgeEffect(EdgeEffect.Spring)
       .scrollBar(BarState.Off)
     }

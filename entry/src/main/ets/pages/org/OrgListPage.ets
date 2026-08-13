@@ -82,11 +82,14 @@ struct OrgListPage {
       Button('邀请码加入')
         .height(44)
         .padding({ left: 28, right: 28 })
+        .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
         .fontColor(Color.White)
         .backgroundColor(AppTheme.colors.primary)
-        .borderRadius(12)
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
         .margin({ top: 8 })
         .onClick(() => {
           pushRoute(PageRoutes.OrgJoin);
@@ -146,6 +149,8 @@ struct OrgListPage {
     }
     .width('100%')
     .type(ButtonType.Normal)
+    .buttonStyle(ButtonStyleMode.NORMAL)
+    .stateEffect(false)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(14)
@@ -224,6 +229,7 @@ struct OrgListPage {
         showAction: true,
         actionIcon: $r('sys.symbol.plus'),
         showActionIcon: true,
+        horizontalPadding: 0,
         onBack: (): void => {
           backRoute();
         },

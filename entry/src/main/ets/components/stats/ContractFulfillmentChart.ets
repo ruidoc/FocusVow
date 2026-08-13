@@ -48,7 +48,7 @@ export struct ContractFulfillmentChart {
       {
         key: 'solo-completed',
         value: this.data.solo_completed_count,
-        color: AppTheme.colors.success,
+        color: AppTheme.colors.primary,
         fullLabel: '单人履约',
         group: 'solo'
       },
@@ -62,7 +62,7 @@ export struct ContractFulfillmentChart {
       {
         key: 'duo-completed',
         value: this.data.duo_completed_count,
-        color: '#10B981',
+        color: '#8B5CF6',
         fullLabel: '互督履约',
         group: 'duo'
       },

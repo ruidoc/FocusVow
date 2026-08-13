@@ -119,53 +119,65 @@ struct LoginPage {
         .alignItems(HorizontalAlign.Center)
         .margin({ bottom: 32 })
 
-        Button() {
-          Row({ space: 8 }) {
-            Image($r('app.media.wechat'))
-              .width(22)
-              .height(22)
-              .objectFit(ImageFit.Contain)
-            Text('微信登录/注册')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
+        Column() {
+          Button() {
+            Row({ space: 8 }) {
+              Image($r('app.media.wechat'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+              Text('微信登录/注册')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+            }
           }
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .backgroundColor(WECHAT_GREEN)
+          .borderRadius(AppTheme.radius.button)
+          .enabled(!this.loading)
+          .opacity(this.loading ? 0.7 : 1)
+          .onClick(() => {
+            void this.onWechatLogin();
+          })
         }
         .width('100%')
-        .height(52)
-        .type(ButtonType.Normal)
-        .backgroundColor(WECHAT_GREEN)
-        .borderRadius(AppTheme.radius.button)
-        .enabled(!this.loading)
-        .opacity(this.loading ? 0.7 : 1)
         .margin({ top: 8, bottom: 4 })
-        .onClick(() => {
-          void this.onWechatLogin();
-        })
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
 
-        Button() {
-          Row({ space: 8 }) {
-            Image($r('app.media.mail'))
-              .width(20)
-              .height(20)
-              .objectFit(ImageFit.Contain)
-            Text(this.loading ? '请稍候...' : '邮箱登录')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(AppTheme.colors.textPrimary)
+        Column() {
+          Button() {
+            Row({ space: 8 }) {
+              Image($r('app.media.mail'))
+                .width(20)
+                .height(20)
+                .objectFit(ImageFit.Contain)
+              Text(this.loading ? '请稍候...' : '邮箱登录')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(AppTheme.colors.textPrimary)
+            }
           }
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .backgroundColor(AppTheme.colors.surface)
+          .border({ width: 0, color: Color.Transparent })
+          .borderRadius(AppTheme.radius.button)
+          .enabled(!this.loading)
+          .onClick(() => {
+            pushRoute(PageRoutes.EmailLogin);
+          })
         }
         .width('100%')
-        .height(52)
-        .type(ButtonType.Normal)
-        .backgroundColor(AppTheme.colors.surface)
-        .border({ width: 0, color: Color.Transparent })
-        .borderRadius(AppTheme.radius.button)
         .margin({ top: 8 })
-        .enabled(!this.loading)
-        .onClick(() => {
-          pushRoute(PageRoutes.EmailLogin);
-        })
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
       }
       .layoutWeight(1)
       .width('100%')
@@ -189,7 +201,7 @@ struct LoginPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '登录',
+        title: '',
         showBack: true,
         usePageScroll: false,
         horizontalPadding: 0,

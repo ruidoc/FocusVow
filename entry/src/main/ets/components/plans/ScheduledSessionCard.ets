@@ -1,10 +1,14 @@
 import {
   DuoSessionView,
   getScheduleRepeatDays,
+  getScheduledSessionEndMin,
+  getScheduledSessionStartMin,
   getScheduledSessionStatusLabel,
+  isInactiveScheduledSession,
   isScheduledSessionActivationOpen
 } from '../../models/DuoModel';
 import { summarizeRepeatDays } from '../../models/PlanModel';
+import { minutesToHours } from '../../models/ActiveLockModel';
 import { AppTheme } from '../../constants/Theme';
 
 @Component
@@ -53,19 +57,13 @@ export struct ScheduledSessionCard {
     const end = this.session.schedule_end && this.session.schedule_end.length > 0
       ? this.session.schedule_end
       : '18:00';
-    return `${start} - ${end}`;
+    const durationMin = Math.max(0, getScheduledSessionEndMin(this.session) - getScheduledSessionStartMin(this.session));
+    return `${start} - ${end} · ${minutesToHours(durationMin)}`;
   }
 
   private getRepeatLabel(): string {
     const repeat = this.session.schedule_repeat ?? '';
     return summarizeRepeatDays(getScheduleRepeatDays(repeat));
-  }
-
-  private getAppCount(): number {
-    if (this.session.my_app_count !== undefined && this.session.my_app_count > 0) {
-      return this.session.my_app_count;
-    }
-    return this.session.my_apps?.length ?? 0;
   }
 
   private isDuoMode(): boolean {
@@ -77,59 +75,66 @@ export struct ScheduledSessionCard {
     Row({ space: 6 }) {
       if (this.isDuoMode()) {
         Text('搭子')
-          .fontSize(12)
+          .fontSize(11)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.warning)
-          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .backgroundColor('#F7EFE0')
           .borderRadius(AppTheme.radius.pill)
       }
 
       Text(getScheduledSessionStatusLabel(this.session))
-        .fontSize(12)
+        .fontSize(11)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.getTagTextColor())
-        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
         .backgroundColor(this.getTagBackgroundColor())
         .borderRadius(AppTheme.radius.pill)
     }
   }
 
   build() {
-    Column({ space: 12 }) {
+    Column({ space: 10 }) {
       Row() {
         Text(this.session.title.length > 0 ? this.session.title : '定时契约')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
         this.buildStatusTags()
       }
       .width('100%')
+      .alignItems(VerticalAlign.Top)
 
-      Text(this.getTimeLabel())
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
+      Column({ space: 4 }) {
+        Text(this.getTimeLabel())
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
 
-      Text(`${this.getRepeatLabel()} · ${this.getAppCount()} 个应用 · ${this.session.expects_duo ? '搭子互督' : '单人专注'}`)
-        .fontSize(13)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
-
-      if (this.session.partner?.nickname) {
-        Text(`搭子：${this.session.partner.nickname}`)
-          .fontSize(12)
+        Text(`${this.getRepeatLabel()} · ${this.session.expects_duo ? '搭子互督' : '单人专注'}`)
+          .fontSize(13)
           .fontColor(AppTheme.colors.textMuted)
           .width('100%')
+
+        if (this.session.partner?.nickname) {
+          Text(`搭子：${this.session.partner.nickname}`)
+            .fontSize(12)
+            .fontColor(AppTheme.colors.textMuted)
+            .width('100%')
+        }
       }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .padding(18)
+    .borderRadius(16)
+    .padding(16)
+    .opacity(isInactiveScheduledSession(this.session) ? 0.55 : 1)
     .alignItems(HorizontalAlign.Start)
     .onClick(() => {
       this.onPress?.();

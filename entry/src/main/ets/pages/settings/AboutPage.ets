@@ -67,7 +67,7 @@ struct AboutPage {
         .textAlign(TextAlign.Center)
     }
     .width('100%')
-    .padding({ top: 24, bottom: 8 })
+    .padding({ top: 24, bottom: 0 })
     .alignItems(HorizontalAlign.Center)
   }
 
@@ -80,7 +80,7 @@ struct AboutPage {
       this.buildBrandSection()
 
       Blank()
-        .layoutWeight(1)
+        .layoutWeight(2)
 
       this.buildFooterLinks()
     }
@@ -95,6 +95,8 @@ struct AboutPage {
         title: '关于我们',
         showBack: true,
         usePageScroll: false,
+        useFloatingTabInset: false,
+        bottomSpacerHeight: 36,
         onBack: () => backRoute(),
         content: (): void => {
           this.buildContent();

@@ -1,4 +1,5 @@
 import { common } from "@kit.AbilityKit";
+import { router } from "@kit.ArkUI";
 import { QuickFocusOptions } from "../../models/ActiveLockModel";
 import { showErrorToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
@@ -20,6 +21,11 @@ import { TimerMode } from "../../utils/TimerMode";
 
 bootstrapStores();
 
+interface QuickStartRouteParams {
+  title?: string;
+  minute?: string;
+}
+
 @Entry
 @Component
 struct QuickStartPage {
@@ -39,6 +45,20 @@ struct QuickStartPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
+    const params = router.getParams() as QuickStartRouteParams;
+    if (params) {
+      const presetTitle = String(params.title ?? '').trim();
+      if (presetTitle.length > 0) {
+        this.title = presetTitle;
+      }
+      const presetMinutes = Number(params.minute ?? 0);
+      if (presetMinutes >= this.durationMin) {
+        const normalizedPreset = this.normalizeDurationMinutes(presetMinutes);
+        this.durationMinutes = normalizedPreset;
+        LockStore.setQuickFocusDurationMinutes(hostContext, normalizedPreset);
+        return;
+      }
+    }
     const rawDuration = LockStore.getQuickFocusDurationMinutes();
     const normalized = this.normalizeDurationMinutes(rawDuration);
     this.durationMinutes = normalized;
@@ -326,7 +346,9 @@ struct QuickStartPage {
         .width("100%")
         .height(52)
         .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
         .borderRadius(AppTheme.radius.button)
+        .clip(true)
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
         .backgroundColor(AppTheme.colors.primary)

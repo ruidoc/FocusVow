@@ -188,17 +188,17 @@ struct RedeemPage {
     Column({ space: 6 }) {
       Text(hint)
         .fontSize(13)
-        .fontColor('#7B8494')
+        .fontColor(AppTheme.colors.textSecondary)
         .width("100%")
         .textAlign(TextAlign.Center)
       Row({ space: 5 }) {
         SymbolGlyph($r("sys.symbol.doc_plaintext"))
           .fontSize(13)
-          .fontColor(['#7B8494'])
+          .fontColor([ACCENT])
         Text("复制微信号")
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#7B8494')
+          .fontColor(ACCENT)
       }
       .onClick(() => {
         this.onCopyWechat();
@@ -212,11 +212,17 @@ struct RedeemPage {
   private buildSuccessCards(): void {
     Column({ space: 16 }) {
       Column({ space: 14 }) {
-        Text("兑换成功")
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(SUCCESS)
-          .width("100%")
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+            .fontSize(22)
+            .fontColor([SUCCESS])
+          Text("兑换成功")
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(SUCCESS)
+        }
+        .width("100%")
+        .alignItems(VerticalAlign.Center)
         Text("每日专注时长已不限额度。")
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
@@ -234,7 +240,7 @@ struct RedeemPage {
       .alignItems(HorizontalAlign.Start)
       .backgroundColor(CARD_BG)
       .border({ width: 1, color: BORDER })
-      .borderRadius(20)
+      .borderRadius(AppTheme.radius.lg)
       Column() {
         this.buildWechatHint("加管理员好友进搭子匹配群，快速找搭子")
       }
@@ -248,11 +254,18 @@ struct RedeemPage {
   private buildRedeemForm(): void {
     Column({ space: 16 }) {
       Column({ space: 16 }) {
-        Text("输入兑换码")
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width("100%")
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.gift'))
+            .fontSize(22)
+            .fontColor([ACCENT])
+            .offset({ top: -1 })
+          Text("输入兑换码")
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+        }
+        .width("100%")
+        .alignItems(VerticalAlign.Center)
         Text("兑换会员后可解锁每日无限专注时长。")
           .fontSize(13)
           .fontColor(AppTheme.colors.textSecondary)
@@ -274,11 +287,14 @@ struct RedeemPage {
         Button(this.isSubmitting ? "兑换中…" : "立即兑换")
           .width("100%")
           .height(48)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor("#461702")
           .backgroundColor(ACCENT)
-          .borderRadius(24)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .enabled(!this.isSubmitting)
           .opacity(this.isSubmitting ? 0.55 : 1)
           .onClick(() => {
@@ -290,7 +306,7 @@ struct RedeemPage {
       .alignItems(HorizontalAlign.Start)
       .backgroundColor(CARD_BG)
       .border({ width: 1, color: BORDER })
-      .borderRadius(20)
+      .borderRadius(AppTheme.radius.lg)
       Column() {
         this.buildWechatHint("没有兑换码？联系管理员免费获取")
       }
@@ -438,7 +454,7 @@ struct RedeemPage {
       .width('100%')
       .padding(20)
       .backgroundColor(Color.White)
-      .borderRadius(16)
+      .borderRadius(AppTheme.radius.lg)
 
       Row({ space: 2 }) {
         Text(
@@ -459,7 +475,7 @@ struct RedeemPage {
       })
     }
     .width('100%')
-    .margin({ top: 16 })
+    .margin({ top: 32 })
     .alignItems(HorizontalAlign.Center)
   }
 

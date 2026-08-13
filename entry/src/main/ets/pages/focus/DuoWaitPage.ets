@@ -499,7 +499,9 @@ struct DuoWaitPage {
             .layoutWeight(2)
             .height(52)
             .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
             .borderRadius(AppTheme.radius.button)
+            .clip(true)
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .backgroundColor(AppTheme.colors.primary)
@@ -511,7 +513,9 @@ struct DuoWaitPage {
             .layoutWeight(1)
             .height(52)
             .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
             .borderRadius(AppTheme.radius.button)
+            .clip(true)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .backgroundColor(AppTheme.colors.primarySoft)
@@ -521,6 +525,8 @@ struct DuoWaitPage {
                 void this.copyInvite();
                 return;
               }
+              const waitTitle = this.getSessionTitle().trim();
+              AppStorage.setOrCreate(StoreKeys.DuoWaitTitle, waitTitle.length > 0 ? waitTitle : '搭子互督');
               pushRoute(PageRoutes.DuoMatch);
             })
         }.width("100%");
@@ -529,7 +535,9 @@ struct DuoWaitPage {
           .width("100%")
           .height(52)
           .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
           .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .backgroundColor(AppTheme.colors.primary)
@@ -542,10 +550,14 @@ struct DuoWaitPage {
         .width("100%")
         .height(52)
         .type(ButtonType.Normal)
-        .borderRadius(AppTheme.radius.button)
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
         .backgroundColor(AppTheme.colors.surface)
         .fontColor(AppTheme.colors.textPrimary)
         .border({ width: 1, color: AppTheme.colors.border })
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
         .onClick(() => {
           this.confirmCancelInvite();
         })

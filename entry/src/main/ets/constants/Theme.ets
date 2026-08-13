@@ -11,7 +11,7 @@ class ThemeColors {
   textSecondary: string = '#5B6475';
   textMuted: string = '#98A2B3';
   success: string = '#1F9D55';
-  successSoft: string = '#E8F7EE';
+  successSoft: string = '#E8F8EF';
   accentBlue: string = '#3B82F6';
   accentOrange: string = '#F97316';
   accentGreen: string = '#10B981';

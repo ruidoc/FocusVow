@@ -9,21 +9,22 @@ import { captureComponentSnapshot } from './CertificateImageService';
 export const STATS_SNAPSHOT_ID: string = 'statsShareSnapshotRoot';
 
 export async function captureStatsShareSnapshot(uiContext: UIContext): Promise<image.PixelMap> {
+  // 长图 + scale 2 体积过大时系统分享会直接失败
   return captureComponentSnapshot(uiContext, STATS_SNAPSHOT_ID, {
-    scale: 2,
+    scale: 1,
     waitUntilRenderFinished: true
   });
 }
 
 export function buildStatsShareCachePath(context: common.Context): string {
-  return `${context.cacheDir}/stats_share_${Date.now()}.png`;
+  return `${context.filesDir}/stats_share_${Date.now()}.jpg`;
 }
 
 export async function writePixelMapToFile(pixelMap: image.PixelMap, filePath: string): Promise<void> {
   const packer = image.createImagePacker();
   const buffer = await packer.packToData(pixelMap, {
-    format: 'image/png',
-    quality: 100
+    format: 'image/jpeg',
+    quality: 70
   });
   const file = await fileIo.open(
     filePath,
@@ -42,9 +43,8 @@ export async function shareStatsImageFile(
   title: string,
   description: string
 ): Promise<void> {
-  const utdTypeId = utd.getUniformDataTypeByFilenameExtension('.png', utd.UniformDataType.IMAGE);
   const shareData = new systemShare.SharedData({
-    utd: utdTypeId,
+    utd: utd.UniformDataType.IMAGE,
     title,
     description,
     uri: fileUri.getUriFromPath(filePath)

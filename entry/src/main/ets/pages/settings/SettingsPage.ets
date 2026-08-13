@@ -120,7 +120,10 @@ struct SettingsPage {
         Button('退出登录')
           .width('100%')
           .height(48)
-          .type(ButtonType.Capsule)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .backgroundColor(AppTheme.colors.dangerSoft)
           .fontColor(AppTheme.colors.danger)
           .onClick(() => {

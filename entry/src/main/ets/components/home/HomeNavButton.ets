@@ -32,10 +32,12 @@ export struct HomeNavButton {
     }
     .width('100%')
     .height(72)
-    .type(ButtonType.Capsule)
+    .type(ButtonType.Normal)
+    .buttonStyle(ButtonStyleMode.NORMAL)
     .backgroundColor(AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(AppTheme.radius.lg)
+    .clip(true)
     .padding({ left: 18, right: 18 })
     .onClick(() => {
       this.onPress?.();

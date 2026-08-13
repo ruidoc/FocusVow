@@ -3,7 +3,6 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { UsersIcon } from '../../components/common/UsersIcon';
-import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
   ORG_DEFAULT_INTRO,
@@ -64,6 +63,7 @@ struct OrgDetailPage {
   @State leaving: boolean = false;
   @State joining: boolean = false;
   @State topSafeInsetVp: number = 0;
+  @State tabItemWidths: number[] = [0, 0, 0, 0];
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -74,7 +74,40 @@ struct OrgDetailPage {
     }
     this.orgId = String(AppStorage.get<string>(StoreKeys.OrgDetailId) ?? '');
     this.loadTopSafeInset(hostContext);
+    this.setStatusBarContentWhite(true);
     void this.loadInitial();
+  }
+
+  onPageShow(): void {
+    this.setStatusBarContentWhite(true);
+  }
+
+  onPageHide(): void {
+    this.setStatusBarContentWhite(false);
+  }
+
+  aboutToDisappear(): void {
+    this.setStatusBarContentWhite(false);
+  }
+
+  private setStatusBarContentWhite(lightIcons: boolean): void {
+    const ctx = this.getUIContext().getHostContext();
+    if (ctx === undefined) {
+      return;
+    }
+    const hostContext = ctx as common.UIAbilityContext;
+    window.getLastWindow(hostContext, (err, win) => {
+      if (err.code) {
+        return;
+      }
+      const barProps: window.SystemBarProperties = {
+        statusBarColor: '#00000000',
+        navigationBarColor: '#00000000',
+        statusBarContentColor: lightIcons ? '#FFFFFFFF' : '#FF0F172A',
+        navigationBarContentColor: '#FF0F172A'
+      };
+      win.setWindowSystemBarProperties(barProps);
+    });
   }
 
   private loadTopSafeInset(hostContext: common.UIAbilityContext): void {
@@ -181,6 +214,28 @@ struct OrgDetailPage {
       count = this.live.solo_active.length;
     }
     return count > 0 ? `${item.label} ${count}` : item.label;
+  }
+
+  private setTabItemWidth(index: number, width: number): void {
+    const nextWidth = Math.round(width);
+    if (index < 0 || index >= this.tabItemWidths.length) {
+      return;
+    }
+    if (this.tabItemWidths[index] === nextWidth) {
+      return;
+    }
+    const next: number[] = this.tabItemWidths.slice();
+    next[index] = nextWidth;
+    this.tabItemWidths = next;
+  }
+
+  private getTabIndicatorWidth(index: number): number {
+    const inset: number = 16;
+    const width = this.tabItemWidths[index];
+    if (width <= inset) {
+      return 0;
+    }
+    return width - inset;
   }
 
   private async refreshCurrentTab(): Promise<void> {
@@ -294,17 +349,17 @@ struct OrgDetailPage {
   private buildHeader(): void {
     Column() {
       Row() {
-        Button({ type: ButtonType.Normal }) {
+        Row() {
           SymbolGlyph($r('sys.symbol.chevron_left'))
             .fontSize(22)
             .fontColor([Color.White])
         }
-          .width(44)
-          .height(44)
-          .backgroundColor(Color.Transparent)
-          .onClick(() => {
-            backRoute();
-          })
+        .width(44)
+        .height(44)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          backRoute();
+        })
 
         Row() {
           if (this.detail && this.detail.avatar.length > 0) {
@@ -334,44 +389,47 @@ struct OrgDetailPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         if (!this.isMember()) {
-          Button({ type: ButtonType.Normal }) {
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.plus'))
+              .fontSize(13)
+              .fontColor([Color.White])
             Text(this.joining ? '加入中..' : '加入')
               .fontSize(13)
               .fontWeight(FontWeight.Bold)
               .fontColor(Color.White)
           }
-            .height(28)
-            .padding({ left: 12, right: 12 })
-            .backgroundColor('#38FFFFFF')
-            .borderRadius(16)
-            .opacity(this.joining ? 0.6 : 1)
-            .enabled(!this.joining)
-            .onClick(() => {
+          .height(28)
+          .padding({ left: 12, right: 12 })
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor('rgba(255,255,255,0.22)')
+          .borderRadius(16)
+          .clip(true)
+          .opacity(this.joining ? 0.6 : 1)
+          .onClick(() => {
+            if (!this.joining) {
               void this.performJoin();
-            })
+            }
+          })
         } else if (this.isOwner()) {
-          Button({ type: ButtonType.Normal }) {
+          Row() {
             SymbolGlyph($r('sys.symbol.gearshape'))
               .fontSize(16)
               .fontColor([Color.White])
           }
+          .width(36)
+          .height(36)
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            pushRoute(PageRoutes.OrgManage);
+          })
+        } else {
+          Text('⋮')
+            .fontSize(22)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
             .width(36)
             .height(36)
-            .backgroundColor(Color.Transparent)
-            .onClick(() => {
-              pushRoute(PageRoutes.OrgManage);
-            })
-        } else {
-          Button({ type: ButtonType.Normal }) {
-            Text('退出')
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Color.White)
-          }
-            .height(28)
-            .padding({ left: 10, right: 10 })
-            .backgroundColor('#33FFFFFF')
-            .borderRadius(16)
+            .textAlign(TextAlign.Center)
             .onClick(() => {
               this.onLeavePress();
             })
@@ -427,10 +485,11 @@ struct OrgDetailPage {
       }
       .width('100%')
       .margin({ top: 10 })
+      .padding({ left: 16, right: 16 })
     }
     .width('100%')
     .padding({
-      left: 8,
+      left: 0,
       right: 8,
       top: this.topSafeInsetVp,
       bottom: 18
@@ -440,39 +499,55 @@ struct OrgDetailPage {
 
   @Builder
   private buildTabBar(): void {
-    Scroll() {
-      Row() {
-        ForEach(TABS, (item: OrgTabItem) => {
-          Column() {
-            Text(this.getTabLabel(item))
-              .fontSize(14)
-              .fontWeight(this.currentTab === item.key ? FontWeight.Bold : FontWeight.Medium)
-              .fontColor(this.currentTab === item.key ? AppTheme.colors.textPrimary : AppTheme.colors.textMuted)
-            if (this.currentTab === item.key) {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Row()
+        .width('100%')
+        .height(1)
+        .backgroundColor(AppTheme.colors.border)
+        .align(Alignment.Bottom)
+
+      Scroll() {
+        Row() {
+          ForEach(TABS, (item: OrgTabItem, index: number) => {
+            Column() {
+              Text(this.getTabLabel(item))
+                .fontSize(14)
+                .fontWeight(this.currentTab === item.key ? FontWeight.Bold : FontWeight.Medium)
+                .fontColor(this.currentTab === item.key ? AppTheme.colors.textPrimary : AppTheme.colors.textMuted)
+                .padding({ left: 12, right: 12 })
+                .height(41)
+                .onAreaChange((_oldArea: Area, area: Area) => {
+                  this.setTabItemWidth(index, Number(area.width));
+                })
               Row()
-                .width('70%')
+                .width(this.getTabIndicatorWidth(index))
                 .height(3)
-                .backgroundColor(AppTheme.colors.primary)
                 .borderRadius(999)
-                .margin({ top: 8 })
+                .backgroundColor(
+                  this.currentTab === item.key ? AppTheme.colors.primary : Color.Transparent
+                )
+                .clip(true)
             }
-          }
-          .height(44)
-          .padding({ left: 12, right: 12 })
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            void this.onTabChange(item.key);
-          })
-        }, (item: OrgTabItem) => item.key)
+            .height(44)
+            .alignItems(HorizontalAlign.Center)
+            .onClick(() => {
+              void this.onTabChange(item.key);
+            })
+          }, (item: OrgTabItem) => item.key)
+        }
+        .height(44)
+        .padding({ left: 2, right: 2 })
+        .alignItems(VerticalAlign.Center)
       }
-      .alignItems(VerticalAlign.Center)
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .width('100%')
+      .height(44)
+      .zIndex(1)
     }
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
     .width('100%')
     .height(44)
     .backgroundColor(AppTheme.colors.background)
-    .border({ width: { bottom: 1 }, color: AppTheme.colors.border })
   }
 
   @Builder
@@ -509,7 +584,7 @@ struct OrgDetailPage {
     }
     .width('100%')
     .padding(12)
-    .backgroundColor(highlight ? `${AppTheme.colors.primary}12` : AppTheme.colors.surface)
+    .backgroundColor(highlight ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
     .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(12)
   }
@@ -563,7 +638,7 @@ struct OrgDetailPage {
     .padding(12)
     .backgroundColor(
       this.getRankMedalStyle(item.rank)?.row ??
-        (this.isMe(item.user_id) ? `${AppTheme.colors.primary}12` : AppTheme.colors.surface)
+        (this.isMe(item.user_id) ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
     )
     .border({
       width: 1,
@@ -584,9 +659,13 @@ struct OrgDetailPage {
               .fontColor(this.currentPeriod === period ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
               .padding({ left: 14, right: 14, top: 7, bottom: 7 })
               .backgroundColor(
-                this.currentPeriod === period ? `${AppTheme.colors.primary}18` : AppTheme.colors.surface
+                this.currentPeriod === period ? AppTheme.colors.primarySoft : AppTheme.colors.surface
               )
-              .borderRadius(999)
+              .borderRadius(AppTheme.radius.pill)
+              .border({
+                width: 1,
+                color: this.currentPeriod === period ? AppTheme.colors.primary : AppTheme.colors.border
+              })
               .onClick(() => {
                 void this.onPeriodChange(period);
               })
@@ -774,22 +853,12 @@ struct OrgDetailPage {
   }
 
   build() {
-    Stack() {
-      SystemNavPage({
-        title: '',
-        showBack: false,
-        showTitleBar: false,
-        usePageScroll: false,
-        horizontalPadding: 0,
-        topSpacerHeight: 0,
-        hiddenTitleTopPadding: 0,
-        bottomSpacerHeight: 0,
-        content: (): void => {
-          this.buildPageBody();
-        }
-      })
+    Column() {
+      this.buildPageBody()
     }
     .width('100%')
     .height('100%')
+    .backgroundColor(AppTheme.colors.background)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 }

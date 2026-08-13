@@ -54,7 +54,7 @@
     "capabilities": [
       {
         "bundleName": "com.freeshore.focusvow",
-        "config": [
+         "config": [
           {
             "name": "Push Kit",
             "capability": "com.huawei.service.push.base_service"

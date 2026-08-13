@@ -6,18 +6,18 @@ export function confirmPrivacyAgreementForAuth(uiContext: UIContext): Promise<bo
   return new Promise<boolean>((resolve: (accepted: boolean) => void) => {
     uiContext.showAlertDialog({
       title: '阅读隐私政策',
-      message: '请阅读并同意《隐私政策》后继续',
+      message: '请阅读并同意《隐私政策》后继续（可点页面下方链接查看）',
       autoCancel: false,
       primaryButton: {
-        value: '同意并继续',
-        action: () => {
-          resolve(true);
-        }
-      },
-      secondaryButton: {
         value: '取消',
         action: () => {
           resolve(false);
+        }
+      },
+      secondaryButton: {
+        value: '同意并继续',
+        action: () => {
+          resolve(true);
         }
       }
     });

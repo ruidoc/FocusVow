@@ -1,7 +1,9 @@
 import { common } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
 import { showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
 import { AppActionButton } from '../../components/common/AppActionButton';
+import { IconTextInputCard } from '../../components/common/IconTextInputCard';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute, PageRoutes, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
@@ -23,6 +25,20 @@ struct EmailLoginPage {
   @State loading: boolean = false;
   @State agreedToTerms: boolean = false;
   @State switchLinkPressed: boolean = false;
+  @State bottomInset: number = 12;
+
+  aboutToAppear(): void {
+    AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const ui = this.getUIContext();
+    window.getLastWindow(hostContext, (err, win) => {
+      if (err.code) {
+        return;
+      }
+      const navAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+      this.bottomInset = Math.max(ui.px2vp(navAvoid.bottomRect.height), 12);
+    });
+  }
 
   private isFormValid(): boolean {
     return EMAIL_PATTERN.test(this.email.trim()) && this.password.length >= 6;
@@ -80,100 +96,100 @@ struct EmailLoginPage {
   }
 
   @Builder
-  private buildInputCard(): void {
-    Column({ space: 14 }) {
-      TextInput({ placeholder: '邮箱', text: this.email })
-        .type(InputType.Email)
-        .height(52)
-        .fontSize(16)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(AppTheme.radius.md)
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
-          this.email = value;
-        })
-
-      TextInput({ placeholder: '密码（至少 6 位）', text: this.password })
-        .type(InputType.Password)
-        .height(52)
-        .fontSize(16)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(AppTheme.radius.md)
-        .padding({ left: 16, right: 16 })
-        .onChange((value: string) => {
-          this.password = value;
-        })
-    }
-    .width('100%')
-    .padding(18)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
   private buildLoginContent(): void {
-    Column({ space: 18 }) {
-      Column({ space: 8 }) {
-        Text('邮箱登录')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
+    Column() {
+      Column() {
+        Column({ space: 8 }) {
+          Text('邮箱登录')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
+            .width('100%')
+          Text('使用邮箱和密码登录专注契约账号')
+            .fontSize(16)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .margin({ top: 40, bottom: 40 })
 
-        Text('使用邮箱和密码登录 FocusVow 账号')
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
+        IconTextInputCard({
+          icon: $r('sys.symbol.envelope'),
+          placeholder: '邮箱',
+          text: this.email,
+          inputType: InputType.Email,
+          onTextChange: (value: string) => {
+            this.email = value;
+          }
+        })
           .width('100%')
+          .margin({ bottom: 16 })
+
+        IconTextInputCard({
+          icon: $r('sys.symbol.lock'),
+          placeholder: '密码（至少 6 位）',
+          text: this.password,
+          inputType: InputType.Password,
+          onTextChange: (value: string) => {
+            this.password = value;
+          }
+        })
+          .width('100%')
+          .margin({ bottom: 24 })
+
+        AppActionButton({
+          label: this.loading ? '登录中...' : '登录',
+          isEnabled: this.isFormValid() && !this.loading,
+          onPress: () => {
+            void this.submitLogin();
+          }
+        })
+
+        Text('还没有账号？去注册')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.primary)
+          .opacity(this.switchLinkPressed ? 0.6 : 1)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 16, bottom: 16 })
+          .onTouch((event: TouchEvent) => {
+            if (event.type === TouchType.Down) {
+              this.switchLinkPressed = true;
+            } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+              this.switchLinkPressed = false;
+            }
+          })
+          .onClick(() => {
+            replaceRoute(PageRoutes.Register);
+          })
       }
+      .layoutWeight(1)
       .width('100%')
       .alignItems(HorizontalAlign.Start)
 
-      this.buildInputCard()
-
-      AppActionButton({
-        label: this.loading ? '登录中...' : '登录',
-        isEnabled: this.isFormValid() && !this.loading,
-        onPress: () => {
-          void this.submitLogin();
-        }
-      })
-
       AgreementConsentRow({
         agreed: this.agreedToTerms,
+        centered: true,
         onAgreedChange: (agreed: boolean) => {
           this.agreedToTerms = agreed;
         }
       })
-
-      Text('还没有账号？去注册')
-        .fontSize(15)
-        .fontColor(AppTheme.colors.primary)
-        .opacity(this.switchLinkPressed ? 0.7 : 1)
-        .padding({ top: 8, bottom: 8 })
-        .onTouch((event: TouchEvent) => {
-          if (event.type === TouchType.Down) {
-            this.switchLinkPressed = true;
-          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-            this.switchLinkPressed = false;
-          }
-        })
-        .onClick(() => {
-          replaceRoute(PageRoutes.Register);
-        })
+        .padding({ bottom: this.bottomInset })
     }
     .width('100%')
-    .alignItems(HorizontalAlign.Start)
+    .height('100%')
   }
 
   build() {
     Stack() {
       SystemNavPage({
-        title: '邮箱登录',
+        title: '',
         showBack: true,
-        usePageScroll: true,
-        horizontalPadding: 16,
+        usePageScroll: false,
+        horizontalPadding: 24,
+        bottomSpacerHeight: 0,
         onBack: () => {
           backRoute();
         },

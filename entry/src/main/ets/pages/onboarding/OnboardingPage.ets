@@ -4,6 +4,7 @@ import { showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
 import { AppTheme } from '../../constants/Theme';
 import { PageRoutes, backRoute, pushRoute, returnToMainTab } from '../../router/PageRoutes';
+import { markFirstFocusPromptPending } from '../../services/FirstFocusPromptService';
 import {
   isOnboardingCompleted,
   markOnboardingCompleted,
@@ -71,6 +72,7 @@ struct OnboardingPage {
   @State bottomInset: number = 0;
   @State goalOptions: OnboardingOption[] = [];
   @State partnerGuideTexts: string[] = [];
+  @State private progressWidthPercent: number = 20;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -78,6 +80,7 @@ struct OnboardingPage {
     SettingsStore.hydrate(hostContext);
     this.viaOldUser = AppStorage.get<boolean>(StoreKeys.OnboardingViaOldUser) === true;
     this.totalSteps = this.viaOldUser ? 4 : 5;
+    this.progressWidthPercent = Math.max(8, (this.step / this.totalSteps) * 100);
     if (isOnboardingCompleted(hostContext) && !this.viaOldUser) {
       replaceToHome();
       return;
@@ -109,8 +112,12 @@ struct OnboardingPage {
     void OnboardingApiService.upsert(hostContext, payload);
   }
 
-  private progressRatio(): number {
-    return this.step / this.totalSteps;
+  private applyStep(next: number): void {
+    this.step = next;
+    const nextWidth = Math.max(8, (this.step / this.totalSteps) * 100);
+    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+      this.progressWidthPercent = nextWidth;
+    });
   }
 
   private goBack(): void {
@@ -118,7 +125,7 @@ struct OnboardingPage {
       backRoute();
       return;
     }
-    this.step = this.step - 1;
+    this.applyStep(this.step - 1);
   }
 
   private selectIdentity(id: string): void {
@@ -130,7 +137,7 @@ struct OnboardingPage {
       'identity': id
     });
     setTimeout(() => {
-      this.step = 2;
+      this.applyStep(2);
     }, 180);
   }
 
@@ -143,7 +150,7 @@ struct OnboardingPage {
       'problem': goalToProblem(id)
     });
     setTimeout(() => {
-      this.step = 3;
+      this.applyStep(3);
     }, 180);
   }
 
@@ -173,14 +180,14 @@ struct OnboardingPage {
     if (this.viaOldUser) {
       await this.syncPermission();
       if (this.screenTimeOk) {
-        this.finish(false);
+        this.finish();
         return;
       }
       this.totalSteps = 4;
-      this.step = 4;
+      this.applyStep(4);
       return;
     }
-    this.step = 4;
+    this.applyStep(4);
   }
 
   private async onReferralBlur(): Promise<void> {
@@ -218,7 +225,7 @@ struct OnboardingPage {
       'goal': this.goal,
       'problem': goalToProblem(this.goal)
     });
-    this.step = 5;
+    this.applyStep(5);
     void this.syncPermission();
   }
 
@@ -282,7 +289,10 @@ struct OnboardingPage {
     this.busy = false;
   }
 
-  private finish(skipPermission: boolean): void {
+  private finish(): void {
+    if (!this.screenTimeOk) {
+      return;
+    }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const meta: Record<string, Object> = {
       'has_study_buddy': this.hasBuddy === 'yes'
@@ -293,10 +303,11 @@ struct OnboardingPage {
       'identity': this.identity,
       'goal': this.goal,
       'problem': goalToProblem(this.goal),
-      'screen_time_status': this.screenTimeOk ? 'approved' : (skipPermission ? 'skipped' : 'denied'),
+      'screen_time_status': 'approved',
       'meta': meta
     });
     markOnboardingCompleted(hostContext);
+    markFirstFocusPromptPending(hostContext);
     AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
     returnToMainTab('focus');
@@ -331,17 +342,18 @@ struct OnboardingPage {
       Stack({ alignContent: Alignment.Start }) {
         Row()
           .width('100%')
-          .height(4)
-          .borderRadius(2)
+          .height(8)
+          .borderRadius(4)
           .backgroundColor(AppTheme.colors.border)
         Row()
-          .width(`${Math.max(8, this.progressRatio() * 100)}%`)
-          .height(4)
-          .borderRadius(2)
+          .width(`${this.progressWidthPercent}%`)
+          .height(8)
+          .borderRadius(4)
           .backgroundColor(AppTheme.colors.primary)
       }
       .layoutWeight(1)
-      .height(4)
+      .height(8)
+      .clip(true)
       .margin({ left: 12, right: 12 })
 
       Row()
@@ -546,11 +558,13 @@ struct OnboardingPage {
           .width('100%')
           .height(52)
           .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(Color.White)
           .backgroundColor(AppTheme.colors.primary)
           .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .enabled(this.hasBuddy.length > 0)
           .opacity(this.hasBuddy.length > 0 ? 1 : 0.45)
           .onClick(() => {
@@ -586,60 +600,66 @@ struct OnboardingPage {
           .width('100%')
           .margin({ top: 12, bottom: 32 })
 
-        Row({ space: 12 }) {
-          SymbolGlyph($r('sys.symbol.gift'))
-            .fontSize(18)
-            .fontColor([AppTheme.colors.textMuted])
-          TextInput({ placeholder: '邀请码（选填）', text: this.referralCode })
-            .layoutWeight(1)
-            .height(48)
-            .fontSize(16)
-            .backgroundColor(Color.Transparent)
-            .onChange((value: string) => {
-              this.referralCode = value;
-              if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
-                this.referralStatus = 'idle';
-              }
-              if (normalizeReferralCode(value).length === 0) {
-                this.referralStatus = 'idle';
-                clearPendingReferralCode();
-              }
-            })
-            .onBlur(() => {
-              void this.onReferralBlur();
-            })
-          if (this.referralStatus === 'checking') {
-            LoadingProgress()
-              .width(18)
-              .height(18)
-              .color(AppTheme.colors.primary)
-          } else if (this.referralStatus === 'valid') {
-            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-              .fontSize(20)
-              .fontColor([AppTheme.colors.success])
+        Column() {
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.gift'))
+              .fontSize(18)
+              .fontColor([AppTheme.colors.textMuted])
+            TextInput({ placeholder: '邀请码（选填）', text: this.referralCode })
+              .layoutWeight(1)
+              .height(48)
+              .fontSize(16)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
+              .onChange((value: string) => {
+                this.referralCode = value;
+                if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
+                  this.referralStatus = 'idle';
+                }
+                if (normalizeReferralCode(value).length === 0) {
+                  this.referralStatus = 'idle';
+                  clearPendingReferralCode();
+                }
+              })
+              .onBlur(() => {
+                void this.onReferralBlur();
+              })
+            if (this.referralStatus === 'checking') {
+              LoadingProgress()
+                .width(18)
+                .height(18)
+                .color(AppTheme.colors.primary)
+            } else if (this.referralStatus === 'valid') {
+              SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+                .fontSize(20)
+                .fontColor([AppTheme.colors.success])
+            }
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 16, right: 16 })
+          .backgroundColor('rgba(0,0,0,0.04)')
+          .borderRadius(16)
+
+          if (this.referralStatus === 'invalid') {
+            Text('邀请码错误，注册时将忽略')
+              .fontSize(12)
+              .fontColor(AppTheme.colors.danger)
+              .lineHeight(18)
+              .width('100%')
+              .textAlign(TextAlign.Start)
+              .margin({ top: 8 })
           }
         }
-        .width('100%')
-        .height(52)
-        .padding({ left: 16, right: 16 })
-        .backgroundColor('rgba(0,0,0,0.04)')
-        .borderRadius(16)
-
-        if (this.referralStatus === 'invalid') {
-          Text('邀请码错误，注册时将忽略')
-            .fontSize(12)
-            .fontColor(AppTheme.colors.danger)
-            .lineHeight(18)
-            .width('100%')
-            .margin({ top: 8 })
-        }
+        .width(240)
+        .alignItems(HorizontalAlign.Start)
 
         Text('快捷登录 / 注册')
           .fontSize(13)
           .fontColor(AppTheme.colors.textMuted)
           .textAlign(TextAlign.Center)
           .width('100%')
-          .margin({ top: 28, bottom: 16 })
+          .margin({ top: 48, bottom: 16 })
 
         Button() {
           Row({ space: 8 }) {
@@ -656,8 +676,10 @@ struct OnboardingPage {
         .width('100%')
         .height(52)
         .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
         .backgroundColor(WECHAT_GREEN)
         .borderRadius(AppTheme.radius.button)
+        .clip(true)
         .enabled(this.referralStatus !== 'checking' && !this.wechatLoading)
         .opacity(this.referralStatus === 'checking' || this.wechatLoading ? 0.6 : 1)
         .onClick(() => {
@@ -723,7 +745,7 @@ struct OnboardingPage {
       .height(28)
       .justifyContent(FlexAlign.Center)
       .borderRadius(14)
-      .backgroundColor(this.screenTimeOk ? 'rgba(16, 185, 129, 0.13)' : 'rgba(0,0,0,0.06)')
+      .backgroundColor(this.screenTimeOk ? 'rgba(16,185,129,0.13)' : 'rgba(0,0,0,0.06)')
       .margin({ top: 2 })
 
       Column({ space: 4 }) {
@@ -787,28 +809,21 @@ struct OnboardingPage {
           .width('100%')
           .height(52)
           .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(Color.White)
           .backgroundColor(AppTheme.colors.primary)
           .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .opacity(this.screenTimeOk ? 1 : 0.9)
           .onClick(() => {
             if (!this.screenTimeOk) {
               void this.requestScreenTime();
               return;
             }
-            this.finish(false);
+            this.finish();
           })
-        if (!this.screenTimeOk) {
-          Text('稍后再说')
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textMuted)
-            .padding({ top: 10, bottom: 4 })
-            .onClick(() => {
-              this.finish(true);
-            })
-        }
       }
       .width('100%')
       .padding({

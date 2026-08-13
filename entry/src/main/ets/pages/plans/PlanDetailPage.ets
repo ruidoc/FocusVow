@@ -1,7 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { copyDuoInviteText, shareDuoInviteText } from '../../services/DuoInviteShareService';
 import { showErrorToast, showToast } from '../../common/Toast';
-import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
@@ -60,6 +59,7 @@ struct PlanDetailPage {
   @State timePickerDraft: Date = new Date();
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
+  private nameInputController: TextInputController = new TextInputController();
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -276,7 +276,18 @@ struct PlanDetailPage {
     return result;
   }
 
+  private minutesToTime(totalMinutes: number): string {
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = totalMinutes % 60;
+    return `${this.padTimePart(hour)}:${this.padTimePart(minute)}`;
+  }
+
+  private blurNameInput(): void {
+    this.nameInputController.stopEditing();
+  }
+
   private openTimePicker(target: 'start' | 'end'): void {
+    this.blurNameInput();
     this.timePickerTarget = target;
     this.timePickerDraft = this.timeStringToDate(target === 'start' ? this.startTime : this.endTime);
     this.timePickerVisible = true;
@@ -284,9 +295,30 @@ struct PlanDetailPage {
 
   private confirmTimePicker(): void {
     const nextTime = this.formatTime(this.timePickerDraft);
+    const uiContext = this.getUIContext();
     if (this.timePickerTarget === 'start') {
+      const startMin = this.timeToMinutes(nextTime);
+      const endMin = startMin + 20;
+      if (endMin > 24 * 60 - 1) {
+        showErrorToast('暂不支持跨日，请改早一点的开始时间', uiContext);
+        this.timePickerVisible = false;
+        return;
+      }
       this.startTime = nextTime;
+      this.endTime = this.minutesToTime(endMin);
     } else {
+      const startMin = this.timeToMinutes(this.startTime);
+      const endMin = this.timeToMinutes(nextTime);
+      if (endMin <= startMin) {
+        showErrorToast('暂不支持跨日，请将结束时间设在当天内', uiContext);
+        this.timePickerVisible = false;
+        return;
+      }
+      if (endMin - startMin < 20) {
+        showErrorToast('时长至少20分钟', uiContext);
+        this.timePickerVisible = false;
+        return;
+      }
       this.endTime = nextTime;
     }
     this.timePickerVisible = false;
@@ -308,7 +340,7 @@ struct PlanDetailPage {
   }
 
   private appCardTitle(): string {
-    return this.mode === 'shield' ? '要锁定的应用' : '要放行的应用';
+    return this.mode === 'allow' ? '允许使用的应用' : '要锁定的应用';
   }
 
   private shouldShowStatusLine(): boolean {
@@ -326,8 +358,10 @@ struct PlanDetailPage {
     if (!this.canEditApps()) {
       return;
     }
+    this.blurNameInput();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
+    this.blurNameInput();
     if (result.data) {
       this.selectedTokens = [...result.data];
       this.statusMessage = result.message;
@@ -599,7 +633,10 @@ struct PlanDetailPage {
             Button('发给搭子')
               .layoutWeight(2)
               .height(42)
-              .type(ButtonType.Capsule)
+              .type(ButtonType.Normal)
+              .buttonStyle(ButtonStyleMode.NORMAL)
+              .borderRadius(AppTheme.radius.button)
+              .clip(true)
               .backgroundColor(AppTheme.colors.primary)
               .fontColor('#FFFFFF')
               .onClick(() => {
@@ -608,7 +645,10 @@ struct PlanDetailPage {
             Button('复制口令')
               .layoutWeight(1)
               .height(42)
-              .type(ButtonType.Capsule)
+              .type(ButtonType.Normal)
+              .buttonStyle(ButtonStyleMode.NORMAL)
+              .borderRadius(AppTheme.radius.button)
+              .clip(true)
               .fontSize(14)
               .backgroundColor(AppTheme.colors.primarySoft)
               .fontColor(AppTheme.colors.primary)
@@ -662,197 +702,182 @@ struct PlanDetailPage {
 
   @Builder
   private buildNameCard(): void {
-    Column({ space: 14 }) {
+    Row() {
       Text('契约名称')
         .fontSize(16)
-        .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
 
-      TextInput({ text: this.planName, placeholder: '请输入' })
-        .width('100%')
-        .height(44)
+      TextInput({
+        text: this.planName,
+        placeholder: '请输入',
+        controller: this.nameInputController
+      })
+        .layoutWeight(1)
+        .height(40)
         .fontSize(15)
         .fontColor(AppTheme.colors.textPrimary)
         .placeholderColor(AppTheme.colors.textMuted)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .borderRadius(12)
-        .padding({ left: 14, right: 14 })
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
+        .border({ width: 0 })
+        .showUnderline(false)
+        .cancelButton({ style: CancelButtonStyle.INVISIBLE })
+        .defaultFocus(false)
+        .textAlign(TextAlign.End)
+        .padding({ left: 12, right: 8 })
+        .enterKeyType(EnterKeyType.Done)
         .onChange((value: string) => {
           this.planName = value;
         })
+        .onSubmit(() => {
+          this.blurNameInput();
+        })
     }
     .width('100%')
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
+    .constraintSize({ minHeight: 54 })
+    .padding({ left: 16, right: 16 })
+    .alignItems(VerticalAlign.Center)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
+    .borderRadius(12)
   }
 
   @Builder
   private buildTimeCard(): void {
-    Column({ space: 14 }) {
-      Text('专注时段')
+    Row() {
+      Text('起始时间')
         .fontSize(16)
-        .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
+
+      Blank()
 
       Row({ space: 8 }) {
-        Row({ space: 6 }) {
-          Text(this.startTime)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-
-          SymbolGlyph($r('sys.symbol.clock'))
-            .fontSize(14)
-            .fontColor([AppTheme.colors.textMuted])
-        }
-        .layoutWeight(1)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .borderRadius(12)
-        .onClick(() => {
-          this.openTimePicker('start');
-        })
+        Text(this.startTime)
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textPrimary)
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .borderRadius(8)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .onClick(() => {
+            this.openTimePicker('start');
+          })
 
         Text('至')
           .fontSize(14)
-          .fontColor(AppTheme.colors.textMuted)
+          .fontColor(AppTheme.colors.textSecondary)
 
-        Row({ space: 6 }) {
-          Text(this.endTime)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-
-          SymbolGlyph($r('sys.symbol.clock'))
-            .fontSize(14)
-            .fontColor([AppTheme.colors.textMuted])
-        }
-        .layoutWeight(1)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .borderRadius(12)
-        .onClick(() => {
-          this.openTimePicker('end');
-        })
+        Text(this.endTime)
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textPrimary)
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .borderRadius(8)
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .onClick(() => {
+            this.openTimePicker('end');
+          })
       }
-      .width('100%')
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
+    .padding({ left: 16, right: 16, top: 15, bottom: 15 })
+    .alignItems(VerticalAlign.Center)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
+    .borderRadius(12)
   }
 
   @Builder
   private buildAppCard(): void {
-    Column({ space: 14 }) {
+    Column() {
       Row() {
         Text(this.appCardTitle())
           .layoutWeight(1)
           .fontSize(16)
-          .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
 
-        Text('+ 选择')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.primary)
-          .onClick(() => {
-            void this.chooseApps();
-          })
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(14)
+            .fontColor([AppTheme.colors.textMuted])
+          Text('选择')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+        }
+        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        .borderRadius(16)
+        .backgroundColor(AppTheme.colors.surfaceRaised)
+        .onClick(() => {
+          void this.chooseApps();
+        })
       }
       .width('100%')
+      .padding({ left: 16, right: 16, top: 15, bottom: 8 })
       .alignItems(VerticalAlign.Center)
 
-      if (this.selectedTokens.length === 0) {
-        Text('未选择应用')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textMuted)
-          .width('100%')
-      } else {
-        Text(`已选 ${this.selectedTokens.length} 个应用`)
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
-      }
+      Text(this.selectedTokens.length === 0 ? '未选择应用' : `已选 ${this.selectedTokens.length} 个应用`)
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: this.shouldShowStatusLine() ? 8 : 16 })
 
       if (this.shouldShowStatusLine()) {
         Text(this.statusMessage)
           .fontSize(12)
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
+          .padding({ left: 16, right: 16, bottom: 16 })
       }
     }
     .width('100%')
-    .padding(20)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
+    .borderRadius(12)
+    .clip(true)
   }
 
   @Builder
   private buildRepeatDaysCard(): void {
-    Column({ space: 14 }) {
+    Column() {
       Row() {
         Text('每周几重复')
           .fontSize(16)
-          .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
         Blank()
         Text(`已选${this.repeatDays.length}天`)
-          .fontSize(13)
+          .fontSize(14)
           .fontColor(AppTheme.colors.textMuted)
       }
       .width('100%')
+      .padding({ left: 16, right: 16, top: 15, bottom: 8 })
 
       Row({ space: 8 }) {
         ForEach(this.dayOptions, (item: number) => {
-          Button({ type: ButtonType.Capsule }) {
-            Stack() {
-              Text(getRepeatDayShortLabel(item))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
-            }
-            .width('100%')
-            .height('100%')
-            .alignContent(Alignment.Center)
+          Stack() {
+            Text(getRepeatDayShortLabel(item))
+              .fontSize(15)
+              .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
           }
-          .width(36)
-          .height(36)
-          .padding(0)
-          .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.surfaceRaised)
+          .width(38)
+          .height(38)
+          .borderRadius(19)
+          .clip(true)
+          .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.border)
           .onClick(() => {
             this.toggleRepeatDay(item);
           })
         }, (item: number) => item.toString())
       }
       .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 20 })
     }
     .width('100%')
-    .padding(20)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg)
+    .borderRadius(12)
+    .clip(true)
   }
 
   @Builder
   private buildEditBody(): void {
-    Column({ space: 18 }) {
+    Column({ space: 16 }) {
       if (this.canEditAll()) {
         this.buildNameCard()
         this.buildTimeCard()
@@ -864,13 +889,23 @@ struct PlanDetailPage {
         this.buildRepeatDaysCard()
       }
 
-      AppActionButton({
-        label: this.isSaving ? '保存中...' : '保存修改',
-        onPress: () => {
-          void this.saveChanges();
-        }
-      })
+      Button(this.isSaving ? '保存中...' : '保存修改')
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .backgroundColor(AppTheme.colors.primary)
+        .fontColor('#FFFFFF')
+        .enabled(!this.isSaving)
+        .opacity(this.isSaving ? 0.7 : 1)
         .margin({ top: 8 })
+        .onClick(() => {
+          void this.saveChanges();
+        })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -902,7 +937,10 @@ struct PlanDetailPage {
         Button('取消')
           .layoutWeight(1)
           .height(48)
-          .type(ButtonType.Capsule)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .fontSize(16)
           .fontColor(AppTheme.colors.textSecondary)
           .backgroundColor(AppTheme.colors.surfaceRaised)
@@ -913,7 +951,10 @@ struct PlanDetailPage {
         Button('确定')
           .layoutWeight(1)
           .height(48)
-          .type(ButtonType.Capsule)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor('#FFFFFF')

@@ -23,21 +23,27 @@ export struct AppActionButton {
   }
 
   build() {
-    // Capsule 会忽略自定义 borderRadius；须 Normal + 显式圆角才对齐 RN rounded-[30px]
-    Button(this.label)
-      .width('100%')
-      .height(this.buttonHeight)
-      .type(ButtonType.Normal)
-      .borderRadius(AppTheme.radius.button)
-      .fontSize(17)
-      .fontWeight(FontWeight.Bold)
-      .backgroundColor(this.getBackgroundColor())
-      .fontColor(this.getFontColor())
-      .border({ width: 0, color: this.getBorderColor() })
-      .enabled(this.isEnabled)
-      .opacity(this.isEnabled ? 1 : 0.7)
-      .onClick(() => {
-        this.onPress?.();
-      })
+    // 外层 clip 才能真正切出圆角；border 必须在 radius/clip 之前
+    Column() {
+      Button(this.label)
+        .width('100%')
+        .height(this.buttonHeight)
+        .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .border({ width: 0, color: this.getBorderColor() })
+        .borderRadius(AppTheme.radius.button)
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .backgroundColor(this.getBackgroundColor())
+        .fontColor(this.getFontColor())
+        .enabled(this.isEnabled)
+        .opacity(this.isEnabled ? 1 : 0.7)
+        .onClick(() => {
+          this.onPress?.();
+        })
+    }
+    .width('100%')
+    .borderRadius(AppTheme.radius.button)
+    .clip(true)
   }
 }

@@ -5,7 +5,7 @@ import { formatSuccessDurationLabel } from '../../services/StatsRecordUtil';
 const BAR_PALETTE: string[] = [
   '#6366F1',
   '#06B6D4',
-  '#10B981',
+  '#7A5AF8',
   '#F59E0B',
   '#EC4899',
   '#8B5CF6',

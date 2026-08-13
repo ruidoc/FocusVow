@@ -1,11 +1,11 @@
 import { common } from "@kit.AbilityKit";
-import { window } from "@kit.ArkUI";
+import { window, router } from "@kit.ArkUI";
 import {
   ActiveLockState,
   createIdleLockState,
   normalizeActiveLockState,
 } from "../../models/ActiveLockModel";
-import { MainTabKey, pushRoute, PageRoutes } from "../../router/PageRoutes";
+import { MainTabKey, returnToMainTab } from "../../router/PageRoutes";
 import { endQuickFocus } from "../../services/ActiveLockLifecycleService";
 import {
   queueHonorCertificate,
@@ -67,8 +67,6 @@ struct MainTabPage {
       // 老用户（已登录或已授权）跳过新引导，避免升版后被强制重走
       if (UserStore.isLoggedIn() || SettingsStore.getState().hasAuthorized) {
         markOnboardingCompleted(hostContext);
-      } else {
-        pushRoute(PageRoutes.Welcome);
       }
     }
     void UserStore.syncRemoteIfLoggedIn(hostContext);
@@ -194,8 +192,14 @@ struct MainTabPage {
   }
 
   private onActiveLockChanged(): void {
-    if (shouldHideMainTabBar(this.activeLock) && this.currentTab !== "focus") {
+    if (!shouldHideMainTabBar(this.activeLock)) {
+      return;
+    }
+    if (this.currentTab !== "focus") {
       this.currentTab = "focus";
+    }
+    if (Number(router.getLength()) > 1) {
+      returnToMainTab("focus");
     }
   }
 

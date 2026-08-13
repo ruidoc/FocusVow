@@ -65,14 +65,6 @@ export struct ProfilePage {
     return false;
   }
 
-  private openOrgList(): void {
-    if (!this.isLoggedIn) {
-      pushLogin();
-      return;
-    }
-    pushRoute(PageRoutes.OrgList);
-  }
-
   private openOrgManage(): void {
     if (!this.isLoggedIn) {
       pushLogin();
@@ -220,6 +212,11 @@ export struct ProfilePage {
         Row() {
           Column({ space: 8 }) {
             Row({ space: 8 }) {
+              SymbolGlyph($r('sys.symbol.gift'))
+                .fontSize(18)
+                .fontColor([this.isMembershipActive() ? '#A16207' : '#D4A44A'])
+                .offset({ top: -1 })
+
               Text(this.getMemberTitle())
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
@@ -250,11 +247,14 @@ export struct ProfilePage {
             Button('兑换')
               .height(32)
               .padding({ left: 14, right: 14 })
+              .type(ButtonType.Normal)
+              .buttonStyle(ButtonStyleMode.NORMAL)
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .fontColor('#461702')
               .backgroundColor('#D4A44A')
               .borderRadius(16)
+              .clip(true)
               .onClick(() => {
                 this.openRedeemPage();
               })
@@ -295,9 +295,10 @@ export struct ProfilePage {
       .backgroundColor(this.isMembershipActive() ? '#FFFBF0' : '#FFFFFF')
       .border({
         width: 1,
-        color: this.isMembershipActive() ? 'rgba(212,164,74,0.35)' : '#F1F3F8'
+        color: this.isMembershipActive() ? 'rgba(212,164,74,0.35)' : '#E8EBF0'
       })
-      .borderRadius(24)
+      .borderRadius(AppTheme.radius.lg)
+      .clip(true)
       .onClick(() => {
         this.openRedeemPage();
       })
@@ -365,20 +366,17 @@ export struct ProfilePage {
             pushRoute(PageRoutes.CycleGuardEdit);
           })
         }
-        this.buildMenuRow('我的组织', $r('sys.symbol.person_badge_plus'), '', true, () => {
-          this.openOrgList();
-        })
-        if (this.hasOwnedOrg()) {
-          this.buildMenuRow('组织管理', $r('sys.symbol.person_2'), '', true, () => {
-            this.openOrgManage();
-          })
-        }
         this.buildMenuRow('权限管理', $r('sys.symbol.bolt_shield'), this.getPermissionLabel(), true, () => {
           pushRoute(PageRoutes.Permission);
         })
         this.buildMenuRow('意见反馈', $r('sys.symbol.ellipsis_message'), '', true, () => {
           pushRoute(PageRoutes.Feedback);
         })
+        if (this.hasOwnedOrg()) {
+          this.buildMenuRow('组织管理', $r('sys.symbol.person_2'), '', true, () => {
+            this.openOrgManage();
+          })
+        }
         this.buildMenuRow('关于我们', $r('sys.symbol.square_grid_2x2'), '', true, () => {
           pushRoute(PageRoutes.About);
         })

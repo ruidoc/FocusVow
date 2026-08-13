@@ -57,6 +57,18 @@ export function pushRoute(url: string): void {
   });
 }
 
+export function pushQuickStart(title: string = '', minutes: number = 0): void {
+  router.pushUrl({
+    url: PageRoutes.QuickStart,
+    params: {
+      title: title,
+      minute: String(minutes)
+    }
+  }).catch((error: BusinessError) => {
+    logRouteError('pushQuickStart', error);
+  });
+}
+
 /** 普通登录入口：清掉欢迎页老用户标记，避免误进补画像 */
 export function pushLogin(): void {
   AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
@@ -121,16 +133,34 @@ export function openMainTab(tab: MainTabKey = 'focus'): void {
 
 /**
  * 从二级页回到主 Tab，避免 replace 再叠一层 MainTabPage。
- * 栈里已有主页时用 back 回到该实例；否则 replace 兜底。
+ * 栈里已有主页时用 back 回到该实例；否则 replace 后清栈，避免欢迎页还能返回首页。
  */
 export function returnToMainTab(tab: MainTabKey = 'focus'): void {
   openMainTab(tab);
-  const stackLength = Number(router.getLength());
-  if (stackLength > 1) {
-    router.back({ url: PageRoutes.FocusHome });
-    return;
+  if (isMainTabInStack()) {
+    const stackLength = Number(router.getLength());
+    if (stackLength > 1) {
+      router.back({ url: PageRoutes.FocusHome });
+      return;
+    }
   }
-  replaceRoute(PageRoutes.FocusHome);
+  router.replaceUrl({ url: PageRoutes.FocusHome }).then(() => {
+    try {
+      router.clear();
+    } catch {
+    }
+  }).catch((error: BusinessError) => {
+    logRouteError('returnToMainTab', error);
+  });
+}
+
+function isMainTabInStack(): boolean {
+  try {
+    const matched = router.getStateByUrl(PageRoutes.FocusHome);
+    return matched !== undefined && matched.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** 从二级页返回主 Tab，并打开指定 Tab */

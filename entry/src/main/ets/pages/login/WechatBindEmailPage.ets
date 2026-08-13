@@ -172,10 +172,13 @@ struct WechatBindEmailPage {
         Button(this.codeCountdown > 0 ? `${this.codeCountdown}s` : (this.sendingCode ? '发送中' : '获取验证码'))
           .height(52)
           .padding({ left: 14, right: 14 })
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
           .fontSize(13)
           .fontColor(AppTheme.colors.primary)
           .backgroundColor(AppTheme.colors.primarySoft)
-          .borderRadius(14)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
           .enabled(this.canSendVerifyCode())
           .onClick(() => {
             void this.sendVerifyCode();

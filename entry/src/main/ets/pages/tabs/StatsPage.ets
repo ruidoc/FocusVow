@@ -60,6 +60,7 @@ const STATS_SHARE_BOTTOM_PADDING: number = 24;
 
 @Component
 export struct StatsPage {
+  @StorageLink(StoreKeys.UserIsLoggedIn) @Watch('onLoginChanged') isLoggedIn: boolean = false;
   @State currentPeriod: StatsPeriod = 'today';
   @State summary: DuoStatsSummary | null = null;
   @State timeline: DuoTimelineDay[] = [];
@@ -83,6 +84,24 @@ export struct StatsPage {
     unregisterStatsReload();
   }
 
+  private onLoginChanged(): void {
+    if (!this.isLoggedIn) {
+      this.resetStatsView();
+    }
+  }
+
+  private resetStatsView(): void {
+    this.reloadVersion++;
+    this.currentPeriod = 'today';
+    this.summary = null;
+    this.timeline = [];
+    this.shame = [];
+    this.byTask = [];
+    this.errorMessage = '登录后可查看履约荣誉墙与耻辱柱';
+    this.isLoading = false;
+    this.isRefreshing = false;
+  }
+
   private async reload(fromPull: boolean = false): Promise<void> {
     const requestVersion = ++this.reloadVersion;
     if (fromPull) {
@@ -93,13 +112,7 @@ export struct StatsPage {
     this.errorMessage = '';
 
     if (!UserStore.isLoggedIn()) {
-      this.errorMessage = '登录后可查看履约荣誉墙与耻辱柱';
-      this.summary = null;
-      this.timeline = [];
-      this.shame = [];
-      this.byTask = [];
-      this.isLoading = false;
-      this.isRefreshing = false;
+      this.resetStatsView();
       return;
     }
 
@@ -366,8 +379,9 @@ export struct StatsPage {
       MixedDuration({
         text: value,
         color: AppTheme.colors.textPrimary,
-        numberSize: 20,
-        unitSize: 11
+        numberSize: 22,
+        unitSize: 12,
+        numberWeight: FontWeight.Medium
       })
       Text(hint)
         .fontSize(11)
@@ -378,11 +392,10 @@ export struct StatsPage {
     }
     .padding(14)
     .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(AppTheme.radius.md)
+    .borderRadius(AppTheme.radius.lg)
     .border({ width: 1, color: AppTheme.colors.border })
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .constraintSize({ minHeight: 100 })
   }
 
   @Builder

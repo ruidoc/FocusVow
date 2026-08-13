@@ -1,11 +1,14 @@
 import { common } from '@kit.AbilityKit';
 import { getAppVersion, getDeviceModel } from '../common/AppInfo';
 import { AppContextHolder } from '../common/AppContextHolder';
+import { PageRoutes } from '../router/PageRoutes';
 import { HttpService } from './HttpService';
 import {
   readStoredString,
   writeStoredString
 } from './PreferencesService';
+import { SettingsStore } from '../stores/SettingsStore';
+import { UserStore } from '../stores/UserStore';
 import deviceInfo from '@ohos.deviceInfo';
 
 const COMPLETED_KEY: string = 'onboarding.completed';
@@ -32,6 +35,20 @@ export function markOnboardingCompleted(context?: common.Context | null): void {
     return;
   }
   writeStoredString(ctx, COMPLETED_KEY, '1');
+}
+
+/** 冷启动首页：未完成引导直接进欢迎页，避免先落到 MainTab 还能返回 */
+export function resolveAppLaunchPage(context: common.UIAbilityContext): string {
+  UserStore.hydrate(context);
+  SettingsStore.hydrate(context);
+  if (isOnboardingCompleted(context)) {
+    return PageRoutes.FocusHome;
+  }
+  if (UserStore.isLoggedIn() || SettingsStore.getState().hasAuthorized) {
+    markOnboardingCompleted(context);
+    return PageRoutes.FocusHome;
+  }
+  return PageRoutes.Welcome;
 }
 
 export function ensureOnboardingDeviceId(context: common.Context): string {
