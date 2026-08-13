@@ -52,6 +52,7 @@ import {
   markFirstFocusPromptDone,
   shouldShowFirstFocusPrompt
 } from "../../services/FirstFocusPromptService";
+import { getPendingReferralCode } from "../../utils/ReferralUtil";
 import { openTrustListAppForm } from "../../services/ScreenTimeService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { LockStore } from "../../stores/LockStore";
@@ -119,9 +120,18 @@ export struct FocusHomePage {
   }
 
   private presentFirstFocusPrompt(): void {
+    const loggedIn = UserStore.isLoggedIn();
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const hasInvite = getPendingReferralCode(hostContext).length > 0;
+    let message = '时长 5 分钟，可选放行应用，即刻开始';
+    if (loggedIn) {
+      message = hasInvite
+        ? '完成第一次专注后领取 7 天会员，邀请码再 +15 天。时长 5 分钟。'
+        : '完成第一次专注后领取 7 天会员。时长 5 分钟，可选放行应用。';
+    }
     this.getUIContext().showAlertDialog({
       title: '开启你的第一次专注',
-      message: '时长 5 分钟，可选放行应用，即刻开始',
+      message: message,
       autoCancel: false,
       primaryButton: {
         value: '立即开始',
@@ -327,11 +337,25 @@ export struct FocusHomePage {
     return isLocked(this.activeLock);
   }
 
+  private shouldWarnSignupTrialOnTear(): boolean {
+    if (!UserStore.isLoggedIn()) {
+      return false;
+    }
+    return this.activeLock.title === FIRST_FOCUS_TITLE;
+  }
+
   private getTearConfirmMessage(): string {
     if (this.activeLock.participationMode === "duo") {
       return "撕毁后本次立即失败，搭子也会连坐失败，且无法撤销。";
     }
     return "撕毁后将生成耻辱证，本次专注记为违约，且无法撤销。";
+  }
+
+  private getTearExtraWarning(): string {
+    if (this.shouldWarnSignupTrialOnTear()) {
+      return "撕毁后将无法领取 7 天会员。";
+    }
+    return "";
   }
 
   private getTearRequiredText(): string {
@@ -1069,6 +1093,7 @@ export struct FocusHomePage {
         visible: this.showTearConfirm,
         title: "撕毁契约",
         message: this.getTearConfirmMessage(),
+        extraWarning: this.getTearExtraWarning(),
         requiredText: this.getTearRequiredText(),
         confirmText: "确认撕毁",
         cancelText: this.getTearCancelText(),

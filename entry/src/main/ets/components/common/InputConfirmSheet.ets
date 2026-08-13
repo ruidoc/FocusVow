@@ -11,6 +11,7 @@ export struct InputConfirmSheet {
   @Link visible: boolean;
   @Prop title: string = '';
   @Prop message: string = '';
+  @Prop extraWarning: string = '';
   @Prop requiredText: string = '';
   @Prop confirmText: string = '确认';
   @Prop cancelText: string = '取消';
@@ -62,12 +63,24 @@ export struct InputConfirmSheet {
           .justifyContent(FlexAlign.Center)
           .width('100%')
 
-          Text(this.message)
-            .fontSize(15)
-            .fontColor(AppTheme.colors.textSecondary)
-            .lineHeight(22)
-            .textAlign(TextAlign.Center)
-            .width('100%')
+          Column({ space: 4 }) {
+            Text(this.message)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textSecondary)
+              .lineHeight(22)
+              .textAlign(TextAlign.Center)
+              .width('100%')
+
+            if (this.extraWarning.length > 0) {
+              Text(this.extraWarning)
+                .fontSize(13)
+                .fontColor(AppTheme.colors.warning)
+                .lineHeight(19)
+                .textAlign(TextAlign.Center)
+                .width('100%')
+            }
+          }
+          .width('100%')
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 12 })

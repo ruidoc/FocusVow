@@ -28,6 +28,12 @@ struct WechatBindEmailPage {
   private countdownTimer: number = -1;
 
   aboutToAppear(): void {
+    if (this.isFromProfile()) {
+      if (!UserStore.isLoggedIn()) {
+        pushRoute(PageRoutes.Login);
+      }
+      return;
+    }
     if (this.wxPending.openid.length === 0) {
       pushRoute(PageRoutes.Login);
     }
@@ -35,6 +41,9 @@ struct WechatBindEmailPage {
 
   aboutToDisappear(): void {
     this.clearCountdown();
+    if (this.isFromProfile()) {
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+    }
   }
 
   private clearCountdown(): void {
@@ -55,6 +64,10 @@ struct WechatBindEmailPage {
       }
       this.codeCountdown -= 1;
     }, 1000);
+  }
+
+  private isFromProfile(): boolean {
+    return String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '') === 'profile';
   }
 
   private canSendVerifyCode(): boolean {
@@ -91,14 +104,18 @@ struct WechatBindEmailPage {
     }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.loading = true;
-    const errorMessage = await UserStore.wechatBindByEmail(
-      hostContext,
-      this.email,
-      this.verifyCode
-    );
+    const errorMessage = this.isFromProfile()
+      ? await UserStore.bindEmailByCode(hostContext, this.email, this.verifyCode)
+      : await UserStore.wechatBindByEmail(hostContext, this.email, this.verifyCode);
     this.loading = false;
     if (errorMessage) {
       showToast(errorMessage, this.getUIContext());
+      return;
+    }
+    if (this.isFromProfile()) {
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+      showToast('邮箱绑定成功', this.getUIContext());
+      backRoute();
       return;
     }
     showToast('登录成功', this.getUIContext());
@@ -194,16 +211,18 @@ struct WechatBindEmailPage {
         }
       })
 
-      Text(this.skipping ? '创建中...' : '暂时跳过')
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textMuted)
-        .margin({ top: 8 })
-        .opacity(this.skipping || this.loading ? 0.5 : 1)
-        .onClick(() => {
-          if (!this.skipping && !this.loading) {
-            void this.onSkip();
-          }
-        })
+      if (!this.isFromProfile()) {
+        Text(this.skipping ? '创建中...' : '暂时跳过')
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textMuted)
+          .margin({ top: 8 })
+          .opacity(this.skipping || this.loading ? 0.5 : 1)
+          .onClick(() => {
+            if (!this.skipping && !this.loading) {
+              void this.onSkip();
+            }
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -215,6 +234,11 @@ struct WechatBindEmailPage {
         title: '完善账号',
         showBack: true,
         onBack: () => {
+          if (this.isFromProfile()) {
+            AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+            backRoute();
+            return;
+          }
           UserStore.setWxPendingInfo(null);
           backRoute();
         },

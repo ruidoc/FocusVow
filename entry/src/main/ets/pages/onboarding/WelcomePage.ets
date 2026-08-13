@@ -8,6 +8,12 @@ import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
 
+const WELCOME_POINTS: string[] = [
+  '专注时会锁住短视频、游戏',
+  '搭子一起，建立契约，互相监督',
+  '完成第一次专注，领取 7 天会员'
+];
+
 @Entry
 @Component
 struct WelcomePage {
@@ -50,27 +56,46 @@ struct WelcomePage {
 
   build() {
     Column() {
-      Column({ space: 12 }) {
+      Column() {
         Image($r('app.media.startIcon'))
-          .width(72)
-          .height(72)
+          .width(80)
+          .height(80)
           .borderRadius(18)
-          .margin({ bottom: 28 })
+          .margin({ bottom: 40 })
 
-        Text('专注，不必独自硬扛')
+        Text('分心的APP，这次打不开')
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
           .width('100%')
+          .margin({ bottom: 32 })
 
-        Text('和搭子一起锁机，轻松又高效')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-          .lineHeight(24)
-          .textAlign(TextAlign.Center)
-          .padding({ left: 16, right: 16 })
-          .width('100%')
+        Column({ space: 14 }) {
+          ForEach(WELCOME_POINTS, (text: string, index: number) => {
+            Row() {
+              Text(`${index + 1}`)
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.colors.primary)
+                .width(22)
+                .height(22)
+                .textAlign(TextAlign.Center)
+                .borderRadius(11)
+                .backgroundColor('rgba(122, 90, 248, 0.09)')
+                .margin({ right: 12 })
+              Text(text)
+                .layoutWeight(1)
+                .fontSize(15)
+                .fontColor(AppTheme.colors.textSecondary)
+                .lineHeight(20)
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+          }, (text: string) => text)
+        }
+        .width('100%')
+        .padding({ left: 32, right: 32 })
       }
       .layoutWeight(1)
       .width('100%')

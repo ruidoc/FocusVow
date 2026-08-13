@@ -210,6 +210,19 @@ export class UserStore {
     return UserStore.applySessionToken(context, token);
   }
 
+  /** 已登录用户绑定邮箱（资料页） */
+  static async bindEmailByCode(
+    context: common.UIAbilityContext,
+    email: string,
+    code: string
+  ): Promise<string | null> {
+    const response = await AuthApiService.bindEmailByCode(email.trim(), code.trim());
+    if (response.statusCode !== 200) {
+      return response.message ?? '邮箱绑定失败';
+    }
+    return UserStore.refreshUserInfo(context);
+  }
+
   /** 已登录用户绑定微信 */
   static async bindWechat(context: common.UIAbilityContext): Promise<string | null> {
     const auth = await WeChatOpenService.requestAuthCode(context);

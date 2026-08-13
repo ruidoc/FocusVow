@@ -297,6 +297,16 @@ struct ProfileEditPage {
     .padding({ left: 16, right: 16 })
   }
 
+  private emailRowLabel(): string {
+    if (this.userInfo.email.length > 0) {
+      return this.userInfo.email;
+    }
+    if (this.userInfo.openid.length > 0) {
+      return '去绑定';
+    }
+    return '未设置';
+  }
+
   private async onWechatRowPress(): Promise<void> {
     if (this.userInfo.openid.length > 0) {
       showToast('微信已绑定', this.getUIContext());
@@ -328,7 +338,7 @@ struct ProfileEditPage {
 
         Blank()
 
-        Text(this.userInfo.email.length > 0 ? this.userInfo.email : '未设置')
+        Text(this.emailRowLabel())
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
           .margin({ right: 6 })
@@ -343,6 +353,11 @@ struct ProfileEditPage {
       .onClick(() => {
         if (this.userInfo.email.length > 0) {
           showToast('邮箱不可修改', this.getUIContext());
+          return;
+        }
+        if (this.userInfo.openid.length > 0) {
+          AppStorage.setOrCreate(StoreKeys.LoginFrom, 'profile');
+          pushRoute(PageRoutes.WechatBindEmail);
         }
       })
 

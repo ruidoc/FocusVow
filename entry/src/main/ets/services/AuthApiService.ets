@@ -93,4 +93,13 @@ export class AuthApiService {
     };
     return HttpService.post('/user/wechat-bind-code', body, true);
   }
+
+  /** 已登录用户绑定邮箱 */
+  static bindEmailByCode(email: string, code: string): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'email': email,
+      'code': code
+    };
+    return HttpService.post('/user/bind-email', body, true);
+  }
 }

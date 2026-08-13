@@ -134,6 +134,7 @@ export struct ContractFulfillmentChart {
           .borderRadius(6)
           .backgroundColor(seg.color)
           .margin({ right: 8 })
+          .offset({ top: -1 })
         Text(seg.fullLabel)
           .fontSize(13)
           .fontColor(AppTheme.colors.textSecondary)
@@ -207,7 +208,7 @@ export struct ContractFulfillmentChart {
             Column({ space: 2 }) {
               Text(`${this.successRate}%`)
                 .fontSize(22)
-                .fontWeight(FontWeight.Normal)
+                .fontWeight(FontWeight.Bold)
                 .fontColor(AppTheme.colors.textPrimary)
               Text('守约率')
                 .fontSize(12)

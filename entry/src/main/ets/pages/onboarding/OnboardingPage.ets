@@ -3,8 +3,12 @@ import { window } from '@kit.ArkUI';
 import { showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
 import { AppTheme } from '../../constants/Theme';
-import { PageRoutes, backRoute, pushRoute, returnToMainTab } from '../../router/PageRoutes';
-import { markFirstFocusPromptPending } from '../../services/FirstFocusPromptService';
+import { PageRoutes, backRoute, pushQuickStart, pushRoute, returnToMainTab } from '../../router/PageRoutes';
+import {
+  FIRST_FOCUS_MINUTES,
+  FIRST_FOCUS_TITLE,
+  markFirstFocusPromptDone
+} from '../../services/FirstFocusPromptService';
 import {
   isOnboardingCompleted,
   markOnboardingCompleted,
@@ -20,6 +24,7 @@ import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import {
   clearPendingReferralCode,
+  getPendingReferralCode,
   normalizeReferralCode,
   savePendingReferralCode
 } from '../../utils/ReferralUtil';
@@ -64,7 +69,9 @@ struct OnboardingPage {
   @State hasBuddy: string = '';
   @State referralCode: string = '';
   @State referralStatus: string = 'idle'; // idle | checking | valid | invalid
+  @State showReferralInput: boolean = false;
   @State screenTimeOk: boolean = false;
+  @State screenTimeDenied: boolean = false;
   @State busy: boolean = false;
   @State wechatLoading: boolean = false;
   @State agreedToTerms: boolean = false;
@@ -96,6 +103,12 @@ struct OnboardingPage {
       this.bottomInset = ui.px2vp(navAvoid.bottomRect.height);
     });
     void this.syncPermission();
+    const pending = getPendingReferralCode(hostContext);
+    if (pending.length > 0) {
+      this.referralCode = pending;
+      this.showReferralInput = true;
+      void this.onReferralBlur();
+    }
   }
 
   onPageShow(): void {
@@ -255,12 +268,20 @@ struct OnboardingPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.wechatLoading = true;
     const result = await UserStore.loginWithWechat(hostContext);
-    this.wechatLoading = false;
     if (result === UserStore.WECHAT_NEED_BIND) {
-      AppStorage.setOrCreate(StoreKeys.LoginFrom, 'onboarding');
-      pushRoute(PageRoutes.WechatBindEmail);
+      const createError = await UserStore.wechatCreateSkipEmail(hostContext);
+      this.wechatLoading = false;
+      if (createError) {
+        showToast(createError, this.getUIContext());
+        return;
+      }
+      if (!UserStore.isLoggedIn()) {
+        return;
+      }
+      this.continueInviteToPermission();
       return;
     }
+    this.wechatLoading = false;
     if (result) {
       showToast(result, this.getUIContext());
       return;
@@ -286,6 +307,9 @@ struct OnboardingPage {
       authorized ? '系统授权已开启' : result.message
     );
     this.screenTimeOk = authorized;
+    if (!authorized) {
+      this.screenTimeDenied = true;
+    }
     this.busy = false;
   }
 
@@ -307,10 +331,13 @@ struct OnboardingPage {
       'meta': meta
     });
     markOnboardingCompleted(hostContext);
-    markFirstFocusPromptPending(hostContext);
+    markFirstFocusPromptDone(hostContext);
     AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
     returnToMainTab('focus');
+    setTimeout(() => {
+      pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES);
+    }, 80);
   }
 
   private isInviteStep(): boolean {
@@ -586,80 +613,19 @@ struct OnboardingPage {
   private buildInviteStep(): void {
     Column() {
       Column({ space: 0 }) {
-        Text('有邀请码吗？')
+        Text('新用户权益')
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
           .width('100%')
-        Text('有邀请码的话，输入后注册可领 15 天会员')
+        Text('注册并完成第一次专注后，领取 7 天会员')
           .fontSize(15)
           .fontColor(AppTheme.colors.textSecondary)
           .lineHeight(22)
           .textAlign(TextAlign.Center)
           .width('100%')
           .margin({ top: 12, bottom: 32 })
-
-        Column() {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.gift'))
-              .fontSize(18)
-              .fontColor([AppTheme.colors.textMuted])
-            TextInput({ placeholder: '邀请码（选填）', text: this.referralCode })
-              .layoutWeight(1)
-              .height(48)
-              .fontSize(16)
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onChange((value: string) => {
-                this.referralCode = value;
-                if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
-                  this.referralStatus = 'idle';
-                }
-                if (normalizeReferralCode(value).length === 0) {
-                  this.referralStatus = 'idle';
-                  clearPendingReferralCode();
-                }
-              })
-              .onBlur(() => {
-                void this.onReferralBlur();
-              })
-            if (this.referralStatus === 'checking') {
-              LoadingProgress()
-                .width(18)
-                .height(18)
-                .color(AppTheme.colors.primary)
-            } else if (this.referralStatus === 'valid') {
-              SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-                .fontSize(20)
-                .fontColor([AppTheme.colors.success])
-            }
-          }
-          .width('100%')
-          .height(52)
-          .padding({ left: 16, right: 16 })
-          .backgroundColor('rgba(0,0,0,0.04)')
-          .borderRadius(16)
-
-          if (this.referralStatus === 'invalid') {
-            Text('邀请码错误，注册时将忽略')
-              .fontSize(12)
-              .fontColor(AppTheme.colors.danger)
-              .lineHeight(18)
-              .width('100%')
-              .textAlign(TextAlign.Start)
-              .margin({ top: 8 })
-          }
-        }
-        .width(240)
-        .alignItems(HorizontalAlign.Start)
-
-        Text('快捷登录 / 注册')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textMuted)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .margin({ top: 48, bottom: 16 })
 
         Button() {
           Row({ space: 8 }) {
@@ -685,6 +651,76 @@ struct OnboardingPage {
         .onClick(() => {
           void this.onInviteWechatLogin();
         })
+
+        if (this.showReferralInput) {
+          Column() {
+            Text('有邀请码，首次专注后再 +15 天')
+              .fontSize(13)
+              .fontColor(AppTheme.colors.textMuted)
+              .width('100%')
+              .margin({ bottom: 12 })
+            Row({ space: 8 }) {
+              SymbolGlyph($r('sys.symbol.gift'))
+                .fontSize(18)
+                .fontColor([AppTheme.colors.textMuted])
+              TextInput({ placeholder: '输入邀请码', text: this.referralCode })
+                .layoutWeight(1)
+                .height(48)
+                .fontSize(16)
+                .padding(0)
+                .backgroundColor(Color.Transparent)
+                .onChange((value: string) => {
+                  this.referralCode = value;
+                  if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
+                    this.referralStatus = 'idle';
+                  }
+                  if (normalizeReferralCode(value).length === 0) {
+                    this.referralStatus = 'idle';
+                    clearPendingReferralCode();
+                  }
+                })
+                .onBlur(() => {
+                  void this.onReferralBlur();
+                })
+              if (this.referralStatus === 'checking') {
+                LoadingProgress()
+                  .width(18)
+                  .height(18)
+                  .color(AppTheme.colors.primary)
+              } else if (this.referralStatus === 'valid') {
+                SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+                  .fontSize(20)
+                  .fontColor([AppTheme.colors.success])
+              }
+            }
+            .width('100%')
+            .height(52)
+            .padding({ left: 16, right: 16 })
+            .backgroundColor('rgba(0,0,0,0.04)')
+            .borderRadius(16)
+
+            if (this.referralStatus === 'invalid') {
+              Text('邀请码无效，注册时将忽略')
+                .fontSize(12)
+                .fontColor(AppTheme.colors.danger)
+                .lineHeight(18)
+                .width('100%')
+                .textAlign(TextAlign.Start)
+                .margin({ top: 8 })
+            }
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .margin({ top: 32 })
+        } else {
+          Text('我有邀请码')
+            .fontSize(14)
+            .fontColor(AppTheme.colors.textMuted)
+            .margin({ top: 32 })
+            .onClick(() => {
+              this.showReferralInput = true;
+            })
+        }
       }
       .layoutWeight(1)
       .width('100%')
@@ -700,7 +736,7 @@ struct OnboardingPage {
             this.agreedToTerms = agreed;
           }
         })
-        Text('暂不登录，先进入')
+        Text('先看看')
           .fontSize(14)
           .fontColor(AppTheme.colors.textMuted)
           .padding({ top: 12, bottom: 8 })
@@ -799,13 +835,35 @@ struct OnboardingPage {
           .margin({ top: 8, bottom: 20 })
 
         this.buildPermissionStepItem()
+
+        if (this.screenTimeDenied && !this.screenTimeOk) {
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+              .fontSize(18)
+              .fontColor([AppTheme.colors.danger])
+              .margin({ top: 1 })
+            Text('还没开成功。请在系统弹窗中允许，或到设置里打开后再试。')
+              .fontSize(13)
+              .fontColor(AppTheme.colors.textPrimary)
+              .lineHeight(20)
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+          .borderRadius(16)
+          .backgroundColor(AppTheme.colors.dangerSoft)
+          .alignItems(VerticalAlign.Top)
+          .margin({ top: 20 })
+        }
       }
       .layoutWeight(1)
       .width('100%')
       .padding({ left: 32, right: 32, top: 8 })
 
       Column({ space: 8 }) {
-        Button(this.screenTimeOk ? '进入首页' : '去开启')
+        Button(this.screenTimeOk
+          ? '开始第一次专注'
+          : (this.screenTimeDenied ? '再试一次' : '去开启'))
           .width('100%')
           .height(52)
           .type(ButtonType.Normal)
