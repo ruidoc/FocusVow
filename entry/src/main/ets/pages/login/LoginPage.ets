@@ -14,6 +14,7 @@ import { UserStore } from '../../stores/UserStore';
 import { confirmPrivacyAgreementForAuth } from '../../utils/PrivacyConsentUtil';
 
 const WECHAT_GREEN: string = '#07C160';
+const HUAWEI_RED: string = '#CF0A2C';
 
 @Entry
 @Component
@@ -94,6 +95,29 @@ struct LoginPage {
     await this.afterLoginSuccess(hostContext);
   }
 
+  private async onHuaweiLogin(): Promise<void> {
+    if (!(await this.ensurePrivacy())) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.loading = true;
+    const result = await UserStore.loginWithHuawei(hostContext);
+    this.loading = false;
+    if (result) {
+      showToast(result, this.getUIContext());
+      return;
+    }
+    if (!UserStore.isLoggedIn()) {
+      return;
+    }
+    if (UserStore.getUserInfo().email.length === 0) {
+      AppStorage.setOrCreate(StoreKeys.BindEmailFrom, 'post_oauth');
+      pushRoute(PageRoutes.WechatBindEmail);
+      return;
+    }
+    await this.afterLoginSuccess(hostContext);
+  }
+
   @Builder
   private buildLoginContent(): void {
     // 对齐 RN：标题+按钮成组垂直居中；协议贴底
@@ -111,13 +135,43 @@ struct LoginPage {
             .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.colors.textPrimary)
 
-          Text('微信一键登录，也可使用邮箱账号')
+          Text('华为账号、微信或邮箱登录')
             .fontSize(14)
             .fontColor(AppTheme.colors.textSecondary)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
         .margin({ bottom: 32 })
+
+        Column() {
+          Button() {
+            Row({ space: 8 }) {
+              Image($r('app.media.huawei'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+              Text(this.loading ? '请稍候...' : '华为账号登录')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+            }
+          }
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .backgroundColor(HUAWEI_RED)
+          .borderRadius(AppTheme.radius.button)
+          .enabled(!this.loading)
+          .opacity(this.loading ? 0.7 : 1)
+          .onClick(() => {
+            void this.onHuaweiLogin();
+          })
+        }
+        .width('100%')
+        .margin({ top: 8, bottom: 4 })
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
 
         Column() {
           Button() {

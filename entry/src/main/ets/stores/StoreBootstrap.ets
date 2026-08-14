@@ -59,6 +59,12 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.OrgDefaults, []);
   AppStorage.setOrCreate(StoreKeys.OrgMine, []);
   AppStorage.setOrCreate(StoreKeys.OrgLoading, false);
+  AppStorage.setOrCreate(StoreKeys.InboxItems, []);
+  AppStorage.setOrCreate(StoreKeys.InboxUnread, 0);
+  AppStorage.setOrCreate(StoreKeys.InboxImportantUnread, 0);
+  AppStorage.setOrCreate(StoreKeys.InboxLoading, false);
+  AppStorage.setOrCreate(StoreKeys.InboxOpenId, '');
+  AppStorage.setOrCreate(StoreKeys.InboxDetailId, '');
   AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
   AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());

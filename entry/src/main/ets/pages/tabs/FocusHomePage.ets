@@ -20,6 +20,7 @@ import {
   resolveDuoSessionIdFromLock,
 } from "../../models/ActiveLockModel";
 import { isPastCountupMinimum } from "../../utils/TimerMode";
+import { inboxBadgeLabel } from "../../models/InboxModel";
 import { FocusPlan } from "../../models/PlanModel";
 import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from "../../models/DuoModel";
 import { PageRoutes, pushLogin, pushQuickStart, pushRoute } from "../../router/PageRoutes";
@@ -59,6 +60,7 @@ import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { UserStore } from "../../stores/UserStore";
+import { InboxStore } from "../../stores/InboxStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
 
@@ -72,6 +74,8 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.DuoWaitTitle) duoWaitTitle: string = "";
   @StorageLink(StoreKeys.DuoWaitIsScheduled) duoWaitIsScheduled: boolean = false;
   @StorageLink(StoreKeys.DuoWaitScheduleLabel) duoWaitScheduleLabel: string = "";
+  @StorageLink(StoreKeys.InboxUnread) inboxUnread: number = 0;
+  @StorageLink(StoreKeys.InboxImportantUnread) inboxImportant: number = 0;
   @State remainingLabel: string = LockStore.getRemainingLabel();
   @State showTearConfirm: boolean = false;
   @State topSafeInsetVp: number = 0;
@@ -95,6 +99,9 @@ export struct FocusHomePage {
     void this.syncDuoPartnerDisplay();
     if (UserStore.isLoggedIn()) {
       void BenefitStore.refresh();
+      void InboxStore.fetchUnread();
+    } else {
+      InboxStore.reset();
     }
     this.startTimer();
     this.loadTopSafeInset(hostContext);
@@ -105,6 +112,9 @@ export struct FocusHomePage {
     // 引导结束 returnToMainTab 时首页可能早已 aboutToAppear，需在回显时再申请
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     void this.runPostOnboardingHomeFlow(hostContext);
+    if (UserStore.isLoggedIn()) {
+      void InboxStore.fetchUnread();
+    }
   }
 
   private async runPostOnboardingHomeFlow(hostContext: common.UIAbilityContext): Promise<void> {
@@ -211,6 +221,15 @@ export struct FocusHomePage {
       return;
     }
     pushRoute(PageRoutes.OrgList);
+  }
+
+  private onInboxPress(): void {
+    if (!UserStore.isLoggedIn()) {
+      showToast("请先登录", this.getUIContext());
+      pushLogin();
+      return;
+    }
+    pushRoute(PageRoutes.InboxList);
   }
 
   private getDuoWaitEntryDetail(): string {
@@ -965,7 +984,7 @@ export struct FocusHomePage {
 
   @Builder
   private buildOrgEntryButton(): void {
-    Column() {
+    Row({ space: 8 }) {
       Button({ type: ButtonType.Normal }) {
         UsersIcon({ iconSize: 22, color: AppTheme.colors.textPrimary })
       }
@@ -977,10 +996,49 @@ export struct FocusHomePage {
       .onClick(() => {
         this.onOrgEntryPress();
       })
+
+      Stack() {
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph($r('sys.symbol.bell'))
+            .fontSize(22)
+            .fontColor([AppTheme.colors.textPrimary])
+        }
+        .width(42)
+        .height(42)
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .borderRadius(21)
+        .onClick(() => {
+          this.onInboxPress();
+        })
+
+        if (this.inboxImportant > 0) {
+          Row() {
+            Text(inboxBadgeLabel(this.inboxImportant))
+              .fontSize(10)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FFFFFF')
+          }
+          .height(16)
+          .padding({ left: 4, right: 4 })
+          .borderRadius(8)
+          .backgroundColor(AppTheme.colors.danger)
+          .justifyContent(FlexAlign.Center)
+          .position({ x: 24, y: 2 })
+        } else if (this.inboxUnread > 0) {
+          Circle()
+            .width(8)
+            .height(8)
+            .fill(AppTheme.colors.danger)
+            .position({ x: 28, y: 6 })
+        }
+      }
+      .width(42)
+      .height(42)
     }
     .width("100%")
     .padding({ left: 20, right: 20, top: this.topSafeInsetVp + 8 })
-    .alignItems(HorizontalAlign.End)
+    .justifyContent(FlexAlign.End)
   }
 
   @Builder

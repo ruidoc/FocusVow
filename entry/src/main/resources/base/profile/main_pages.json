@@ -34,6 +34,8 @@
     "pages/org/OrgJoinPage",
     "pages/org/OrgDetailPage",
     "pages/org/OrgMembersPage",
-    "pages/org/OrgManagePage"
+    "pages/org/OrgManagePage",
+    "pages/inbox/InboxListPage",
+    "pages/inbox/InboxDetailPage"
   ]
 }

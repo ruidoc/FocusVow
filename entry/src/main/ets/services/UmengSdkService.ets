@@ -84,13 +84,16 @@ export class UmengSdkService {
   }
 
   static enablePushNotification(context: common.UIAbilityContext): void {
+    UmengSdkService.ensureInitialized(context);
     if (!sdkInitialized) {
       return;
     }
 
     PushAgent.enableNotification(context, (result: Record<string, string>) => {
       hilog.info(DOMAIN, TAG, "push notification permission: %{public}s", JSON.stringify(result));
-      void UmengSdkService.logPushDiagnostics();
+      PushAgent.enable(() => {
+        void UmengSdkService.logPushDiagnostics();
+      });
     });
   }
 

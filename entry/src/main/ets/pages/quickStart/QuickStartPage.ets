@@ -13,6 +13,7 @@ import {
 } from "../../services/ScreenTimeService";
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
+import { AnalyticsService } from "../../services/AnalyticsService";
 import { LockStore } from "../../stores/LockStore";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
@@ -24,6 +25,7 @@ bootstrapStores();
 interface QuickStartRouteParams {
   title?: string;
   minute?: string;
+  from_onboarding?: string;
 }
 
 @Entry
@@ -36,6 +38,7 @@ struct QuickStartPage {
   @State timerMode: TimerMode = "countdown";
   @State mode: "shield" | "allow" = "allow";
   @State title: string = "";
+  private fromOnboarding: boolean = false;
 
   private readonly durationMin: number = 5;
   private readonly durationMax: number = 180;
@@ -47,6 +50,8 @@ struct QuickStartPage {
     LockStore.hydrate(hostContext);
     const params = router.getParams() as QuickStartRouteParams;
     if (params) {
+      this.fromOnboarding =
+        params.from_onboarding === '1' || params.from_onboarding === 'true';
       const presetTitle = String(params.title ?? '').trim();
       if (presetTitle.length > 0) {
         this.title = presetTitle;
@@ -56,15 +61,28 @@ struct QuickStartPage {
         const normalizedPreset = this.normalizeDurationMinutes(presetMinutes);
         this.durationMinutes = normalizedPreset;
         LockStore.setQuickFocusDurationMinutes(hostContext, normalizedPreset);
-        return;
+      } else {
+        const rawDuration = LockStore.getQuickFocusDurationMinutes();
+        const normalized = this.normalizeDurationMinutes(rawDuration);
+        this.durationMinutes = normalized;
+        if (normalized !== rawDuration) {
+          LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
+        }
+      }
+    } else {
+      const rawDuration = LockStore.getQuickFocusDurationMinutes();
+      const normalized = this.normalizeDurationMinutes(rawDuration);
+      this.durationMinutes = normalized;
+      if (normalized !== rawDuration) {
+        LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
       }
     }
-    const rawDuration = LockStore.getQuickFocusDurationMinutes();
-    const normalized = this.normalizeDurationMinutes(rawDuration);
-    this.durationMinutes = normalized;
-    if (normalized !== rawDuration) {
-      LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
-    }
+    AnalyticsService.trackEvent('quick_start_viewed', {
+      'is_first_focus': this.fromOnboarding,
+      'from_onboarding': this.fromOnboarding,
+      'entry_source': this.fromOnboarding ? 'onboarding' : 'quick_start',
+      'screen_name': 'quick_start'
+    });
   }
 
   private normalizeDurationMinutes(raw: number): number {
@@ -173,6 +191,14 @@ struct QuickStartPage {
       this.mode,
       focusOptions,
     );
+    AnalyticsService.trackEvent('session_started', {
+      'plan_id': LockStore.getState().planId,
+      'focus_type': 'once',
+      'duration_minutes': this.durationMinutes,
+      'mode': this.mode,
+      'entry_source': this.fromOnboarding ? 'onboarding' : 'quick_start',
+      'is_first_focus': this.fromOnboarding
+    });
     returnToMainTab("focus");
   }
 

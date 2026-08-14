@@ -27,6 +27,7 @@ struct ProfileEditPage {
   /** 仅保存资料时的 loading，不与头像文案共用 */
   @State isSaving: boolean = false;
   @State isBindingWechat: boolean = false;
+  @State isBindingHuawei: boolean = false;
 
   private usernameDialogController: CustomDialogController = new CustomDialogController({
     builder: CustomContentDialog({
@@ -263,6 +264,41 @@ struct ProfileEditPage {
   }
 
   @Builder
+  private buildHuaweiRow(): void {
+    Column({ space: 0 }) {
+      Row() {
+        Text('华为账号')
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textPrimary)
+
+        Blank()
+
+        Text(this.userInfo.huawei_id.length > 0 ? '已绑定' : '未绑定')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .margin({ right: 6 })
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([AppTheme.colors.textMuted])
+      }
+      .width('100%')
+      .height(52)
+      .alignItems(VerticalAlign.Center)
+      .opacity(this.isBindingHuawei ? 0.6 : 1)
+      .onClick(() => {
+        void this.onHuaweiRowPress();
+      })
+
+      Divider()
+        .color('#EEF1F6')
+        .strokeWidth(1)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
   private buildWechatRow(): void {
     Column({ space: 0 }) {
       Row() {
@@ -301,10 +337,28 @@ struct ProfileEditPage {
     if (this.userInfo.email.length > 0) {
       return this.userInfo.email;
     }
-    if (this.userInfo.openid.length > 0) {
-      return '去绑定';
+    return '去绑定';
+  }
+
+  private async onHuaweiRowPress(): Promise<void> {
+    if (this.userInfo.huawei_id.length > 0) {
+      showToast('华为账号已绑定', this.getUIContext());
+      return;
     }
-    return '未设置';
+    if (this.isBindingHuawei || this.isSaving) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.isBindingHuawei = true;
+    const errorMessage = await UserStore.bindHuawei(hostContext);
+    this.isBindingHuawei = false;
+    if (errorMessage) {
+      showErrorToast(errorMessage, this.getUIContext());
+      return;
+    }
+    if (UserStore.getUserInfo().huawei_id.length > 0) {
+      showToast('华为账号绑定成功', this.getUIContext());
+    }
   }
 
   private async onWechatRowPress(): Promise<void> {
@@ -355,10 +409,8 @@ struct ProfileEditPage {
           showToast('邮箱不可修改', this.getUIContext());
           return;
         }
-        if (this.userInfo.openid.length > 0) {
-          AppStorage.setOrCreate(StoreKeys.LoginFrom, 'profile');
-          pushRoute(PageRoutes.WechatBindEmail);
-        }
+        AppStorage.setOrCreate(StoreKeys.LoginFrom, 'profile');
+        pushRoute(PageRoutes.WechatBindEmail);
       })
 
       Divider()
@@ -408,6 +460,7 @@ struct ProfileEditPage {
       Column({ space: 0 }) {
         this.buildUsernameRow()
         this.buildEmailRow()
+        this.buildHuaweiRow()
         this.buildWechatRow()
         this.buildSexRow()
       }

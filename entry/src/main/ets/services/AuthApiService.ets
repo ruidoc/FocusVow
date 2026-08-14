@@ -56,6 +56,26 @@ export class AuthApiService {
     return HttpService.post('/user/wechat-app', body, false);
   }
 
+  /** 华为账号登录；新用户直接建号发 token */
+  static loginWithHuawei(
+    code: string,
+    idToken: string,
+    username: string = '',
+    avatar: string = ''
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'code': code,
+      'idToken': idToken
+    };
+    if (username.length > 0) {
+      body['username'] = username;
+    }
+    if (avatar.length > 0) {
+      body['avatar'] = avatar;
+    }
+    return HttpService.post('/user/huawei-login', body, false);
+  }
+
   /** 微信新用户绑定邮箱建号/挂号 */
   static wechatBindByEmail(
     email: string,
@@ -84,6 +104,26 @@ export class AuthApiService {
       'sex': wxInfo['sex'] ?? 0
     };
     return HttpService.post('/user/wechat-create', body, false);
+  }
+
+  /** 已登录用户绑定华为账号 */
+  static bindHuaweiByCode(
+    code: string,
+    idToken: string,
+    username: string = '',
+    avatar: string = ''
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'code': code,
+      'idToken': idToken
+    };
+    if (username.length > 0) {
+      body['username'] = username;
+    }
+    if (avatar.length > 0) {
+      body['avatar'] = avatar;
+    }
+    return HttpService.post('/user/huawei-bind', body, true);
   }
 
   /** 已登录用户绑定微信 */

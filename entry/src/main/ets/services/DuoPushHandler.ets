@@ -25,6 +25,8 @@ import { refreshStats } from '../stores/StatsStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { queueHonorCertificate, queueShameCertificate } from './CertificatePendingService';
 import { bootstrapStores } from '../stores/StoreBootstrap';
+import { InboxStore } from '../stores/InboxStore';
+import { PageRoutes, pushInboxDetail, pushRoute } from '../router/PageRoutes';
 
 bootstrapStores();
 
@@ -276,6 +278,8 @@ export class DuoPushHandler {
         return DuoPushHandler.handleDuoPartnerLeft;
       case 'duo_scheduled_cancelled':
         return DuoPushHandler.handleDuoScheduledCancelled;
+      case 'inbox':
+        return DuoPushHandler.handleInbox;
       default:
         return null;
     }
@@ -340,6 +344,10 @@ export class DuoPushHandler {
     const tooShort = record['too_short'];
     if (tooShort && tooShort.length > 0) {
       payload.too_short = tooShort;
+    }
+    const messageId = record['message_id'];
+    if (messageId && messageId.length > 0) {
+      payload.message_id = messageId;
     }
     return payload;
   }
@@ -439,6 +447,20 @@ export class DuoPushHandler {
         : '发起人已作废定时契约';
       InAppMessageService.show(title, message, payload.type);
     }
+  }
+
+  private static async handleInbox(
+    _context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    _options?: PushDispatchOptions
+  ): Promise<void> {
+    const messageId = payload.message_id ?? '';
+    void InboxStore.fetchUnread();
+    if (messageId.length > 0) {
+      pushInboxDetail(messageId);
+      return;
+    }
+    pushRoute(PageRoutes.InboxList);
   }
 
   private static async handleDuoStart(

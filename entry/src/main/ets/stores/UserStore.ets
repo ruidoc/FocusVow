@@ -14,11 +14,15 @@ import { FocusSyncService } from '../services/FocusSyncService';
 import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
 import { clearAllScheduledGuardOnLogout, syncAllScheduledGuardOnLogin } from '../services/ScheduledCovenantService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
+import { HuaweiAccountService } from '../services/HuaweiAccountService';
 import { PlanStore } from './PlanStore';
 import { CycleGuardStore } from './CycleGuardStore';
 import { BenefitStore } from './BenefitStore';
+import { InboxStore } from './InboxStore';
 import { refreshStats } from './StatsStore';
+import { AnalyticsService, LoginMethod } from '../services/AnalyticsService';
 import { UmengSdkService } from '../services/UmengSdkService';
+import { ensureOnboardingDeviceId } from '../services/OnboardingApiService';
 import {
   clearUserSession,
   loadAccessToken,
@@ -53,7 +57,8 @@ function cloneUserInfo(source: UserInfo): UserInfo {
     avatar: source.avatar,
     sex: source.sex,
     invite_code: source.invite_code,
-    openid: source.openid
+    openid: source.openid,
+    huawei_id: source.huawei_id
   };
   return cloned;
 }
@@ -126,7 +131,7 @@ export class UserStore {
       return '登录失败：未返回 token';
     }
 
-    return UserStore.applySessionToken(context, token);
+    return UserStore.applySessionToken(context, token, 'email');
   }
 
   static async loginWithWechat(context: common.UIAbilityContext): Promise<string | null> {
@@ -155,7 +160,42 @@ export class UserStore {
       return '微信登录失败：未返回 token';
     }
     UserStore.setWxPendingInfo(null);
-    return UserStore.applySessionToken(context, token);
+    return UserStore.applySessionToken(
+      context,
+      token,
+      'wechat',
+      response.data?.['is_new'] === true
+    );
+  }
+
+  static async loginWithHuawei(context: common.UIAbilityContext): Promise<string | null> {
+    const auth = await HuaweiAccountService.requestIdToken(context);
+    if (!auth.ok) {
+      if (auth.cancelled) {
+        return null;
+      }
+      return auth.message.length > 0 ? auth.message : '华为账号授权失败';
+    }
+
+    const response = await AuthApiService.loginWithHuawei(
+      auth.code,
+      auth.idToken,
+      auth.nickName.trim(),
+      auth.avatarUri.trim()
+    );
+    if (response.statusCode !== 200) {
+      return response.message ?? '华为账号登录失败';
+    }
+    const token = String(response.data?.['token'] ?? '');
+    if (token.length === 0) {
+      return '华为账号登录失败：未返回 token';
+    }
+    return UserStore.applySessionToken(
+      context,
+      token,
+      'huawei',
+      response.data?.['is_new'] === true
+    );
   }
 
   static async wechatBindByEmail(
@@ -183,7 +223,7 @@ export class UserStore {
       return '绑定失败：未返回 token';
     }
     UserStore.setWxPendingInfo(null);
-    return UserStore.applySessionToken(context, token);
+    return UserStore.applySessionToken(context, token, 'wechat');
   }
 
   static async wechatCreateSkipEmail(context: common.UIAbilityContext): Promise<string | null> {
@@ -207,7 +247,12 @@ export class UserStore {
       return '注册失败：未返回 token';
     }
     UserStore.setWxPendingInfo(null);
-    return UserStore.applySessionToken(context, token);
+    return UserStore.applySessionToken(
+      context,
+      token,
+      'wechat',
+      response.data?.['is_new'] === true
+    );
   }
 
   /** 已登录用户绑定邮箱（资料页） */
@@ -235,6 +280,27 @@ export class UserStore {
     const response = await AuthApiService.bindWechatByCode(auth.code);
     if (response.statusCode !== 200) {
       return response.message ?? '微信绑定失败';
+    }
+    return UserStore.refreshUserInfo(context);
+  }
+
+  /** 已登录用户绑定华为账号 */
+  static async bindHuawei(context: common.UIAbilityContext): Promise<string | null> {
+    const auth = await HuaweiAccountService.requestIdToken(context);
+    if (!auth.ok) {
+      if (auth.cancelled) {
+        return null;
+      }
+      return auth.message.length > 0 ? auth.message : '华为账号授权失败';
+    }
+    const response = await AuthApiService.bindHuaweiByCode(
+      auth.code,
+      auth.idToken,
+      auth.nickName.trim(),
+      auth.avatarUri.trim()
+    );
+    if (response.statusCode !== 200) {
+      return response.message ?? '华为账号绑定失败';
     }
     return UserStore.refreshUserInfo(context);
   }
@@ -313,6 +379,13 @@ export class UserStore {
     UmengSdkService.ensureInitialized(context);
     // 通知授权延后到首页 ensureNotifyOnLaunch，避免引导/登录阶段过早弹窗
     UmengSdkService.bindUserAlias(userInfo.id);
+    const deviceId = ensureOnboardingDeviceId(context);
+    AnalyticsService.identifyUser(userInfo.id, {
+      'username': userInfo.username,
+      'email': userInfo.email,
+      'phone': userInfo.phone,
+      'device_id': deviceId
+    }, context);
     return null;
   }
 
@@ -351,7 +424,8 @@ export class UserStore {
         avatar: data['avatar'] !== undefined ? String(data['avatar']) : current.avatar,
         sex: data['sex'] !== undefined ? Number(data['sex']) : current.sex,
         invite_code: current.invite_code,
-        openid: data['openid'] !== undefined ? String(data['openid']) : current.openid
+        openid: data['openid'] !== undefined ? String(data['openid']) : current.openid,
+        huawei_id: data['huawei_id'] !== undefined ? String(data['huawei_id']) : current.huawei_id
       };
     }
     savePersistedUserInfo(context, next);
@@ -414,9 +488,11 @@ export class UserStore {
     const guardResult = await clearAllScheduledGuardOnLogout(context);
     CycleGuardStore.hydrate(context);
     UmengSdkService.clearUserAlias();
+    AnalyticsService.trackLogout(context);
     clearDuoWaitContext();
     clearUserSession(context);
     BenefitStore.reset();
+    InboxStore.reset();
     UserStore.setWxPendingInfo(null);
     syncAppStorageValue(StoreKeys.UserAccessToken, '');
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, false);
@@ -430,7 +506,9 @@ export class UserStore {
 
   private static async applySessionToken(
     context: common.UIAbilityContext,
-    token: string
+    token: string,
+    loginMethod?: LoginMethod,
+    isNew: boolean = false
   ): Promise<string | null> {
     saveAccessToken(context, token);
     syncAppStorageValue(StoreKeys.UserAccessToken, token);
@@ -444,6 +522,13 @@ export class UserStore {
     void FocusSyncService.flushPending(context);
     void UserStore.syncGuardsOnLogin(context);
     void UserStore.flushPendingReferral(context);
+    if (loginMethod) {
+      if (isNew) {
+        AnalyticsService.trackRegisterCompleted(loginMethod, context);
+      } else {
+        AnalyticsService.trackLoginCompleted(loginMethod, context);
+      }
+    }
     return null;
   }
 

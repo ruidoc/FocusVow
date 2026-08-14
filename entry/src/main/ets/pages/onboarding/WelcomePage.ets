@@ -3,6 +3,7 @@ import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { OnboardingApiService } from '../../services/OnboardingApiService';
+import { AnalyticsService } from '../../services/AnalyticsService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
@@ -21,6 +22,7 @@ struct WelcomePage {
   @State topInset: number = 0;
 
   aboutToAppear(): void {
+    AnalyticsService.trackEvent('welcome_viewed');
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const ui = this.getUIContext();
     window.getLastWindow(hostContext, (err, win) => {
@@ -36,6 +38,7 @@ struct WelcomePage {
 
   private onStart(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AnalyticsService.trackEvent('welcome_cta_clicked', { 'cta': 'start' });
     AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
     void OnboardingApiService.upsert(hostContext, {
       'current_step': 'welcome'
@@ -45,6 +48,7 @@ struct WelcomePage {
 
   private onOldUser(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AnalyticsService.trackEvent('welcome_cta_clicked', { 'cta': 'old_user' });
     AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
     AppStorage.setOrCreate(StoreKeys.LoginFrom, 'welcome_old_user');
     void OnboardingApiService.upsert(hostContext, {
@@ -84,11 +88,25 @@ struct WelcomePage {
                 .borderRadius(11)
                 .backgroundColor('rgba(122, 90, 248, 0.09)')
                 .margin({ right: 12 })
-              Text(text)
+              if (index === WELCOME_POINTS.length - 1) {
+                Text() {
+                  Span('完成第一次专注，')
+                    .fontSize(15)
+                    .fontColor(AppTheme.colors.textSecondary)
+                  Span('领取 7 天会员')
+                    .fontSize(15)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(AppTheme.colors.textPrimary)
+                }
                 .layoutWeight(1)
-                .fontSize(15)
-                .fontColor(AppTheme.colors.textSecondary)
                 .lineHeight(20)
+              } else {
+                Text(text)
+                  .layoutWeight(1)
+                  .fontSize(15)
+                  .fontColor(AppTheme.colors.textSecondary)
+                  .lineHeight(20)
+              }
             }
             .width('100%')
             .alignItems(VerticalAlign.Center)

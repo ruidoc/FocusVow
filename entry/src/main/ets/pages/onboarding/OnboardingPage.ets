@@ -15,6 +15,7 @@ import {
   OnboardingApiService
 } from '../../services/OnboardingApiService';
 import { ReferralApiService } from '../../services/ReferralApiService';
+import { AnalyticsService } from '../../services/AnalyticsService';
 import {
   checkScreenTimeAuthorized,
   requestScreenTimeAuthorization
@@ -57,6 +58,7 @@ const GUIDE_STEPS_NO: string[] = [
 ];
 
 const WECHAT_GREEN: string = '#07C160';
+const HUAWEI_RED: string = '#CF0A2C';
 
 @Entry
 @Component
@@ -74,6 +76,7 @@ struct OnboardingPage {
   @State screenTimeDenied: boolean = false;
   @State busy: boolean = false;
   @State wechatLoading: boolean = false;
+  @State huaweiLoading: boolean = false;
   @State agreedToTerms: boolean = false;
   @State topInset: number = 0;
   @State bottomInset: number = 0;
@@ -145,6 +148,7 @@ struct OnboardingPage {
     this.identity = id;
     this.goal = '';
     this.goalOptions = getGoalsForIdentity(id);
+    AnalyticsService.trackEvent('identity_selected', { 'identity': id });
     this.upsert({
       'current_step': 'identity',
       'identity': id
@@ -156,6 +160,10 @@ struct OnboardingPage {
 
   private selectGoal(id: string): void {
     this.goal = id;
+    AnalyticsService.trackEvent('goal_selected', {
+      'goal': id,
+      'identity': this.identity
+    });
     this.upsert({
       'current_step': 'goal',
       'identity': this.identity,
@@ -179,8 +187,14 @@ struct OnboardingPage {
     if (this.hasBuddy.length === 0) {
       return;
     }
+    const hasStudyBuddy = this.hasBuddy === 'yes';
+    AnalyticsService.trackEvent('study_buddy_selected', {
+      'has_study_buddy': hasStudyBuddy,
+      'identity': this.identity,
+      'goal': this.goal
+    });
     const meta: Record<string, Object> = {
-      'has_study_buddy': this.hasBuddy === 'yes'
+      'has_study_buddy': hasStudyBuddy
     };
     this.upsert({
       'current_step': 'partner',
@@ -200,6 +214,10 @@ struct OnboardingPage {
       this.applyStep(4);
       return;
     }
+    AnalyticsService.trackEvent('signup_benefit_viewed', {
+      'entry_source': 'onboarding_signup_benefit',
+      'screen_name': 'onboarding_signup_benefit'
+    });
     this.applyStep(4);
   }
 
@@ -223,7 +241,21 @@ struct OnboardingPage {
     }
   }
 
-  private continueInviteToPermission(): void {
+  private trackSignupBenefitContinue(action: string, loginMethod?: string): void {
+    const props: Record<string, Object> = {
+      'action': action,
+      'referral_code_status': this.referralStatus,
+      'has_valid_referral_code': this.referralStatus === 'valid',
+      'entry_source': 'onboarding_signup_benefit',
+      'screen_name': 'onboarding_signup_benefit'
+    };
+    if (loginMethod && loginMethod.length > 0) {
+      props['login_method'] = loginMethod;
+    }
+    AnalyticsService.trackEvent('signup_benefit_continued', props);
+  }
+
+  private continueInviteToPermission(action: string = 'skip', loginMethod?: string): void {
     if (this.referralStatus === 'checking') {
       return;
     }
@@ -232,6 +264,7 @@ struct OnboardingPage {
     } else {
       clearPendingReferralCode();
     }
+    this.trackSignupBenefitContinue(action, loginMethod);
     this.upsert({
       'current_step': 'invite_login',
       'identity': this.identity,
@@ -278,7 +311,7 @@ struct OnboardingPage {
       if (!UserStore.isLoggedIn()) {
         return;
       }
-      this.continueInviteToPermission();
+      this.continueInviteToPermission('login', 'wechat');
       return;
     }
     this.wechatLoading = false;
@@ -290,7 +323,33 @@ struct OnboardingPage {
       return;
     }
     showToast('7 天会员仅限新用户领取', this.getUIContext(), 3000);
-    this.continueInviteToPermission();
+    this.continueInviteToPermission('login', 'wechat');
+  }
+
+  private async onInviteHuaweiLogin(): Promise<void> {
+    if (this.referralStatus === 'checking') {
+      return;
+    }
+    if (!(await this.ensurePrivacy())) {
+      return;
+    }
+    if (this.referralStatus === 'valid') {
+      savePendingReferralCode(this.referralCode);
+    } else {
+      clearPendingReferralCode();
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.huaweiLoading = true;
+    const result = await UserStore.loginWithHuawei(hostContext);
+    this.huaweiLoading = false;
+    if (result) {
+      showToast(result, this.getUIContext());
+      return;
+    }
+    if (!UserStore.isLoggedIn()) {
+      return;
+    }
+    this.continueInviteToPermission('login', 'huawei');
   }
 
   private async requestScreenTime(): Promise<void> {
@@ -298,6 +357,12 @@ struct OnboardingPage {
       return;
     }
     this.busy = true;
+    AnalyticsService.trackEvent('permission_request_clicked', {
+      'permission_type': 'screen_time',
+      'scene': 'onboarding',
+      'entry_source': 'onboarding',
+      'screen_name': 'onboarding_permission_setup'
+    });
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const result = await requestScreenTimeAuthorization(hostContext);
     // 以系统真实授权为准（request 返回后可能仍在弹框中）
@@ -311,6 +376,11 @@ struct OnboardingPage {
     if (!authorized) {
       this.screenTimeDenied = true;
     }
+    AnalyticsService.trackEvent('permission_result', {
+      'permission_type': 'screen_time',
+      'result': authorized ? 'approved' : 'denied',
+      'scene': 'onboarding'
+    });
     this.busy = false;
   }
 
@@ -322,6 +392,15 @@ struct OnboardingPage {
     const meta: Record<string, Object> = {
       'has_study_buddy': this.hasBuddy === 'yes'
     };
+    AnalyticsService.trackEvent('onboarding_finished', {
+      'with_login': UserStore.isLoggedIn(),
+      'entry_source': this.viaOldUser ? 'welcome_old_user' : 'onboarding',
+      'identity': this.identity,
+      'goal': this.goal,
+      'has_study_buddy': this.hasBuddy === 'yes',
+      'via_old_user': this.viaOldUser,
+      'screen_time_status': 'approved'
+    });
     this.upsert({
       'current_step': 'done',
       'finished': true,
@@ -337,7 +416,7 @@ struct OnboardingPage {
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
     returnToMainTab('focus');
     setTimeout(() => {
-      pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES);
+      pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES, true);
     }, 80);
   }
 
@@ -630,6 +709,32 @@ struct OnboardingPage {
 
         Button() {
           Row({ space: 8 }) {
+            Image($r('app.media.huawei'))
+              .width(22)
+              .height(22)
+              .objectFit(ImageFit.Contain)
+            Text(this.huaweiLoading ? '请稍候...' : '华为账号登录')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Color.White)
+          }
+        }
+        .width('100%')
+        .height(52)
+        .type(ButtonType.Normal)
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .backgroundColor(HUAWEI_RED)
+        .borderRadius(AppTheme.radius.button)
+        .clip(true)
+        .enabled(this.referralStatus !== 'checking' && !this.wechatLoading && !this.huaweiLoading)
+        .opacity(this.referralStatus === 'checking' || this.wechatLoading || this.huaweiLoading ? 0.6 : 1)
+        .margin({ bottom: 12 })
+        .onClick(() => {
+          void this.onInviteHuaweiLogin();
+        })
+
+        Button() {
+          Row({ space: 8 }) {
             Image($r('app.media.wechat'))
               .width(22)
               .height(22)
@@ -647,8 +752,8 @@ struct OnboardingPage {
         .backgroundColor(WECHAT_GREEN)
         .borderRadius(AppTheme.radius.button)
         .clip(true)
-        .enabled(this.referralStatus !== 'checking' && !this.wechatLoading)
-        .opacity(this.referralStatus === 'checking' || this.wechatLoading ? 0.6 : 1)
+        .enabled(this.referralStatus !== 'checking' && !this.wechatLoading && !this.huaweiLoading)
+        .opacity(this.referralStatus === 'checking' || this.wechatLoading || this.huaweiLoading ? 0.6 : 1)
         .onClick(() => {
           void this.onInviteWechatLogin();
         })
@@ -746,7 +851,7 @@ struct OnboardingPage {
             if (this.referralStatus === 'checking') {
               return;
             }
-            this.continueInviteToPermission();
+            this.continueInviteToPermission('skip');
           })
       }
       .width('100%')

@@ -160,6 +160,7 @@ export interface DuoPushPayload {
   end_at?: string;
   /** '1' 表示短场无效 */
   too_short?: string;
+  message_id?: string;
 }
 
 export interface PushDispatchOptions {

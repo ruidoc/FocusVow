@@ -10,6 +10,7 @@ import { DuoPushHandler } from '../services/DuoPushHandler';
 import { UmengPushMessageBody } from '../models/DuoModel';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { resolveAppLaunchPage } from '../services/OnboardingApiService';
+import { AnalyticsService } from '../services/AnalyticsService';
 import { UmengSdkService } from '../services/UmengSdkService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { StoreKeys } from '../stores/StoreKeys';
@@ -25,6 +26,7 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, TAG, '%{public}s', 'Failed to set colorMode.');
     }
     AppContextHolder.bind(this.context);
+    AnalyticsService.ensureInitialized(this.context);
     webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
     warmUpPreferencesStore(this.context);

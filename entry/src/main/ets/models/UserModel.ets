@@ -7,6 +7,7 @@ export interface UserInfo {
   sex: number;
   invite_code: string;
   openid: string;
+  huawei_id: string;
 }
 
 /** 微信授权后待绑定的用户资料（statusCode 20003） */
@@ -33,7 +34,8 @@ export function createEmptyUserInfo(): UserInfo {
     avatar: '',
     sex: 0,
     invite_code: '',
-    openid: ''
+    openid: '',
+    huawei_id: ''
   };
 }
 
@@ -82,6 +84,7 @@ export function parseUserInfo(raw: Record<string, Object> | undefined): UserInfo
     avatar: String(raw['avatar'] ?? ''),
     sex: Number(raw['sex'] ?? 0),
     invite_code: String(raw['invite_code'] ?? ''),
-    openid: String(raw['openid'] ?? '')
+    openid: String(raw['openid'] ?? ''),
+    huawei_id: String(raw['huawei_id'] ?? '')
   };
 }

@@ -5,6 +5,8 @@ import { endCurrentCycleGuardLockAndRestart, restartCycleGuardIfEnabled } from '
 import { DuoApiService } from './DuoApiService';
 import { DuoBgSyncService } from './DuoBgSyncService';
 import { FocusSyncService } from './FocusSyncService';
+import { AnalyticsService } from './AnalyticsService';
+import { FIRST_FOCUS_TITLE } from './FirstFocusPromptService';
 import { GuardResult, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { LockStore } from '../stores/LockStore';
 import { refreshStats } from '../stores/StatsStore';
@@ -25,6 +27,29 @@ export interface FocusLifecycleResult {
 
 function notifyDuoBgSync(): void {
   DuoBgSyncService.ensure();
+}
+
+function trackSessionFinished(
+  state: ActiveLockState,
+  endedAt: number,
+  result: string,
+  reason: string = ''
+): void {
+  const elapsedMs = Math.max(0, endedAt - state.startedAt);
+  const props: Record<string, Object> = {
+    'plan_id': state.planId,
+    'focus_type': 'once',
+    'result': result,
+    'is_first_focus': state.title === FIRST_FOCUS_TITLE,
+    'entry_source': 'quick_start',
+    'participation_mode': state.participationMode.length > 0 ? state.participationMode : 'solo',
+    'elapsed_minutes': Math.floor(elapsedMs / 60000)
+  };
+  if (reason.length > 0) {
+    props['reason'] = reason;
+    props['unlock_path'] = reason;
+  }
+  AnalyticsService.trackEvent('session_finished', props);
 }
 
 function saveQuickFocusPending(
@@ -84,11 +109,13 @@ export async function endQuickFocus(
 
     if (markCompleted) {
       if (tooShort) {
+        trackSessionFinished(state, endedAt, 'failed', 'too_short');
         const sessionId = resolveDuoSessionIdFromLock(state);
         if (sessionId.length > 0) {
           saveQuickFocusPending(context, state, 'VIOLATION', endedAt, 'too_short');
         }
       } else {
+        trackSessionFinished(state, endedAt, 'completed');
         saveQuickFocusPending(context, state, 'SUCCESS', endedAt);
       }
     }
@@ -127,6 +154,13 @@ export async function tearQuickFocus(
     const endedAt = Date.now();
     const tooShort = isFocusTooShort(state.startedAt, endedAt);
     const sessionId = resolveDuoSessionIdFromLock(state);
+
+    trackSessionFinished(
+      state,
+      endedAt,
+      'failed',
+      tooShort ? 'too_short' : 'user_exit'
+    );
 
     if (tooShort) {
       if (sessionId.length > 0) {

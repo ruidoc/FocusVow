@@ -4,7 +4,11 @@ import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { createEmptyWxPendingInfo, WxPendingInfo } from '../../models/UserModel';
-import { backRoute, PageRoutes, pushRoute, returnToMainTab } from '../../router/PageRoutes';
+import { backRoute, PageRoutes, pushRoute, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
+import {
+  fetchHasOnboardingProfile,
+  markOnboardingCompleted
+} from '../../services/OnboardingApiService';
 import { ExtendApiService } from '../../services/ExtendApiService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
@@ -28,7 +32,7 @@ struct WechatBindEmailPage {
   private countdownTimer: number = -1;
 
   aboutToAppear(): void {
-    if (this.isFromProfile()) {
+    if (this.isFromProfile() || this.isPostOAuthBind()) {
       if (!UserStore.isLoggedIn()) {
         pushRoute(PageRoutes.Login);
       }
@@ -43,6 +47,9 @@ struct WechatBindEmailPage {
     this.clearCountdown();
     if (this.isFromProfile()) {
       AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+    }
+    if (this.isPostOAuthBind()) {
+      AppStorage.setOrCreate(StoreKeys.BindEmailFrom, '');
     }
   }
 
@@ -68,6 +75,35 @@ struct WechatBindEmailPage {
 
   private isFromProfile(): boolean {
     return String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '') === 'profile';
+  }
+
+  private isPostOAuthBind(): boolean {
+    return String(AppStorage.get<string>(StoreKeys.BindEmailFrom) ?? '') === 'post_oauth';
+  }
+
+  private isLoggedInBindMode(): boolean {
+    return this.isFromProfile() || this.isPostOAuthBind();
+  }
+
+  private async finishPostOAuthBind(hostContext: common.UIAbilityContext): Promise<void> {
+    AppStorage.setOrCreate(StoreKeys.BindEmailFrom, '');
+    const loginFrom = String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '');
+    if (loginFrom === 'welcome_old_user') {
+      const hasProfile = await fetchHasOnboardingProfile(hostContext);
+      if (hasProfile) {
+        markOnboardingCompleted(hostContext);
+        AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+        AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+        returnToMainTab('focus');
+        return;
+      }
+      AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+      replaceRoute(PageRoutes.Onboarding);
+      return;
+    }
+    AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+    returnToMainTab('focus');
   }
 
   private canSendVerifyCode(): boolean {
@@ -104,7 +140,7 @@ struct WechatBindEmailPage {
     }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.loading = true;
-    const errorMessage = this.isFromProfile()
+    const errorMessage = this.isLoggedInBindMode()
       ? await UserStore.bindEmailByCode(hostContext, this.email, this.verifyCode)
       : await UserStore.wechatBindByEmail(hostContext, this.email, this.verifyCode);
     this.loading = false;
@@ -118,11 +154,21 @@ struct WechatBindEmailPage {
       backRoute();
       return;
     }
+    if (this.isPostOAuthBind()) {
+      showToast('登录成功', this.getUIContext());
+      await this.finishPostOAuthBind(hostContext);
+      return;
+    }
     showToast('登录成功', this.getUIContext());
     returnToMainTab('focus');
   }
 
   private async onSkip(): Promise<void> {
+    if (this.isPostOAuthBind()) {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      await this.finishPostOAuthBind(hostContext);
+      return;
+    }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     this.skipping = true;
     const errorMessage = await UserStore.wechatCreateSkipEmail(hostContext);
@@ -237,6 +283,11 @@ struct WechatBindEmailPage {
           if (this.isFromProfile()) {
             AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
             backRoute();
+            return;
+          }
+          if (this.isPostOAuthBind()) {
+            const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+            void this.finishPostOAuthBind(hostContext);
             return;
           }
           UserStore.setWxPendingInfo(null);

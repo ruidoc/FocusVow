@@ -45,6 +45,8 @@ export class PageRoutes {
   static readonly OrgDetail: string = 'pages/org/OrgDetailPage';
   static readonly OrgMembers: string = 'pages/org/OrgMembersPage';
   static readonly OrgManage: string = 'pages/org/OrgManagePage';
+  static readonly InboxList: string = 'pages/inbox/InboxListPage';
+  static readonly InboxDetail: string = 'pages/inbox/InboxDetailPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {
@@ -57,12 +59,17 @@ export function pushRoute(url: string): void {
   });
 }
 
-export function pushQuickStart(title: string = '', minutes: number = 0): void {
+export function pushQuickStart(
+  title: string = '',
+  minutes: number = 0,
+  fromOnboarding: boolean = false
+): void {
   router.pushUrl({
     url: PageRoutes.QuickStart,
     params: {
       title: title,
-      minute: String(minutes)
+      minute: String(minutes),
+      from_onboarding: fromOnboarding ? '1' : '0'
     }
   }).catch((error: BusinessError) => {
     logRouteError('pushQuickStart', error);
@@ -78,6 +85,11 @@ export function pushLogin(): void {
 export function pushOrgDetail(orgId: string): void {
   AppStorage.setOrCreate(StoreKeys.OrgDetailId, orgId);
   pushRoute(PageRoutes.OrgDetail);
+}
+
+export function pushInboxDetail(id: string): void {
+  AppStorage.setOrCreate(StoreKeys.InboxDetailId, id);
+  pushRoute(PageRoutes.InboxDetail);
 }
 
 export function pushOrgMembers(orgId: string): void {
@@ -152,6 +164,17 @@ export function returnToMainTab(tab: MainTabKey = 'focus'): void {
   }).catch((error: BusinessError) => {
     logRouteError('returnToMainTab', error);
   });
+}
+
+export function backToHome(): void {
+  try {
+    if (Number(router.getLength()) > 1) {
+      backRoute();
+      return;
+    }
+  } catch {
+  }
+  returnToMainTab('focus');
 }
 
 function isMainTabInStack(): boolean {
