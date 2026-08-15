@@ -85,9 +85,6 @@ function saveQuickFocusPending(
     FocusSyncService.saveSessionTerminalPending(context, enriched, result, endedAt, failReason);
     return;
   }
-  if (!UserStore.isLoggedIn()) {
-    return;
-  }
   FocusSyncService.saveSoloInstantPending(context, state, result, endedAt, failReason);
 }
 

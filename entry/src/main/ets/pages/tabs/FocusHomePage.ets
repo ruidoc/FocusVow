@@ -44,6 +44,7 @@ import {
 import {
   afterGuestSoloFocusEnded,
   ensureSoloFocusAccess,
+  onCertificateGuideDismissed,
 } from "../../services/GuestSoloFocusService";
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
@@ -115,6 +116,8 @@ export struct FocusHomePage {
     void this.runPostOnboardingHomeFlow(hostContext);
     if (UserStore.isLoggedIn()) {
       void InboxStore.fetchUnread();
+    } else if (!this.isActiveLocked()) {
+      onCertificateGuideDismissed(this.getUIContext());
     }
   }
 
@@ -463,7 +466,7 @@ export struct FocusHomePage {
     if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
       queueHonorCertificate(lockSnapshot, endedAt);
       tryPresentCertificateGuide(this.getUIContext());
-    } else if (!(endResult.ok && endResult.tooShort)) {
+    } else {
       afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
     }
     this.remainingLabel = LockStore.getRemainingLabel();
@@ -486,8 +489,6 @@ export struct FocusHomePage {
         // 已登录：弹耻辱证；游客单人只走登录引导
         queueShameCertificate(lockSnapshot, endedAt, "violator", "tear");
         tryPresentCertificateGuide(this.getUIContext());
-      } else if (endResult.ok && endResult.tooShort) {
-        // 短场无效：提示已写在 statusMessage
       } else {
         afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
       }

@@ -178,7 +178,7 @@ struct MainTabPage {
       // 已登录：弹荣誉证；游客单人只走登录引导
       queueHonorCertificate(lockSnapshot, endedAt);
       tryPresentCertificateGuide(this.getUIContext());
-    } else if (!(endResult.ok && endResult.tooShort)) {
+    } else {
       afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
     }
     this.isEndingLock = false;

@@ -364,6 +364,15 @@ struct PlanDetailPage {
     }
     this.blurNameInput();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      if (authResult.message.length > 0) {
+        showErrorToast(authResult.message, this.getUIContext());
+      }
+      return;
+    }
+
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     this.blurNameInput();
     if (result.data) {

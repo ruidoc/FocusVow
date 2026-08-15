@@ -211,15 +211,17 @@ async function getUserAuthGranted(): Promise<boolean> {
   }
 }
 
-/** 弹框关闭后系统状态可能滞后，短轮询直到授权成功或超时 */
-async function pollUserAuthGranted(maxRetry: number = 30, intervalMs: number = 200): Promise<boolean> {
+/** 弹框关闭后授权成功时系统状态可能滞后，短轮询几次；拒绝则尽快返回 */
+async function pollUserAuthGranted(maxRetry: number = 5, intervalMs: number = 80): Promise<boolean> {
   for (let i = 0; i < maxRetry; i++) {
     if (await getUserAuthGranted()) {
       return true;
     }
-    await sleep(intervalMs);
+    if (i < maxRetry - 1) {
+      await sleep(intervalMs);
+    }
   }
-  return await getUserAuthGranted();
+  return false;
 }
 
 /** 查询屏时守护系统授权是否已授予 */

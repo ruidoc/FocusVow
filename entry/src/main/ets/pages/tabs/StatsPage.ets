@@ -42,6 +42,7 @@ import { StoreKeys } from '../../stores/StoreKeys';
 import { registerStatsReload, unregisterStatsReload } from '../../stores/StatsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { FLOATING_TAB_EXTRA_BOTTOM_VP } from './MainTabUtil';
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { image } from '@kit.ImageKit';
@@ -61,6 +62,7 @@ const STATS_SHARE_BOTTOM_PADDING: number = 24;
 @Component
 export struct StatsPage {
   @StorageLink(StoreKeys.UserIsLoggedIn) @Watch('onLoginChanged') isLoggedIn: boolean = false;
+  @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
   @State currentPeriod: StatsPeriod = 'today';
   @State summary: DuoStatsSummary | null = null;
   @State timeline: DuoTimelineDay[] = [];
@@ -169,6 +171,10 @@ export struct StatsPage {
       return '本月成功专注';
     }
     return '今日成功专注';
+  }
+
+  private getViolationCount(): number {
+    return this.summary?.failed_count ?? 0;
   }
 
   private getFulfillment(): ContractFulfillment {
@@ -422,8 +428,8 @@ export struct StatsPage {
       Column() {
         this.buildCompactMetricCard(
           '违约次数',
-          `${this.summary?.duo_violator_count ?? 0} 次`,
-          getDuoBlastReputationHint(this.summary?.duo_violator_count ?? 0)
+          `${this.getViolationCount()} 次`,
+          getDuoBlastReputationHint(this.getViolationCount())
         )
       }
       .layoutWeight(1)
@@ -580,6 +586,10 @@ export struct StatsPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  private getScrollBottomPadding(): number {
+    return STATS_SHARE_BOTTOM_PADDING + (this.floatingTabBar ? FLOATING_TAB_EXTRA_BOTTOM_VP : 0);
+  }
+
   @Builder
   private buildStatsBody(): void {
     Refresh({ refreshing: $$this.isRefreshing }) {
@@ -590,7 +600,7 @@ export struct StatsPage {
         .width('100%')
         .constraintSize({ minHeight: '100%' })
         .justifyContent(FlexAlign.Start)
-        .padding({ bottom: STATS_SHARE_BOTTOM_PADDING })
+        .padding({ bottom: this.getScrollBottomPadding() })
         .backgroundColor(AppTheme.colors.background)
         .alignItems(HorizontalAlign.Start)
         .id(STATS_SNAPSHOT_ID)
@@ -618,6 +628,7 @@ export struct StatsPage {
       actionLabel: '分享',
       actionIcon: $r('sys.symbol.share'),
       bottomSpacerHeight: 0,
+      useFloatingTabInset: false,
       usePageScroll: false,
       bindScrollers: [this.scroller],
       onAction: () => {

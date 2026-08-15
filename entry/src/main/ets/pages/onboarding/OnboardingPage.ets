@@ -384,11 +384,19 @@ struct OnboardingPage {
     this.busy = false;
   }
 
-  private finish(): void {
-    if (!this.screenTimeOk) {
-      return;
+  private getScreenTimeStatus(): string {
+    if (this.screenTimeOk) {
+      return 'approved';
     }
+    if (this.screenTimeDenied) {
+      return 'denied';
+    }
+    return 'skipped';
+  }
+
+  private finish(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const screenTimeStatus = this.getScreenTimeStatus();
     const meta: Record<string, Object> = {
       'has_study_buddy': this.hasBuddy === 'yes'
     };
@@ -399,7 +407,7 @@ struct OnboardingPage {
       'goal': this.goal,
       'has_study_buddy': this.hasBuddy === 'yes',
       'via_old_user': this.viaOldUser,
-      'screen_time_status': 'approved'
+      'screen_time_status': screenTimeStatus
     });
     this.upsert({
       'current_step': 'done',
@@ -407,7 +415,7 @@ struct OnboardingPage {
       'identity': this.identity,
       'goal': this.goal,
       'problem': goalToProblem(this.goal),
-      'screen_time_status': 'approved',
+      'screen_time_status': screenTimeStatus,
       'meta': meta
     });
     markOnboardingCompleted(hostContext);
@@ -896,7 +904,7 @@ struct OnboardingPage {
           .fontWeight(FontWeight.Bold)
           .fontColor(this.screenTimeOk ? AppTheme.colors.accentGreen : AppTheme.colors.textPrimary)
           .width('100%')
-        Text('用于专注期间限制分心应用')
+        Text('用于专注期间锁住分心应用')
           .fontSize(13)
           .fontColor(AppTheme.colors.textMuted)
           .lineHeight(19)
@@ -905,10 +913,12 @@ struct OnboardingPage {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
 
-      Text(this.screenTimeOk ? '已开启' : '必开')
+      Text(this.screenTimeOk ? '已开启' : (this.screenTimeDenied ? '已拒绝' : '未开启'))
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.screenTimeOk ? AppTheme.colors.accentGreen : AppTheme.colors.textSecondary)
+        .fontColor(this.screenTimeOk
+          ? AppTheme.colors.accentGreen
+          : (this.screenTimeDenied ? AppTheme.colors.danger : AppTheme.colors.textSecondary))
         .margin({ top: 4 })
     }
     .width('100%')
@@ -926,13 +936,13 @@ struct OnboardingPage {
   private buildPermissionStep(): void {
     Column() {
       Column({ space: 0 }) {
-        Text('需要系统权限')
+        Text('需要权限')
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
           .width('100%')
-        Text('开始专注之前，先开一下锁机权限')
+        Text('开始专注之前，先开一下必要权限')
           .fontSize(15)
           .fontColor(AppTheme.colors.textSecondary)
           .lineHeight(24)
@@ -941,35 +951,15 @@ struct OnboardingPage {
           .margin({ top: 8, bottom: 20 })
 
         this.buildPermissionStepItem()
-
-        if (this.screenTimeDenied && !this.screenTimeOk) {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-              .fontSize(18)
-              .fontColor([AppTheme.colors.danger])
-              .margin({ top: 1 })
-            Text('还没开成功。请在系统弹窗中允许，或到设置里打开后再试。')
-              .fontSize(13)
-              .fontColor(AppTheme.colors.textPrimary)
-              .lineHeight(20)
-              .layoutWeight(1)
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-          .borderRadius(16)
-          .backgroundColor(AppTheme.colors.dangerSoft)
-          .alignItems(VerticalAlign.Top)
-          .margin({ top: 20 })
-        }
       }
       .layoutWeight(1)
       .width('100%')
       .padding({ left: 32, right: 32, top: 8 })
 
       Column({ space: 8 }) {
-        Button(this.screenTimeOk
+        Button(this.screenTimeOk || this.screenTimeDenied
           ? '开始第一次专注'
-          : (this.screenTimeDenied ? '再试一次' : '去开启'))
+          : '去开启')
           .width('100%')
           .height(52)
           .type(ButtonType.Normal)
@@ -980,9 +970,8 @@ struct OnboardingPage {
           .backgroundColor(AppTheme.colors.primary)
           .borderRadius(AppTheme.radius.button)
           .clip(true)
-          .opacity(this.screenTimeOk ? 1 : 0.9)
           .onClick(() => {
-            if (!this.screenTimeOk) {
+            if (!this.screenTimeOk && !this.screenTimeDenied) {
               void this.requestScreenTime();
               return;
             }

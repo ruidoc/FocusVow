@@ -6,8 +6,7 @@ import { DuoSessionView } from '../../models/DuoModel';
 import { PageRoutes, backRoute, pushRoute, navigateToMainTab } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
-  ensureScreenTimeAuthorization,
-  requestScreenTimeAuthorization
+  ensureScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
@@ -29,7 +28,6 @@ const CODE_LENGTH: number = 6;
 @Entry
 @Component
 struct DuoJoinPage {
-  @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State code: string = '';
@@ -110,13 +108,13 @@ struct DuoJoinPage {
 
   private async chooseApps(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!this.hasAuthorized) {
-      const auth = await requestScreenTimeAuthorization(hostContext);
-      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
-      if (!auth.ok) {
-        this.toastError(auth.message);
-        return;
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      if (authResult.message.length > 0) {
+        this.toastError(authResult.message);
       }
+      return;
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     if (result.data) {
@@ -132,20 +130,13 @@ struct DuoJoinPage {
     }
 
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (this.preview.type === 'scheduled') {
-      const auth = await ensureScreenTimeAuthorization(hostContext);
-      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
-      if (!auth.ok) {
-        this.toastError(auth.message);
-        return;
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      if (authResult.message.length > 0) {
+        this.toastError(authResult.message);
       }
-    } else if (!this.hasAuthorized) {
-      const auth = await requestScreenTimeAuthorization(hostContext);
-      SettingsStore.updateAuthorization(hostContext, auth.ok, auth.message);
-      if (!auth.ok) {
-        this.toastError(auth.message);
-        return;
-      }
+      return;
     }
 
     this.isSubmitting = true;

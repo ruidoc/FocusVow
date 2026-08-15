@@ -3,6 +3,7 @@ import { AppContextHolder } from "../common/AppContextHolder";
 import { ActiveLockState } from "../models/ActiveLockModel";
 import { AppTheme } from "../constants/Theme";
 import { PageRoutes, pushRoute } from "../router/PageRoutes";
+import { StoreKeys } from "../stores/StoreKeys";
 import { UserStore } from "../stores/UserStore";
 import { readStoredString, writeStoredString } from "./PreferencesService";
 
@@ -10,6 +11,7 @@ const GUEST_SOLO_FOCUS_USED_KEY: string = "guest_solo_focus_used";
 
 /** 证书弹窗关闭后再引导登录 */
 let pendingLoginPromptAfterCert: boolean = false;
+let loginPromptReadyAt: number = 0;
 
 export function isSoloQuickFocusLock(lock: ActiveLockState): boolean {
   return (
@@ -61,12 +63,13 @@ export function showGuestSoloLoginPrompt(uiContext: UIContext): void {
   }
   uiContext.showAlertDialog({
     title: "登录后查看统计",
-    message: "未登录时本次专注不会产生统计数据。登录后可同步记录、查看时长与履约证明。",
+    message: "本次专注已保存在本地。登录后会自动同步记录，即可查看时长与履约证明。",
     autoCancel: true,
     primaryButton: {
       value: "去登录",
       fontColor: AppTheme.colors.primary,
       action: () => {
+        AppStorage.setOrCreate(StoreKeys.LoginFrom, "guest_solo_ended");
         pushRoute(PageRoutes.Login);
       },
     },
@@ -80,8 +83,8 @@ export function showGuestSoloLoginPrompt(uiContext: UIContext): void {
 }
 
 /**
- * 未登录单人结束后调用：标记额度并立刻弹登录引导。
- * 游客结束不弹证书，调用方应传 willShowCertificate=false。
+ * 未登录单人结束后：标记额度并引导登录。
+ * 锁结束会重建首页，延迟弹出，避免弹窗被冲掉。
  */
 export function afterGuestSoloFocusEnded(
   uiContext: UIContext,
@@ -96,16 +99,23 @@ export function afterGuestSoloFocusEnded(
     return;
   }
   markGuestSoloFocusUsed(context);
+  pendingLoginPromptAfterCert = true;
+  loginPromptReadyAt = Date.now() + 200;
   if (willShowCertificate) {
-    pendingLoginPromptAfterCert = true;
     return;
   }
-  showGuestSoloLoginPrompt(uiContext);
+  setTimeout(() => {
+    onCertificateGuideDismissed(uiContext);
+  }, 240);
 }
 
-/** 证书弹窗 primary/secondary 关闭后调用 */
+/** 证书弹窗关闭后，或首页空闲时补弹登录引导 */
 export function onCertificateGuideDismissed(uiContext: UIContext): void {
-  if (!pendingLoginPromptAfterCert) {
+  if (!pendingLoginPromptAfterCert || UserStore.isLoggedIn()) {
+    pendingLoginPromptAfterCert = false;
+    return;
+  }
+  if (Date.now() < loginPromptReadyAt) {
     return;
   }
   pendingLoginPromptAfterCert = false;

@@ -167,6 +167,15 @@ struct PlanAddPage {
   private async chooseApps(): Promise<void> {
     this.blurNameInput();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      if (authResult.message.length > 0) {
+        showErrorToast(authResult.message, this.getUIContext());
+      }
+      return;
+    }
+
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     this.blurNameInput();
     if (result.data) {
@@ -332,7 +341,7 @@ struct PlanAddPage {
       .alignItems(VerticalAlign.Center)
 
       Text(this.participationMode === 'duo'
-        ? '保存后邀请搭子，到点双方一起履约；一人撕毁，两人都记为失败。'
+        ? '保存后邀请搭子，到点双方一起履约。'
         : '仅自己按时段履约，适合固定学习节奏。')
         .fontSize(14)
         .fontColor(AppTheme.colors.textSecondary)
