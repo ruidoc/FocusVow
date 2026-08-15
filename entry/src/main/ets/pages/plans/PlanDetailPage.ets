@@ -19,7 +19,11 @@ import {
   reconcileStaleScheduledWindows,
   syncGuardForSession
 } from '../../services/ScheduledCovenantService';
-import { validateScheduledPlanTime } from '../../services/ScheduledPlanValidation';
+import {
+  DEFAULT_SCHEDULED_PLAN_MINUTES,
+  MIN_SCHEDULED_PLAN_MINUTES,
+  validateScheduledPlanTime
+} from '../../services/ScheduledPlanValidation';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import {
   chooseRestrictedApps,
@@ -298,7 +302,7 @@ struct PlanDetailPage {
     const uiContext = this.getUIContext();
     if (this.timePickerTarget === 'start') {
       const startMin = this.timeToMinutes(nextTime);
-      const endMin = startMin + 20;
+      const endMin = startMin + DEFAULT_SCHEDULED_PLAN_MINUTES;
       if (endMin > 24 * 60 - 1) {
         showErrorToast('暂不支持跨日，请改早一点的开始时间', uiContext);
         this.timePickerVisible = false;
@@ -314,8 +318,8 @@ struct PlanDetailPage {
         this.timePickerVisible = false;
         return;
       }
-      if (endMin - startMin < 20) {
-        showErrorToast('时长至少20分钟', uiContext);
+      if (endMin - startMin < MIN_SCHEDULED_PLAN_MINUTES) {
+        showErrorToast(`时长至少${MIN_SCHEDULED_PLAN_MINUTES}分钟`, uiContext);
         this.timePickerVisible = false;
         return;
       }

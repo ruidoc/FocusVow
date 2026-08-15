@@ -54,6 +54,7 @@ import {
   shouldShowFirstFocusPrompt
 } from "../../services/FirstFocusPromptService";
 import { getPendingReferralCode } from "../../utils/ReferralUtil";
+import { isSignupTrialEligible } from "../../utils/SignupTrialUtil";
 import { openTrustListAppForm } from "../../services/ScreenTimeService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { LockStore } from "../../stores/LockStore";
@@ -358,6 +359,10 @@ export struct FocusHomePage {
 
   private shouldWarnSignupTrialOnTear(): boolean {
     if (!UserStore.isLoggedIn()) {
+      return false;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (!isSignupTrialEligible(hostContext)) {
       return false;
     }
     return this.activeLock.title === FIRST_FOCUS_TITLE;

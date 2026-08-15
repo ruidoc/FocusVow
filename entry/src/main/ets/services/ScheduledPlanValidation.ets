@@ -13,6 +13,9 @@ function timeToMinutes(time: string): number {
   return Math.floor(Number(parts[0]) || 0) * 60 + Math.floor(Number(parts[1]) || 0);
 }
 
+export const MIN_SCHEDULED_PLAN_MINUTES: number = 10;
+export const DEFAULT_SCHEDULED_PLAN_MINUTES: number = 20;
+
 export function getScheduledDurationMinutes(startMin: number, endMin: number): number {
   if (endMin > startMin) {
     return endMin - startMin;
@@ -97,8 +100,8 @@ export function validateScheduledPlanTime(
   if (startMin === endMin) {
     return '开始时间和结束时间不能相同';
   }
-  if (getScheduledDurationMinutes(startMin, endMin) < 20) {
-    return '时间间隔最少20分钟';
+  if (getScheduledDurationMinutes(startMin, endMin) < MIN_SCHEDULED_PLAN_MINUTES) {
+    return `时间间隔最少${MIN_SCHEDULED_PLAN_MINUTES}分钟`;
   }
   if (findOverlappingScheduledSession(startMin, endMin, repeatDays, sessions, excludeSessionId)) {
     return '与其他契约时间重叠';

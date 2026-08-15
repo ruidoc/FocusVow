@@ -38,6 +38,10 @@ import {
   normalizeReferralCode,
   savePendingReferralCode
 } from '../utils/ReferralUtil';
+import {
+  clearSignupTrialEligible,
+  setSignupTrialEligible
+} from '../utils/SignupTrialUtil';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
@@ -119,7 +123,8 @@ export class UserStore {
   static async loginWithEmail(
     context: common.UIAbilityContext,
     email: string,
-    password: string
+    password: string,
+    isNew: boolean = false
   ): Promise<string | null> {
     const response = await AuthApiService.loginWithEmail(email.trim(), password);
     if (response.statusCode !== 200) {
@@ -131,7 +136,7 @@ export class UserStore {
       return '登录失败：未返回 token';
     }
 
-    return UserStore.applySessionToken(context, token, 'email');
+    return UserStore.applySessionToken(context, token, 'email', isNew);
   }
 
   static async loginWithWechat(context: common.UIAbilityContext): Promise<string | null> {
@@ -335,7 +340,7 @@ export class UserStore {
       return registerResponse.message ?? '注册失败';
     }
 
-    return UserStore.loginWithEmail(context, trimmedEmail, password);
+    return UserStore.loginWithEmail(context, trimmedEmail, password, true);
   }
 
   /** 登录后尝试绑定本地暂存的邀请码 */
@@ -490,6 +495,7 @@ export class UserStore {
     UmengSdkService.clearUserAlias();
     AnalyticsService.trackLogout(context);
     clearDuoWaitContext();
+    clearSignupTrialEligible(context);
     clearUserSession(context);
     BenefitStore.reset();
     InboxStore.reset();
@@ -513,6 +519,7 @@ export class UserStore {
     saveAccessToken(context, token);
     syncAppStorageValue(StoreKeys.UserAccessToken, token);
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, true);
+    setSignupTrialEligible(context, isNew);
 
     const refreshError = await UserStore.refreshUserInfo(context);
     if (refreshError) {

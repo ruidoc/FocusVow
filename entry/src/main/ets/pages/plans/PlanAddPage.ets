@@ -13,7 +13,11 @@ import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { setScheduledDuoWait } from '../../services/DuoWaitContextService';
 import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
-import { validateScheduledPlanTime } from '../../services/ScheduledPlanValidation';
+import {
+  DEFAULT_SCHEDULED_PLAN_MINUTES,
+  MIN_SCHEDULED_PLAN_MINUTES,
+  validateScheduledPlanTime
+} from '../../services/ScheduledPlanValidation';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
@@ -60,11 +64,11 @@ struct PlanAddPage {
   private initDefaultTimeRange(): void {
     const now = new Date();
     let start = new Date(now.getTime());
-    let end = new Date(start.getTime() + 20 * 60 * 1000);
+    let end = new Date(start.getTime() + DEFAULT_SCHEDULED_PLAN_MINUTES * 60 * 1000);
     if (end.getDate() !== start.getDate() || end.getMonth() !== start.getMonth()) {
       start = new Date(now.getTime());
-      start.setHours(23, 40, 0, 0);
-      end = new Date(start.getTime() + 20 * 60 * 1000);
+      start.setHours(23, 60 - DEFAULT_SCHEDULED_PLAN_MINUTES, 0, 0);
+      end = new Date(start.getTime() + DEFAULT_SCHEDULED_PLAN_MINUTES * 60 * 1000);
     }
     this.startTime = this.formatTime(start);
     this.endTime = this.formatTime(end);
@@ -102,7 +106,7 @@ struct PlanAddPage {
     const uiContext = this.getUIContext();
     if (this.timePickerTarget === 'start') {
       const startMin = this.timeToMinutes(nextTime);
-      const endMin = startMin + 20;
+      const endMin = startMin + DEFAULT_SCHEDULED_PLAN_MINUTES;
       if (endMin > 24 * 60 - 1) {
         showErrorToast('暂不支持跨日，请改早一点的开始时间', uiContext);
         this.timePickerVisible = false;
@@ -118,8 +122,8 @@ struct PlanAddPage {
         this.timePickerVisible = false;
         return;
       }
-      if (endMin - startMin < 20) {
-        showErrorToast('时长至少20分钟', uiContext);
+      if (endMin - startMin < MIN_SCHEDULED_PLAN_MINUTES) {
+        showErrorToast(`时长至少${MIN_SCHEDULED_PLAN_MINUTES}分钟`, uiContext);
         this.timePickerVisible = false;
         return;
       }
