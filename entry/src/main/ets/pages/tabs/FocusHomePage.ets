@@ -46,8 +46,22 @@ import {
   ensureSoloFocusAccess,
   onCertificateGuideDismissed,
 } from "../../services/GuestSoloFocusService";
+import {
+  exitOrgClassroomFocus,
+  getOrgClassroomExitCopy,
+  isOrgClassroomLockPlanId,
+  loadOrgClassroomMeta,
+  reconcileOrgClassroomOnForeground,
+} from "../../services/OrgClassroomService";
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
+import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService";
+import {
+  cancelPendingQuickStart,
+  hasPendingQuickStart,
+  hydratePendingQuickStart,
+  reconcilePendingQuickStart as runPendingQuickStartReconcile,
+} from "../../services/PendingQuickStartService";
 import {
   FIRST_FOCUS_MINUTES,
   FIRST_FOCUS_TITLE,
@@ -76,9 +90,13 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.DuoWaitTitle) duoWaitTitle: string = "";
   @StorageLink(StoreKeys.DuoWaitIsScheduled) duoWaitIsScheduled: boolean = false;
   @StorageLink(StoreKeys.DuoWaitScheduleLabel) duoWaitScheduleLabel: string = "";
+  @StorageLink(StoreKeys.PendingQuickStartTitle) pendingQuickStartTitle: string = "";
+  @StorageLink(StoreKeys.PendingQuickStartDelayMin) pendingQuickStartDelayMin: number = 0;
+  @StorageLink(StoreKeys.PendingQuickStartStartAtMs) pendingQuickStartStartAtMs: number = 0;
   @StorageLink(StoreKeys.InboxUnread) inboxUnread: number = 0;
   @StorageLink(StoreKeys.InboxImportantUnread) inboxImportant: number = 0;
   @State remainingLabel: string = LockStore.getRemainingLabel();
+  @State pendingRemainTick: number = 0;
   @State showTearConfirm: boolean = false;
   @State topSafeInsetVp: number = 0;
   /** 单人入口按压缩放透明度，对齐 iOS activeOpacity=0.7 */
@@ -96,9 +114,13 @@ export struct FocusHomePage {
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     BenefitStore.hydrate(hostContext);
+    hydratePendingQuickStart(hostContext);
     this.syncRemainingLabel();
+    this.pendingRemainTick += 1;
     void this.reconcileDuoWait();
+    void this.reconcilePendingQuickStart();
     void this.syncDuoPartnerDisplay();
+    void reconcileOrgClassroomOnForeground(hostContext);
     if (UserStore.isLoggedIn()) {
       void BenefitStore.refresh();
       void InboxStore.fetchUnread();
@@ -114,6 +136,7 @@ export struct FocusHomePage {
     // 引导结束 returnToMainTab 时首页可能早已 aboutToAppear，需在回显时再申请
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     void this.runPostOnboardingHomeFlow(hostContext);
+    void reconcileOrgClassroomOnForeground(hostContext);
     if (UserStore.isLoggedIn()) {
       void InboxStore.fetchUnread();
     } else if (!this.isActiveLocked()) {
@@ -126,6 +149,7 @@ export struct FocusHomePage {
       return;
     }
     this.postOnboardingFlowStarted = true;
+    await reconcileOnboardingOnLaunch(hostContext);
     await ensureNotifyOnLaunch(hostContext);
     if (this.isActiveLocked() || !shouldShowFirstFocusPrompt(hostContext)) {
       return;
@@ -140,8 +164,8 @@ export struct FocusHomePage {
     let message = '时长 5 分钟，可选放行应用，即刻开始';
     if (loggedIn) {
       message = hasInvite
-        ? '完成第一次专注后领取 7 天会员，邀请码再 +15 天。时长 5 分钟。'
-        : '完成第一次专注后领取 7 天会员。时长 5 分钟，可选放行应用。';
+        ? '完成首次专注后领取 7 天会员，邀请码再 +15 天。时长 5 分钟。'
+        : '完成首次专注后领取 7 天会员。时长 5 分钟，可选放行应用。';
     }
     this.getUIContext().showAlertDialog({
       title: '开启你的第一次专注',
@@ -200,6 +224,18 @@ export struct FocusHomePage {
     this.clearTimer();
     this.timerId = setInterval(() => {
       this.syncRemainingLabel();
+      this.pendingRemainTick += 1;
+      if (this.hasPendingQuickStart()) {
+        void this.reconcilePendingQuickStart();
+      }
+      // 倒计时到点自动履约解锁（此前只在 MainTab onPageShow 检查，会卡在 00:00）
+      if (
+        this.activeLock.kind === "quick_focus" &&
+        !isCountupLock(this.activeLock) &&
+        LockStore.shouldAutoFinish()
+      ) {
+        void this.performCompleteLock();
+      }
       this.duoWaitPollTick += 1;
       if (this.duoWaitSessionId.length > 0 && this.duoWaitPollTick % 5 === 0) {
         void this.reconcileDuoWait();
@@ -208,6 +244,29 @@ export struct FocusHomePage {
         void this.syncDuoPartnerDisplay();
       }
     }, 1000);
+  }
+
+  private hasPendingQuickStart(): boolean {
+    return this.pendingQuickStartStartAtMs > 0 && this.pendingQuickStartTitle.length > 0;
+  }
+
+  private formatPendingRemainLabel(): string {
+    // 引用 tick，保证每秒刷新；不要用独立 00:00 初始值，避免回首页先闪一下
+    const _tick = this.pendingRemainTick;
+    let remainSec = 0;
+    if (this.pendingQuickStartStartAtMs > 0) {
+      remainSec = Math.max(0, Math.ceil((this.pendingQuickStartStartAtMs - Date.now()) / 1000));
+    } else if (this.pendingQuickStartDelayMin > 0) {
+      remainSec = this.pendingQuickStartDelayMin * 60;
+    }
+    const minutes = Math.floor(remainSec / 60);
+    const seconds = remainSec % 60;
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  }
+
+  private async reconcilePendingQuickStart(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    await runPendingQuickStartReconcile(hostContext);
   }
 
   private hasPendingDuoWait(): boolean {
@@ -399,6 +458,44 @@ export struct FocusHomePage {
     return "我再坚持一下";
   }
 
+  private confirmOrgClassroomExit(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const meta = loadOrgClassroomMeta(hostContext);
+    if (meta && meta.exitRequestPending) {
+      showToast('退出申请审核中，请等待发起人处理', this.getUIContext());
+      return;
+    }
+    const copy = getOrgClassroomExitCopy(meta);
+    this.getUIContext().showAlertDialog({
+      title: copy.title,
+      message: copy.message,
+      primaryButton: {
+        value: copy.confirmText,
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.performOrgClassroomExit();
+        },
+      },
+      secondaryButton: {
+        value: "继续上课",
+        fontColor: "#0A59F7",
+        action: () => {},
+      },
+    });
+  }
+
+  private async performOrgClassroomExit(): Promise<void> {
+    if (this.isEndingLock) {
+      return;
+    }
+    this.isEndingLock = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const message = await exitOrgClassroomFocus(hostContext);
+    showToast(message, this.getUIContext());
+    this.remainingLabel = LockStore.getRemainingLabel();
+    this.isEndingLock = false;
+  }
+
   private isPastCountupMin(): boolean {
     return (
       isCountupLock(this.activeLock) &&
@@ -408,6 +505,11 @@ export struct FocusHomePage {
 
   private async endCurrentLock(): Promise<void> {
     if (this.isEndingLock || !this.isActiveLocked()) {
+      return;
+    }
+
+    if (isOrgClassroomLockPlanId(this.activeLock.planId)) {
+      this.confirmOrgClassroomExit();
       return;
     }
 
@@ -552,6 +654,12 @@ export struct FocusHomePage {
       return "单人定时契约";
     }
     if (this.activeLock.kind === "quick_focus") {
+      if (isOrgClassroomLockPlanId(this.activeLock.planId)) {
+        return "组织课堂";
+      }
+      if (this.activeLock.isDelayedSolo) {
+        return isCountupLock(this.activeLock) ? "单人延时 · 正计时" : "单人延时契约";
+      }
       return isCountupLock(this.activeLock) ? "单人即时 · 正计时" : "单人即时契约";
     }
     return "专注中";
@@ -635,6 +743,14 @@ export struct FocusHomePage {
   }
 
   private getEndLockButtonLabel(): string {
+    if (isOrgClassroomLockPlanId(this.activeLock.planId)) {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const meta = loadOrgClassroomMeta(hostContext);
+      if (meta && meta.exitRequestPending) {
+        return "等待审批";
+      }
+      return meta && meta.allowExit ? "申请退出" : "退出";
+    }
     if (this.activeLock.kind === "quick_focus" && this.isPastCountupMin()) {
       return "结束专注";
     }
@@ -905,6 +1021,11 @@ export struct FocusHomePage {
   }
 
   private async openSoloQuickStart(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (hasPendingQuickStart(hostContext)) {
+      showToast("已有预约中的专注，请等待开始或先取消", this.getUIContext());
+      return;
+    }
     if (UserStore.isLoggedIn()) {
       if (!(await ensureDailyFocusQuota(this.getUIContext()))) {
         return;
@@ -932,6 +1053,57 @@ export struct FocusHomePage {
     .onClick(() => {
       this.onSelectTab?.('plans');
     })
+  }
+
+  @Builder
+  private buildPendingQuickStartState(): void {
+    Column({ space: 0 }) {
+      Row({ space: 4 }) {
+        SymbolGlyph($r("sys.symbol.clock"))
+          .fontSize(18)
+          .fontColor([AppTheme.colors.primary])
+        Text("等待开始")
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textSecondary)
+      }
+      .margin({ bottom: 20 })
+
+      Text(this.formatPendingRemainLabel())
+        .fontSize(64)
+        .fontWeight(FontWeight.Lighter)
+        .fontColor(AppTheme.colors.textPrimary)
+        .textAlign(TextAlign.Center)
+
+      Text(this.pendingQuickStartTitle)
+        .fontSize(22)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .textAlign(TextAlign.Center)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ top: 40 })
+        .constraintSize({ maxWidth: 280 })
+
+      Text(`${this.pendingQuickStartDelayMin} 分钟后自动锁机`)
+        .fontSize(15)
+        .fontColor(AppTheme.colors.textSecondary)
+        .textAlign(TextAlign.Center)
+        .margin({ top: 12 })
+
+      Text("取消预约")
+        .fontSize(15)
+        .fontColor(AppTheme.colors.warning)
+        .textAlign(TextAlign.Center)
+        .margin({ top: 64 })
+        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+        .onClick(() => {
+          const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          void cancelPendingQuickStart(hostContext);
+        })
+    }
+    .width("100%")
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
@@ -1112,6 +1284,16 @@ export struct FocusHomePage {
       .height("100%")
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center);
+    } else if (this.hasPendingQuickStart()) {
+      Column() {
+        this.buildPendingQuickStartState()
+      }
+      .width("100%")
+      .height("100%")
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .padding({ left: 24, right: 24 })
+      .offset({ y: -20 });
     } else {
       Column() {
         this.buildEmptyState()

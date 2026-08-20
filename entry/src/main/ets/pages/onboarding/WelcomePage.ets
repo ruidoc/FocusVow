@@ -11,8 +11,8 @@ bootstrapStores();
 
 const WELCOME_POINTS: string[] = [
   '专注时会锁住短视频、游戏',
-  '搭子一起，建立契约，互相监督',
-  '完成第一次专注，领取 7 天会员'
+  '搭子互立契约，违约有惩罚',
+  '完成首次专注，领取 7 天会员'
 ];
 
 @Entry
@@ -47,14 +47,9 @@ struct WelcomePage {
   }
 
   private onOldUser(): void {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     AnalyticsService.trackEvent('welcome_cta_clicked', { 'cta': 'old_user' });
     AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
     AppStorage.setOrCreate(StoreKeys.LoginFrom, 'welcome_old_user');
-    void OnboardingApiService.upsert(hostContext, {
-      'current_step': 'welcome',
-      'via_old_user': true
-    });
     pushRoute(PageRoutes.Login);
   }
 
@@ -67,7 +62,7 @@ struct WelcomePage {
           .borderRadius(18)
           .margin({ bottom: 40 })
 
-        Text('分心的APP，这次打不开')
+        Text('搭子结伴，一起自律上岸')
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
@@ -90,7 +85,7 @@ struct WelcomePage {
                 .margin({ right: 12 })
               if (index === WELCOME_POINTS.length - 1) {
                 Text() {
-                  Span('完成第一次专注，')
+                  Span('完成首次专注，')
                     .fontSize(15)
                     .fontColor(AppTheme.colors.textSecondary)
                   Span('领取 7 天会员')
@@ -122,7 +117,7 @@ struct WelcomePage {
       .padding({ left: 24, right: 24 })
 
       Column({ space: 12 }) {
-        Button('开始')
+        Button('新用户引导')
           .width('100%')
           .height(52)
           .type(ButtonType.Normal)
@@ -137,7 +132,7 @@ struct WelcomePage {
             this.onStart();
           })
 
-        Text('我是老用户')
+        Text('老用户登录')
           .fontSize(15)
           .fontColor(AppTheme.colors.textMuted)
           .padding({ top: 10, bottom: 10 })

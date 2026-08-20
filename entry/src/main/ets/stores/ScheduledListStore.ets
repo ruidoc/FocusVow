@@ -89,4 +89,23 @@ export class ScheduledListStore {
       ScheduledListStore.setAllSessions(next);
     }
   }
+
+  static getEditingSession(): DuoSessionView | null {
+    ScheduledListStore.hydrate();
+    const session = AppStorage.get<DuoSessionView | null>(StoreKeys.ScheduledListEditingSession);
+    if (!session || session.session_id.length === 0) {
+      return null;
+    }
+    return session;
+  }
+
+  static setEditingSession(session: DuoSessionView): void {
+    ScheduledListStore.hydrate();
+    syncAppStorageValue(StoreKeys.ScheduledListEditingSession, session);
+  }
+
+  static clearEditingSession(): void {
+    ScheduledListStore.hydrate();
+    syncAppStorageValue<DuoSessionView | null>(StoreKeys.ScheduledListEditingSession, null);
+  }
 }

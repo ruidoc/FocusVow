@@ -4,11 +4,14 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { MsgContent, PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
+import { ExtensionNetworkService } from '../services/ExtensionNetworkService';
 import { getPreferencesStorageDir, warmUpPreferencesStore } from '../services/PreferencesService';
 import { DuoBgSyncService } from '../services/DuoBgSyncService';
 import { DuoPushHandler } from '../services/DuoPushHandler';
+import { reconcileLockLifecycle } from '../services/LockReconcileService';
 import { UmengPushMessageBody } from '../models/DuoModel';
 import { FocusSyncService } from '../services/FocusSyncService';
+import { reconcileOrgClassroomOnForeground } from '../services/OrgClassroomService';
 import { resolveAppLaunchPage } from '../services/OnboardingApiService';
 import { AnalyticsService } from '../services/AnalyticsService';
 import { UmengSdkService } from '../services/UmengSdkService';
@@ -30,6 +33,7 @@ export default class EntryAbility extends UIAbility {
     webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
     warmUpPreferencesStore(this.context);
+    ExtensionNetworkService.persistClientMeta(this.context);
     DuoBgSyncService.bindPoll((ctx) => {
       return DuoPushHandler.syncActiveDuoSessionIfNeeded(ctx, { isForeground: false });
     });
@@ -122,7 +126,10 @@ export default class EntryAbility extends UIAbility {
     const context = AppContextHolder.get();
     if (context) {
       void FocusSyncService.flushPending(context);
-      void DuoPushHandler.processPendingBreach(this.context).then(() => {
+      void reconcileOrgClassroomOnForeground(this.context);
+      void reconcileLockLifecycle(this.context).then(() => {
+        return DuoPushHandler.processPendingBreach(this.context);
+      }).then(() => {
         return DuoPushHandler.syncActiveDuoSessionIfNeeded(this.context, { isForeground: true });
       }).then(() => {
         DuoBgSyncService.ensure(this.context);

@@ -1,12 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { HttpService } from './HttpService';
+import { ExtensionNetworkService } from './ExtensionNetworkService';
 import { readStoredString, writeStoredString } from './PreferencesService';
 
 const LOG_TAG: string = 'FocusStartedNotify';
 const DEVICE_ID_KEY: string = 'analytics.device_id';
 
-export type FocusStartScene = 'solo_start' | 'duo_initiate_start' | 'duo_join_start';
+export type FocusStartScene = 'solo_start' | 'delayed_solo_start' | 'duo_initiate_start' | 'duo_join_start';
 export type FocusSessionType = 'instant' | 'scheduled' | 'solo_once';
 
 export interface FocusStartedReportParams {
@@ -19,6 +19,9 @@ export interface FocusStartedReportParams {
   title?: string;
   /** countdown | countup */
   timerMode?: string;
+  delayMinutes?: number;
+  /** 毫秒时间戳，登录单人用于落 running */
+  startedAtMs?: number;
 }
 
 /**
@@ -53,7 +56,29 @@ export class FocusStartedNotifyService {
       console.warn(`[${LOG_TAG}] skip: no context`);
       return;
     }
+    void FocusStartedNotifyService.postStarted(
+      host,
+      FocusStartedNotifyService.buildBody(host, params),
+    );
+  }
 
+  /** TimeGuard 扩展必须 await，否则 onStart 返回后进程退出，请求发不出去 */
+  static async reportAndWait(
+    context: common.Context | undefined,
+    params: FocusStartedReportParams
+  ): Promise<boolean> {
+    const host = context ?? AppContextHolder.get();
+    if (!host) {
+      console.warn(`[${LOG_TAG}] skip: no context`);
+      return false;
+    }
+    return FocusStartedNotifyService.postStarted(host, FocusStartedNotifyService.buildBody(host, params));
+  }
+
+  private static buildBody(
+    host: common.Context,
+    params: FocusStartedReportParams
+  ): Record<string, Object> {
     const body: Record<string, Object> = {
       'scene': params.scene
     };
@@ -76,19 +101,46 @@ export class FocusStartedNotifyService {
     if (params.timerMode !== undefined && params.timerMode.length > 0) {
       body['timer_mode'] = params.timerMode;
     }
+    if (params.delayMinutes !== undefined && params.delayMinutes > 0) {
+      body['delay_minutes'] = params.delayMinutes;
+    }
     const focusTitle = (params.title ?? '').trim();
     if (focusTitle.length > 0) {
       body['title'] = focusTitle;
     }
+    const startedAt =
+      params.startedAtMs !== undefined && params.startedAtMs > 0
+        ? Math.round(params.startedAtMs)
+        : Date.now();
+    body['started_at'] = startedAt;
+    if (
+      (params.scene === 'solo_start' || params.scene === 'delayed_solo_start') &&
+      params.planId !== undefined &&
+      params.planId.length > 0
+    ) {
+      body['client_key'] = params.planId.startsWith('once_')
+        ? `solo_plan_${params.planId}`
+        : `solo_plan_${startedAt}`;
+    }
+    return body;
+  }
 
-    // requiresAuth=true：有 token 则带上；skipPendingFlush=true：不阻塞锁机
-    HttpService.post('/focus/started', body, true, true, host)
-      .then(() => {
-        // no-op
-      })
-      .catch((error: Object) => {
-        console.warn(`[${LOG_TAG}] report failed: ${String(error)}`);
-      });
+  private static async postStarted(
+    host: common.Context,
+    body: Record<string, Object>
+  ): Promise<boolean> {
+    try {
+      const res = await ExtensionNetworkService.post(host, '/focus/started', body);
+      if (res.statusCode === 200) {
+        console.info(`[${LOG_TAG}] report ok scene=${String(body['scene'])}`);
+        return true;
+      }
+      console.warn(`[${LOG_TAG}] report failed: ${res.message}`);
+      return false;
+    } catch (error) {
+      console.warn(`[${LOG_TAG}] report failed: ${String(error)}`);
+      return false;
+    }
   }
 
   private static ensureDeviceId(context: common.Context): string {

@@ -27,6 +27,13 @@ import { queueHonorCertificate, queueShameCertificate } from './CertificatePendi
 import { bootstrapStores } from '../stores/StoreBootstrap';
 import { InboxStore } from '../stores/InboxStore';
 import { PageRoutes, pushInboxDetail, pushRoute } from '../router/PageRoutes';
+import {
+  handleOrgClassroomEndedLocally,
+  isOrgClassroomLockPlanId,
+  loadOrgClassroomMeta,
+  patchOrgClassroomMeta,
+  releaseLocalOrgClassroomLock,
+} from './OrgClassroomService';
 
 bootstrapStores();
 
@@ -280,6 +287,14 @@ export class DuoPushHandler {
         return DuoPushHandler.handleDuoScheduledCancelled;
       case 'inbox':
         return DuoPushHandler.handleInbox;
+      case 'org_classroom_end':
+        return DuoPushHandler.handleOrgClassroomEnd;
+      case 'org_classroom_exit_approved':
+        return DuoPushHandler.handleOrgClassroomExitApproved;
+      case 'org_classroom_exit_rejected':
+        return DuoPushHandler.handleOrgClassroomExitRejected;
+      case 'org_classroom_exit_requested':
+        return DuoPushHandler.handleOrgClassroomExitRequested;
       default:
         return null;
     }
@@ -348,6 +363,10 @@ export class DuoPushHandler {
     const messageId = record['message_id'];
     if (messageId && messageId.length > 0) {
       payload.message_id = messageId;
+    }
+    const classroomId = record['classroom_id'];
+    if (classroomId && classroomId.length > 0) {
+      payload.classroom_id = classroomId;
     }
     return payload;
   }
@@ -461,6 +480,92 @@ export class DuoPushHandler {
       return;
     }
     pushRoute(PageRoutes.InboxList);
+  }
+
+  private static classroomMatchesLocal(
+    context: common.Context,
+    classroomId: string
+  ): boolean {
+    const meta = loadOrgClassroomMeta(context);
+    if (classroomId.length > 0 && meta && meta.classroomId !== classroomId) {
+      return false;
+    }
+    return true;
+  }
+
+  private static async handleOrgClassroomEnd(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    const classroomId = payload.classroom_id ?? '';
+    const meta = loadOrgClassroomMeta(context);
+    const state = DuoPushHandler.resolveActiveLockState(context);
+    if (!isOrgClassroomLockPlanId(state.planId) && !meta) {
+      return;
+    }
+    if (!DuoPushHandler.classroomMatchesLocal(context, classroomId)) {
+      return;
+    }
+    const fallback = '组织课堂已结束';
+    const message = payload.message && payload.message.length > 0 ? payload.message : fallback;
+    await handleOrgClassroomEndedLocally(context, message);
+    if (options?.isForeground) {
+      InAppMessageService.show('组织课堂', message, payload.type);
+    }
+  }
+
+  private static async handleOrgClassroomExitApproved(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    const classroomId = payload.classroom_id ?? '';
+    const state = DuoPushHandler.resolveActiveLockState(context);
+    if (!isOrgClassroomLockPlanId(state.planId)) {
+      return;
+    }
+    if (!DuoPushHandler.classroomMatchesLocal(context, classroomId)) {
+      return;
+    }
+    await releaseLocalOrgClassroomLock(context);
+    if (options?.isForeground) {
+      const message = payload.message && payload.message.length > 0
+        ? payload.message
+        : '退出申请已通过，专注已解除';
+      InAppMessageService.show('组织课堂', message, payload.type);
+    }
+  }
+
+  private static async handleOrgClassroomExitRejected(
+    context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    const classroomId = payload.classroom_id ?? '';
+    if (!DuoPushHandler.classroomMatchesLocal(context, classroomId)) {
+      return;
+    }
+    patchOrgClassroomMeta(context, { exitRequestPending: false });
+    if (options?.isForeground) {
+      const message = payload.message && payload.message.length > 0
+        ? payload.message
+        : '退出申请未通过，请继续专注';
+      InAppMessageService.show('组织课堂', message, payload.type);
+    }
+  }
+
+  private static async handleOrgClassroomExitRequested(
+    _context: common.UIAbilityContext,
+    payload: DuoPushPayload,
+    options?: PushDispatchOptions
+  ): Promise<void> {
+    if (options?.isForeground) {
+      const message = payload.message && payload.message.length > 0
+        ? payload.message
+        : '有成员申请退出组织课堂';
+      InAppMessageService.show('组织课堂', message, payload.type);
+    }
   }
 
   private static async handleDuoStart(

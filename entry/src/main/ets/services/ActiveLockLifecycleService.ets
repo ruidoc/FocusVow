@@ -1,5 +1,9 @@
 import { common } from '@kit.AbilityKit';
-import { ActiveLockState, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
+import {
+  ActiveLockState,
+  createIdleLockState,
+  resolveDuoSessionIdFromLock,
+} from '../models/ActiveLockModel';
 import { FocusSyncResult } from '../models/FocusSyncModel';
 import { endCurrentCycleGuardLockAndRestart, restartCycleGuardIfEnabled } from './CycleGuardService';
 import { DuoApiService } from './DuoApiService';
@@ -7,16 +11,23 @@ import { DuoBgSyncService } from './DuoBgSyncService';
 import { FocusSyncService } from './FocusSyncService';
 import { AnalyticsService } from './AnalyticsService';
 import { FIRST_FOCUS_TITLE } from './FirstFocusPromptService';
-import { GuardResult, releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
+import { GuardResult, releaseScreenRestriction, removePlanGuardStrategy, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { LockStore } from '../stores/LockStore';
 import { refreshStats } from '../stores/StatsStore';
 import { UserStore } from '../stores/UserStore';
 import {
   clearScheduledActivationTracking,
-  markScheduledListStale
+  markScheduledListStale,
+  syncGuardForSession
 } from './ScheduledCovenantService';
+import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { SettingsStore } from '../stores/SettingsStore';
+import { clearPendingQuickStart } from './PendingQuickStartService';
+import { saveOrgClassroomMeta } from './OrgClassroomService';
 import { isFocusTooShort } from '../utils/FocusValidity';
+import { queueHonorCertificate } from './CertificatePendingService';
+import { savePersistedActiveLockState } from './ActiveLockPersistenceService';
+import { addExitPlanId } from './ExitPlanIdsService';
 
 let endingLock: boolean = false;
 
@@ -59,6 +70,9 @@ function saveQuickFocusPending(
   endedAt: number = Date.now(),
   failReason: string = ''
 ): void {
+  if (state.planId.startsWith('org_cls_')) {
+    return;
+  }
   const sessionId = resolveDuoSessionIdFromLock(state);
   console.info(
     `[FocusSync] save pending kind=${sessionId.length > 0 ? 'session_terminal' : 'solo_instant'} result=${result}`
@@ -80,12 +94,47 @@ function saveQuickFocusPending(
       participationMode: state.participationMode,
       partnerNickname: state.partnerNickname,
       timerMode: state.timerMode,
-      minDurationMin: state.minDurationMin
+      minDurationMin: state.minDurationMin,
+      isDelayedSolo: state.isDelayedSolo
     };
     FocusSyncService.saveSessionTerminalPending(context, enriched, result, endedAt, failReason);
     return;
   }
   FocusSyncService.saveSoloInstantPending(context, state, result, endedAt, failReason);
+}
+
+/**
+ * TimeGuard onStop：对齐 RN 原生到点停锁。
+ * 扩展进程即可跑：落 sync pending、清锁、重启循环守护。系统停策略即解锁，不依赖 App 打开。
+ */
+export async function completeOnceQuickFocusFromGuardStop(
+  context: common.Context,
+  state: ActiveLockState,
+): Promise<void> {
+  if (state.kind !== 'quick_focus') {
+    return;
+  }
+  const endedAt = Date.now();
+  const tooShort = isFocusTooShort(state.startedAt, endedAt);
+  if (tooShort) {
+    trackSessionFinished(state, endedAt, 'failed', 'too_short');
+  } else {
+    trackSessionFinished(state, endedAt, 'completed');
+    saveQuickFocusPending(context, state, 'SUCCESS', endedAt);
+    if (UserStore.isLoggedIn()) {
+      queueHonorCertificate(state, endedAt);
+    }
+  }
+  clearPendingQuickStart(context);
+  // 扩展进程可能无 AppStorage；持久化 idle + 尝试 LockStore.clear
+  savePersistedActiveLockState(context, createIdleLockState());
+  try {
+    LockStore.clear(context);
+  } catch (_e) {
+    // extension 无 UI store 时忽略
+  }
+  await releaseScreenRestriction(state.selectedTokens, state.mode);
+  await restartCycleGuardIfEnabled(context);
 }
 
 export async function endQuickFocus(
@@ -117,22 +166,43 @@ export async function endQuickFocus(
       }
     }
 
-    const result = await releaseScreenRestriction(state.selectedTokens, state.mode);
+    // once_ 可能是 TimeGuard 策略，也可能是 reconcile 兜底的 setAppsRestriction，两边都解
+    let unlockOk = false;
+    if (state.planId.startsWith('once_')) {
+      const removeResult = await removePlanGuardStrategy(state.planId);
+      const releaseResult = await releaseScreenRestriction(
+        state.selectedTokens,
+        state.mode,
+      );
+      unlockOk = removeResult.ok || releaseResult.ok;
+    } else {
+      const releaseResult = await releaseScreenRestriction(
+        state.selectedTokens,
+        state.mode,
+      );
+      unlockOk = releaseResult.ok;
+    }
     await FocusSyncService.flushPending(context);
-    if (result.ok) {
+    if (unlockOk) {
+      if (state.planId.startsWith('once_') || state.isDelayedSolo) {
+        clearPendingQuickStart(context);
+      }
+      if (state.planId.startsWith('org_cls_')) {
+        saveOrgClassroomMeta(context, null);
+      }
       LockStore.clear(context);
       notifyDuoBgSync();
     }
     SettingsStore.updateStatusMessage(
       context,
-      result.ok
+      unlockOk
         ? (tooShort ? '专注不足 30 秒，本次不计时' : successMessage)
-        : `${failurePrefix}：${result.message}`
+        : `${failurePrefix}：解除限制失败`
     );
-    if (result.ok && markCompleted && !tooShort) {
+    if (unlockOk && markCompleted && !tooShort) {
       refreshStats();
     }
-    return { ok: result.ok, tooShort };
+    return { ok: unlockOk, tooShort };
   } finally {
     endingLock = false;
   }
@@ -163,26 +233,47 @@ export async function tearQuickFocus(
       if (sessionId.length > 0) {
         saveQuickFocusPending(context, state, 'VIOLATION', endedAt, 'too_short');
       }
-    } else {
+    } else if (UserStore.isLoggedIn() || sessionId.length > 0) {
+      // 未登录第一次单人失败：不落 pending，登录后也不补推耻辱记录
       saveQuickFocusPending(context, state, 'VIOLATION', endedAt);
     }
 
-    const result = await releaseScreenRestriction(state.selectedTokens, state.mode);
+    let unlockOk = false;
+    if (state.planId.startsWith('once_')) {
+      const removeResult = await removePlanGuardStrategy(state.planId);
+      const releaseResult = await releaseScreenRestriction(
+        state.selectedTokens,
+        state.mode,
+      );
+      unlockOk = removeResult.ok || releaseResult.ok;
+    } else {
+      const releaseResult = await releaseScreenRestriction(
+        state.selectedTokens,
+        state.mode,
+      );
+      unlockOk = releaseResult.ok;
+    }
     await FocusSyncService.flushPending(context);
-    if (result.ok) {
+    if (unlockOk) {
+      if (state.planId.startsWith('once_') || state.isDelayedSolo) {
+        clearPendingQuickStart(context);
+      }
+      if (state.planId.startsWith('org_cls_')) {
+        saveOrgClassroomMeta(context, null);
+      }
       LockStore.clear(context);
       notifyDuoBgSync();
     }
     SettingsStore.updateStatusMessage(
       context,
-      result.ok
+      unlockOk
         ? (tooShort ? '专注不足 30 秒，本次不计时' : '契约已撕毁')
-        : `撕毁失败：${result.message}`
+        : '撕毁失败：解除限制失败'
     );
-    if (result.ok && !tooShort) {
+    if (unlockOk && !tooShort) {
       refreshStats();
     }
-    return { ok: result.ok, tooShort };
+    return { ok: unlockOk, tooShort };
   } finally {
     endingLock = false;
   }
@@ -233,6 +324,16 @@ export async function tearCovenantWindow(
     const tooShort = await syncScheduledCovenantTerminal(context, state, 'VIOLATION');
     const sessionId = resolveDuoSessionIdFromLock(state);
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
+    if (stopResult.ok && state.planId.length > 0) {
+      addExitPlanId(context, state.planId);
+      const sessions = ScheduledListStore.getAllSessions();
+      for (let i = 0; i < sessions.length; i++) {
+        if (sessions[i].session_id === sessionId) {
+          await syncGuardForSession(context, sessions[i]);
+          break;
+        }
+      }
+    }
     LockStore.clear(context);
     notifyDuoBgSync();
     markScheduledListStale(context);

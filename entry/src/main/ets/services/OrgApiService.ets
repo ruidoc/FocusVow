@@ -67,4 +67,69 @@ export class OrgApiService {
   static async patchOrg(orgId: string, body: Record<string, Object>): Promise<ApiEnvelope> {
     return HttpService.patch(`/org/${encodeURIComponent(orgId)}`, body);
   }
+
+  static async createClassroom(
+    orgId: string,
+    body: Record<string, Object>
+  ): Promise<ApiEnvelope> {
+    return HttpService.post(`/org/${encodeURIComponent(orgId)}/classroom`, body);
+  }
+
+  static async getActiveClassroom(orgId: string): Promise<ApiEnvelope> {
+    return HttpService.get(`/org/${encodeURIComponent(orgId)}/classroom/active`);
+  }
+
+  static async joinClassroom(orgId: string, classroomId: string): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/org/${encodeURIComponent(orgId)}/classroom/${encodeURIComponent(classroomId)}/join`,
+      {}
+    );
+  }
+
+  static async startClassroom(
+    orgId: string,
+    classroomId: string,
+    body: Record<string, Object>
+  ): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/org/${encodeURIComponent(orgId)}/classroom/${encodeURIComponent(classroomId)}/start`,
+      body
+    );
+  }
+
+  static async endClassroom(orgId: string, classroomId: string): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/org/${encodeURIComponent(orgId)}/classroom/${encodeURIComponent(classroomId)}/end`,
+      {}
+    );
+  }
+
+  static async leaveClassroom(orgId: string, classroomId: string): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/org/${encodeURIComponent(orgId)}/classroom/${encodeURIComponent(classroomId)}/leave`,
+      {}
+    );
+  }
+
+  static async approveExitRequest(
+    orgId: string,
+    classroomId: string,
+    requestId: string
+  ): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/org/${encodeURIComponent(orgId)}/classroom/${encodeURIComponent(classroomId)}/exit-request/${encodeURIComponent(requestId)}/approve`,
+      {}
+    );
+  }
+
+  static async rejectExitRequest(
+    orgId: string,
+    classroomId: string,
+    requestId: string
+  ): Promise<ApiEnvelope> {
+    return HttpService.post(
+      `/org/${encodeURIComponent(orgId)}/classroom/${encodeURIComponent(classroomId)}/exit-request/${encodeURIComponent(requestId)}/reject`,
+      {}
+    );
+  }
 }

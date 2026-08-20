@@ -3,6 +3,7 @@ import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FocusPlan } from '../models/PlanModel';
 import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
+import { resolveInstantLockMinutes } from '../utils/TimerMode';
 
 export interface GuardResult<T> {
   ok: boolean;
@@ -331,6 +332,86 @@ export async function releaseScreenRestriction(
       ok: false,
       data: false,
       message: toBusinessMessage('解除应用限制失败')
+    };
+  }
+}
+
+export function isOnceStrategyName(strategyName: string): boolean {
+  return strategyName.startsWith('once_');
+}
+
+function padClock(value: number): string {
+  return value < 10 ? `0${value}` : `${value}`;
+}
+
+function clockOf(date: Date): string {
+  return `${padClock(date.getHours())}:${padClock(date.getMinutes())}`;
+}
+
+function weekdayOf(date: Date): number {
+  const day = date.getDay();
+  return day === 0 ? 7 : day;
+}
+
+/** TimeGuard 只有 HH:mm：结束时刻向上取整到下一整分，避免 UI 已到点系统还在锁 */
+export function ceilToNextMinuteMs(ms: number): number {
+  const date = new Date(ms);
+  if (date.getSeconds() === 0 && date.getMilliseconds() === 0) {
+    return ms;
+  }
+  date.setSeconds(0, 0);
+  date.setMinutes(date.getMinutes() + 1);
+  return date.getTime();
+}
+
+export async function syncDelayedOnceGuardStrategy(
+  planId: string,
+  startAtMs: number,
+  durationMinutes: number,
+  timerMode: string,
+  selectedTokens: string[],
+  mode: 'shield' | 'allow'
+): Promise<GuardResult<number>> {
+  if (selectedTokens.length === 0 && mode !== 'allow') {
+    return { ok: false, data: 0, message: toBusinessMessage('请先选择要限制的应用') };
+  }
+  const lockMinutes = resolveInstantLockMinutes(durationMinutes, timerMode);
+  const endAtMs = ceilToNextMinuteMs(startAtMs + lockMinutes * 60_000);
+  const startDate = new Date(startAtMs);
+  const endDate = new Date(endAtMs);
+  const startDay = weekdayOf(startDate);
+  const endDay = weekdayOf(endDate);
+  const strategy: guardService.GuardStrategy = {
+    name: planId,
+    timeStrategy: {
+      type: guardService.TimeStrategyType.START_END_TIME_TYPE,
+      startTime: clockOf(startDate),
+      endTime: clockOf(endDate),
+      repeat: startDay === endDay ? [startDay] : [startDay, endDay]
+    },
+    appInfo: {
+      appTokens: [...selectedTokens]
+    },
+    appRestrictionType: getRestrictionType(mode)
+  };
+  try {
+    try {
+      await guardService.addGuardStrategy(strategy);
+    } catch (error) {
+      const guardError = error as GuardErrorLike;
+      if (!isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.STRATEGY_NAME_ALREADY_EXIST)) {
+        throw new Error(String(error));
+      }
+      await guardService.updateGuardStrategy(planId, strategy);
+    }
+    await startPlanGuardStrategy(planId);
+    return { ok: true, data: endAtMs, message: '已预约延迟开始' };
+  } catch (error) {
+    logGuardError(`syncDelayedOnceGuardStrategy(${planId})`, error as Object);
+    return {
+      ok: false,
+      data: 0,
+      message: toBusinessMessage('预约延迟开始失败')
     };
   }
 }

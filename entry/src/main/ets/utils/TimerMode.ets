@@ -1,8 +1,7 @@
 /**
- * 正计时无产品硬上限；锁机仍需结束点。
- * 对齐 rn-expo：用 23h 作开放锁机窗（不展示给用户）。
+ * 正计时无产品硬上限；锁机默认 12h 后自动结束。
  */
-export const COUNTUP_OPEN_LOCK_MIN: number = 23 * 60;
+export const COUNTUP_OPEN_LOCK_MIN: number = 12 * 60;
 
 export type TimerMode = 'countdown' | 'countup';
 

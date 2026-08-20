@@ -8,8 +8,7 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute, PageRoutes, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
 import {
-  fetchHasOnboardingProfile,
-  markOnboardingCompleted
+  routeAfterWelcomeOldUserLogin
 } from '../../services/OnboardingApiService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
@@ -48,17 +47,15 @@ struct EmailLoginPage {
     showToast('登录成功', this.getUIContext());
     const loginFrom = String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '');
     if (loginFrom === 'welcome_old_user') {
-      const hasProfile = await fetchHasOnboardingProfile(hostContext);
-      if (hasProfile) {
-        markOnboardingCompleted(hostContext);
-        AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
-        AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+      const goHome = await routeAfterWelcomeOldUserLogin(
+        hostContext,
+        UserStore.lastLoginUserId
+      );
+      if (goHome) {
         returnToMainTab('focus');
-        return;
+      } else {
+        replaceRoute(PageRoutes.Onboarding);
       }
-      AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
-      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
-      replaceRoute(PageRoutes.Onboarding);
       return;
     }
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');

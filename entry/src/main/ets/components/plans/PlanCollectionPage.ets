@@ -38,6 +38,7 @@ export struct PlanCollectionPage {
       return;
     }
     AppStorage.setOrCreate(StoreKeys.ScheduledSessionCurrentId, '');
+    ScheduledListStore.clearEditingSession();
     pushRoute(PageRoutes.PlanAdd);
   }
 

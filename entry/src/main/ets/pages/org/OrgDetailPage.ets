@@ -5,18 +5,28 @@ import { showErrorToast, showToast } from '../../common/Toast';
 import { UsersIcon } from '../../components/common/UsersIcon';
 import { AppTheme } from '../../constants/Theme';
 import {
+  formatOrgClassroomElapsed,
+  isOrgClassroomFocusing,
+  isOrgClassroomJoinable,
   ORG_DEFAULT_INTRO,
   ORG_DEFAULT_THEME,
+  OrgClassroomActive,
   OrgDetail,
   OrgLive,
   OrgLiveDuo,
   OrgLiveSolo,
-  OrgLiveWaiting,
   OrgRank,
   OrgRankItem
 } from '../../models/OrgModel';
 import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
-import { PageRoutes, backRoute, pushOrgMembers, pushRoute } from '../../router/PageRoutes';
+import {
+  PageRoutes,
+  backRoute,
+  pushOrgClassroomCreate,
+  pushOrgClassroomJoin,
+  pushOrgMembers,
+  pushRoute
+} from '../../router/PageRoutes';
 import { formatSuccessDurationLabel, getStatsPeriodLabel, StatsPeriod } from '../../services/StatsRecordUtil';
 import { OrgStore } from '../../stores/OrgStore';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -25,7 +35,7 @@ import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
 
-type OrgTab = 'rank' | 'waiting' | 'duo' | 'solo';
+type OrgTab = 'rank' | 'duo' | 'solo';
 
 interface OrgTabItem {
   key: OrgTab;
@@ -39,10 +49,9 @@ interface RankMedalStyle {
 }
 
 const PERIODS: StatsPeriod[] = ['today', 'week', 'month'];
-const RANK_LIMIT: number = 10;
+const RANK_LIMIT: number = 50;
 const TABS: OrgTabItem[] = [
   { key: 'rank', label: '🌟 排行榜' },
-  { key: 'waiting', label: '⌛️ 待加入' },
   { key: 'duo', label: '搭子互督中' },
   { key: 'solo', label: '单人专注中' }
 ];
@@ -63,7 +72,10 @@ struct OrgDetailPage {
   @State leaving: boolean = false;
   @State joining: boolean = false;
   @State topSafeInsetVp: number = 0;
-  @State tabItemWidths: number[] = [0, 0, 0, 0];
+  @State tabItemWidths: number[] = [0, 0, 0];
+  @State activeClassroom: OrgClassroomActive | null = null;
+  @State classroomNowMs: number = Date.now();
+  private classroomTimerId: number = -1;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -88,6 +100,35 @@ struct OrgDetailPage {
 
   aboutToDisappear(): void {
     this.setStatusBarContentWhite(false);
+    this.clearClassroomTimer();
+  }
+
+  private clearClassroomTimer(): void {
+    if (this.classroomTimerId !== -1) {
+      clearInterval(this.classroomTimerId);
+      this.classroomTimerId = -1;
+    }
+  }
+
+  private startClassroomTimer(): void {
+    this.clearClassroomTimer();
+    if (!this.activeClassroom) {
+      return;
+    }
+    this.classroomTimerId = setInterval(() => {
+      this.classroomNowMs = Date.now();
+    }, 1000);
+  }
+
+  private async loadActiveClassroom(): Promise<void> {
+    if (this.orgId.length === 0) {
+      this.activeClassroom = null;
+      this.clearClassroomTimer();
+      return;
+    }
+    const active = await OrgStore.getActiveClassroom(this.orgId);
+    this.activeClassroom = isOrgClassroomJoinable(active) ? active : null;
+    this.startClassroomTimer();
   }
 
   private setStatusBarContentWhite(lightIcons: boolean): void {
@@ -140,6 +181,7 @@ struct OrgDetailPage {
     await OrgStore.fetchDetail(this.orgId);
     await OrgStore.fetchRank(this.orgId, 'today');
     await OrgStore.fetchLive(this.orgId);
+    await this.loadActiveClassroom();
     this.syncFromStore();
     this.pageLoading = false;
   }
@@ -206,9 +248,7 @@ struct OrgDetailPage {
       return item.label;
     }
     let count = 0;
-    if (item.key === 'waiting') {
-      count = this.live.waiting.length;
-    } else if (item.key === 'duo') {
+    if (item.key === 'duo') {
       count = this.live.duo_active.length;
     } else if (item.key === 'solo') {
       count = this.live.solo_active.length;
@@ -230,12 +270,12 @@ struct OrgDetailPage {
   }
 
   private getTabIndicatorWidth(index: number): number {
-    const inset: number = 16;
+    const horizontalInset: number = 24;
     const width = this.tabItemWidths[index];
-    if (width <= inset) {
+    if (width <= horizontalInset) {
       return 0;
     }
-    return width - inset;
+    return width - horizontalInset;
   }
 
   private async refreshCurrentTab(): Promise<void> {
@@ -249,6 +289,7 @@ struct OrgDetailPage {
       } else {
         await OrgStore.fetchLive(this.orgId);
       }
+      await this.loadActiveClassroom();
       this.syncFromStore();
     } finally {
       this.refreshing = false;
@@ -498,6 +539,58 @@ struct OrgDetailPage {
   }
 
   @Builder
+  private buildClassroomBanner(): void {
+    Row() {
+      Column({ space: 6 }) {
+        Text(this.activeClassroom ? this.activeClassroom.classroom.title : '')
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Row({ space: 6 }) {
+          Circle()
+            .width(6)
+            .height(6)
+            .fill(AppTheme.colors.success)
+          Text('正在上课中')
+            .fontSize(12)
+            .fontColor(AppTheme.colors.textSecondary)
+          Text(this.activeClassroom
+            ? formatOrgClassroomElapsed(this.activeClassroom.classroom.active_at, this.classroomNowMs)
+            : '')
+            .fontSize(12)
+            .fontColor(AppTheme.colors.textSecondary)
+        }
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Text(this.isOwner()
+        ? '管理'
+        : (isOrgClassroomFocusing(this.activeClassroom, this.userInfo.id) ? '继续专注' : '加入'))
+        .fontSize(14)
+        .fontColor(AppTheme.colors.primary)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([AppTheme.colors.textMuted])
+        .margin({ left: 2 })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+    .margin({ left: 16, right: 16, top: 12 })
+    .backgroundColor(AppTheme.colors.surface)
+    .borderRadius(12)
+    .onClick(() => {
+      if (this.isOwner()) {
+        pushOrgClassroomCreate();
+        return;
+      }
+      pushOrgClassroomJoin(this.orgId);
+    })
+  }
+
+  @Builder
   private buildTabBar(): void {
     Stack({ alignContent: Alignment.Bottom }) {
       Row()
@@ -527,9 +620,10 @@ struct OrgDetailPage {
                   this.currentTab === item.key ? AppTheme.colors.primary : Color.Transparent
                 )
                 .clip(true)
+                .margin({ left: 12 })
             }
             .height(44)
-            .alignItems(HorizontalAlign.Center)
+            .alignItems(HorizontalAlign.Start)
             .onClick(() => {
               void this.onTabChange(item.key);
             })
@@ -537,10 +631,12 @@ struct OrgDetailPage {
         }
         .height(44)
         .padding({ left: 2, right: 2 })
+        .justifyContent(FlexAlign.Start)
         .alignItems(VerticalAlign.Center)
       }
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)
+      .align(Alignment.TopStart)
       .width('100%')
       .height(44)
       .zIndex(1)
@@ -706,38 +802,6 @@ struct OrgDetailPage {
   }
 
   @Builder
-  private buildWaitingTab(): void {
-    Column({ space: 8 }) {
-      if (this.tabLoading) {
-        LoadingProgress()
-          .width(32)
-          .height(32)
-          .color(AppTheme.colors.primary)
-          .margin({ top: 40, bottom: 40 })
-      } else if (this.live && this.live.waiting.length > 0) {
-        ForEach(this.live.waiting, (item: OrgLiveWaiting) => {
-          this.buildUserRow(
-            item.user_id,
-            item.avatar,
-            `${item.username}${this.isMe(item.user_id) ? '（我）' : ''}`,
-            `${item.title.length > 0 ? item.title : '互督邀请'} · 等待搭子加入`,
-            this.isMe(item.user_id)
-          )
-        }, (item: OrgLiveWaiting) => item.user_id)
-      } else {
-        Text('暂无等待加入的互督')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textMuted)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .padding({ top: 40, bottom: 40 })
-      }
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 12, bottom: 32 })
-  }
-
-  @Builder
   private buildDuoTab(): void {
     Column({ space: 8 }) {
       if (this.tabLoading) {
@@ -807,8 +871,6 @@ struct OrgDetailPage {
   private buildTabBody(): void {
     if (this.currentTab === 'rank') {
       this.buildRankTab()
-    } else if (this.currentTab === 'waiting') {
-      this.buildWaitingTab()
     } else if (this.currentTab === 'duo') {
       this.buildDuoTab()
     } else {
@@ -832,6 +894,9 @@ struct OrgDetailPage {
     } else {
       Column() {
         this.buildHeader()
+        if (this.isMember() && isOrgClassroomJoinable(this.activeClassroom)) {
+          this.buildClassroomBanner()
+        }
         this.buildTabBar()
         Refresh({ refreshing: $$this.refreshing }) {
           Scroll() {

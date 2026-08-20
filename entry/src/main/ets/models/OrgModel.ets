@@ -341,6 +341,215 @@ export function formatOrgShortMins(min: number): string {
   return m > 0 ? `${h}小时${m}分` : `${h}小时`;
 }
 
+function asBoolean(value: Object | undefined, fallback: boolean = false): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const text = asString(value);
+  if (text === 'true' || text === '1') {
+    return true;
+  }
+  if (text === 'false' || text === '0') {
+    return false;
+  }
+  return fallback;
+}
+
+export interface OrgClassroomSummary {
+  id: string;
+  org_id: string;
+  title: string;
+  duration_min: number;
+  max_apps: number;
+  allow_exit: boolean;
+  status: string;
+  created_by: string;
+  active_at: string;
+  end_at: string;
+}
+
+export interface OrgClassroomStats {
+  joined: number;
+  focusing: number;
+  completed: number;
+  left: number;
+}
+
+export interface OrgClassroomMember {
+  user_id: string;
+  username: string;
+  avatar: string;
+  record_id: string;
+  status: string;
+}
+
+export interface OrgClassroomExitRequest {
+  id: string;
+  user_id: string;
+  username: string;
+  avatar: string;
+  record_id: string;
+  status: string;
+}
+
+export interface OrgClassroomMyExitRequest {
+  id: string;
+  status: string;
+}
+
+export interface OrgClassroomActive {
+  classroom: OrgClassroomSummary;
+  stats: OrgClassroomStats;
+  members: OrgClassroomMember[];
+  exit_requests: OrgClassroomExitRequest[];
+  my_exit_request: OrgClassroomMyExitRequest | null;
+}
+
+export function parseOrgIsoMs(raw: string): number {
+  if (raw.length === 0) {
+    return 0;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function formatOrgClassroomElapsed(startedAt: string, nowMs: number = Date.now()): string {
+  const startMs = parseOrgIsoMs(startedAt);
+  const sec = startMs > 0 ? Math.max(0, Math.floor((nowMs - startMs) / 1000)) : 0;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) {
+    const mm = m < 10 ? `0${m}` : `${m}`;
+    const ss = s < 10 ? `0${s}` : `${s}`;
+    return `${h}:${mm}:${ss}`;
+  }
+  const mm = m < 10 ? `0${m}` : `${m}`;
+  const ss = s < 10 ? `0${s}` : `${s}`;
+  return `${mm}:${ss}`;
+}
+
+export function isOrgClassroomJoinable(active: OrgClassroomActive | null): boolean {
+  if (!active) {
+    return false;
+  }
+  return active.classroom.status === 'active';
+}
+
+export function isOrgClassroomFocusing(active: OrgClassroomActive | null, userId: string): boolean {
+  if (!active || userId.length === 0) {
+    return false;
+  }
+  for (let i = 0; i < active.members.length; i++) {
+    if (active.members[i].user_id === userId && active.members[i].status === 'running') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseOrgClassroomSummary(raw: Record<string, Object>): OrgClassroomSummary {
+  return {
+    id: asString(raw['id']),
+    org_id: asString(raw['org_id']),
+    title: asString(raw['title']),
+    duration_min: asNumber(raw['duration_min'], 0),
+    max_apps: asNumber(raw['max_apps'], 0),
+    allow_exit: asBoolean(raw['allow_exit'], false),
+    status: asString(raw['status']),
+    created_by: asString(raw['created_by']),
+    active_at: asString(raw['active_at']),
+    end_at: asString(raw['end_at'])
+  };
+}
+
+function parseOrgClassroomStats(raw: Record<string, Object> | undefined): OrgClassroomStats {
+  if (!raw) {
+    return { joined: 0, focusing: 0, completed: 0, left: 0 };
+  }
+  return {
+    joined: asNumber(raw['joined'], 0),
+    focusing: asNumber(raw['focusing'], 0),
+    completed: asNumber(raw['completed'], 0),
+    left: asNumber(raw['left'], 0)
+  };
+}
+
+function parseOrgClassroomMember(raw: Record<string, Object>): OrgClassroomMember {
+  return {
+    user_id: asString(raw['user_id']),
+    username: asString(raw['username']),
+    avatar: asString(raw['avatar']),
+    record_id: asString(raw['record_id']),
+    status: asString(raw['status'])
+  };
+}
+
+function parseOrgClassroomExitRequest(raw: Record<string, Object>): OrgClassroomExitRequest {
+  return {
+    id: asString(raw['id']),
+    user_id: asString(raw['user_id']),
+    username: asString(raw['username']),
+    avatar: asString(raw['avatar']),
+    record_id: asString(raw['record_id']),
+    status: asString(raw['status'])
+  };
+}
+
+export function parseOrgClassroomActive(raw: Record<string, Object> | undefined): OrgClassroomActive | null {
+  if (!raw) {
+    return null;
+  }
+  const classroomRaw = raw['classroom'];
+  if (!classroomRaw || typeof classroomRaw !== 'object') {
+    return null;
+  }
+  const members: OrgClassroomMember[] = [];
+  const membersRaw = raw['members'];
+  if (Array.isArray(membersRaw)) {
+    const list = membersRaw as Object[];
+    for (let i = 0; i < list.length; i++) {
+      const row = list[i];
+      if (row && typeof row === 'object') {
+        members.push(parseOrgClassroomMember(row as Record<string, Object>));
+      }
+    }
+  }
+  const exitRequests: OrgClassroomExitRequest[] = [];
+  const exitRaw = raw['exit_requests'];
+  if (Array.isArray(exitRaw)) {
+    const list = exitRaw as Object[];
+    for (let i = 0; i < list.length; i++) {
+      const row = list[i];
+      if (row && typeof row === 'object') {
+        exitRequests.push(parseOrgClassroomExitRequest(row as Record<string, Object>));
+      }
+    }
+  }
+  let myExit: OrgClassroomMyExitRequest | null = null;
+  const myRaw = raw['my_exit_request'];
+  if (myRaw && typeof myRaw === 'object') {
+    const myRec = myRaw as Record<string, Object>;
+    const id = asString(myRec['id']);
+    if (id.length > 0) {
+      myExit = {
+        id,
+        status: asString(myRec['status'])
+      };
+    }
+  }
+  const statsRaw = raw['stats'];
+  return {
+    classroom: parseOrgClassroomSummary(classroomRaw as Record<string, Object>),
+    stats: parseOrgClassroomStats(
+      statsRaw && typeof statsRaw === 'object' ? statsRaw as Record<string, Object> : undefined
+    ),
+    members,
+    exit_requests: exitRequests,
+    my_exit_request: myExit
+  };
+}
+
 export function sanitizeOrgInviteCode(raw: string): string {
   let text = String(raw ?? '');
   const chars: string[] = [];

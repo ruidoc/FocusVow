@@ -3,7 +3,7 @@ import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { request } from '@kit.BasicServicesKit';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { getAppVersion, getDeviceModel } from '../common/AppInfo';
+import { getAppVersionSync, getDeviceModel } from '../common/AppInfo';
 import { ApiConfig } from '../config/ApiConfig';
 import { ApiEnvelope } from '../models/UserModel';
 import { FocusSyncService } from './FocusSyncService';
@@ -202,7 +202,7 @@ export class HttpService {
       }, UPLOAD_TIMEOUT_MS);
 
       void (async () => {
-        const appVersion = await getAppVersion();
+        const appVersion = getAppVersionSync();
         const headers: Record<string, string> = {
           'project-tag': ApiConfig.PROJECT_TAG,
           'os': ApiConfig.OS_TAG,
@@ -291,7 +291,7 @@ export class HttpService {
     contentType: string,
     size: number
   ): Promise<ApiEnvelope> {
-    const appVersion = await getAppVersion();
+    const appVersion = getAppVersionSync();
     const headers: Record<string, string> = {
       // 关键：没有这行时 multiFormDataList 会被忽略
       'Content-Type': 'multipart/form-data',
@@ -342,11 +342,11 @@ export class HttpService {
     }
   }
 
-  private static async buildHeaders(
+  private static buildHeaders(
     requiresAuth: boolean,
     context?: common.Context
-  ): Promise<Record<string, string>> {
-    const appVersion = await getAppVersion();
+  ): Record<string, string> {
+    const appVersion = getAppVersionSync();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'project-tag': ApiConfig.PROJECT_TAG,
@@ -362,6 +362,8 @@ export class HttpService {
       const token = authContext ? loadAccessToken(authContext) : '';
       if (token.length > 0) {
         headers['Authorization'] = `Bearer ${token}`;
+      } else {
+        console.warn(`[${LOG_TAG}] auth token empty, request may fail`);
       }
     }
 
@@ -415,7 +417,7 @@ export class HttpService {
       }
       const requestOptions: http.HttpRequestOptions = {
         method: method,
-        header: await HttpService.buildHeaders(requiresAuth, context),
+        header: HttpService.buildHeaders(requiresAuth, context),
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: ApiConfig.CONNECT_TIMEOUT_MS,
         readTimeout: ApiConfig.READ_TIMEOUT_MS

@@ -31,6 +31,9 @@ export type PlanPresentationState = 'running' | 'upcoming' | 'enabled' | 'paused
 /** HarmonyOS repeat 标准：1=周一 … 7=周日 */
 export const PLAN_REPEAT_DAY_OPTIONS: number[] = [1, 2, 3, 4, 5, 6, 7];
 
+/** 新建定时契约默认全周，对齐 RN plans/add */
+export const DEFAULT_PLAN_REPEAT_DAYS: number[] = [1, 2, 3, 4, 5, 6, 7];
+
 const REPEAT_DAY_FULL_LABELS: string[] = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 export function getTodayRepeatDay(): number {

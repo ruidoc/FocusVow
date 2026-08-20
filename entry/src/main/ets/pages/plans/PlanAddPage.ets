@@ -2,8 +2,16 @@ import { common } from '@kit.AbilityKit';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, validateScheduledStartTime } from '../../models/PlanModel';
-import { DuoScheduledCreatePayload, DuoParticipationMode } from '../../models/DuoModel';
+import { DEFAULT_PLAN_REPEAT_DAYS, PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, validateScheduledStartTime } from '../../models/PlanModel';
+import {
+  DuoScheduledCreatePayload,
+  DuoScheduledUpdatePayload,
+  DuoParticipationMode,
+  DuoSessionView,
+  getScheduleRepeatDays,
+  getSessionApps,
+  mergeSessionAppsForHarmony
+} from '../../models/DuoModel';
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
@@ -40,7 +48,7 @@ struct PlanAddPage {
   @State planName: string = '';
   @State startTime: string = '09:00';
   @State endTime: string = '09:30';
-  @State repeatDays: number[] = [1, 2, 3, 4, 5];
+  @State repeatDays: number[] = [...DEFAULT_PLAN_REPEAT_DAYS];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'allow';
   @State participationMode: DuoParticipationMode = 'solo';
@@ -49,9 +57,64 @@ struct PlanAddPage {
   @State timePickerVisible: boolean = false;
   @State timePickerTarget: 'start' | 'end' = 'start';
   @State timePickerDraft: Date = new Date();
+  @State statusMessage: string = '';
+  @State private editingSession: DuoSessionView | null = null;
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
   private nameInputController: TextInputController = new TextInputController();
+
+  private isEditing(): boolean {
+    return this.editingSession !== null;
+  }
+
+  private isPartnerEdit(): boolean {
+    return this.isEditing() && this.editingSession?.viewer_role === 'partner';
+  }
+
+  private canEditAll(): boolean {
+    return Boolean(this.editingSession?.editable) && this.editingSession?.viewer_role === 'initiator';
+  }
+
+  private canEditApps(): boolean {
+    return Boolean(this.editingSession?.editable);
+  }
+
+  private getPageTitle(): string {
+    return this.isEditing() ? '编辑契约' : '创建契约';
+  }
+
+  private getSubmitLabel(): string {
+    if (this.isSaving) {
+      return this.isEditing() ? '保存中...' : '生效中...';
+    }
+    return this.isEditing() ? '保存修改' : '签定契约';
+  }
+
+  private fillFormFromSession(session: DuoSessionView): void {
+    this.planName = session.title;
+    this.startTime = session.schedule_start && session.schedule_start.length > 0
+      ? session.schedule_start
+      : '09:00';
+    this.endTime = session.schedule_end && session.schedule_end.length > 0
+      ? session.schedule_end
+      : '18:00';
+    this.repeatDays = getScheduleRepeatDays(session.schedule_repeat ?? '');
+    this.selectedTokens = getSessionApps(session);
+    this.mode = session.mode === 'shield' ? 'shield' : 'allow';
+    this.participationMode = session.participation_mode === 'duo' ? 'duo' : 'solo';
+    this.hasInitializedDefaultTime = true;
+  }
+
+  private shouldShowStatusLine(): boolean {
+    if (this.statusMessage.length === 0) {
+      return false;
+    }
+    const m = /^已选择 (\d+) 个应用$/.exec(this.statusMessage);
+    if (m !== null && Number(m[1]) === this.selectedTokens.length) {
+      return false;
+    }
+    return true;
+  }
 
   private padTimePart(value: number): string {
     return value.toString().padStart(2, '0');
@@ -144,6 +207,16 @@ struct PlanAddPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     UserStore.hydrate(hostContext);
+    ScheduledListStore.hydrate();
+    const editing = ScheduledListStore.getEditingSession();
+    if (editing) {
+      this.editingSession = editing;
+      this.fillFormFromSession(editing);
+      this.statusMessage = '';
+      return;
+    }
+    this.editingSession = null;
+    this.statusMessage = '';
     const settingsState = SettingsStore.getState();
     this.selectedTokens = [...settingsState.selectedTokens];
     if (!this.hasInitializedDefaultTime) {
@@ -151,7 +224,15 @@ struct PlanAddPage {
     }
   }
 
+  aboutToDisappear(): void {
+    ScheduledListStore.clearEditingSession();
+    this.editingSession = null;
+  }
+
   private toggleRepeatDay(day: number): void {
+    if (this.isEditing() && !this.canEditAll()) {
+      return;
+    }
     if (this.repeatDays.includes(day)) {
       this.repeatDays = this.repeatDays.filter((item: number) => item !== day);
       return;
@@ -165,6 +246,9 @@ struct PlanAddPage {
   }
 
   private async chooseApps(): Promise<void> {
+    if (this.isEditing() && !this.canEditApps()) {
+      return;
+    }
     this.blurNameInput();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const authResult = await ensureScreenTimeAuthorization(hostContext);
@@ -180,7 +264,11 @@ struct PlanAddPage {
     this.blurNameInput();
     if (result.data) {
       this.selectedTokens = [...result.data];
-      SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
+      if (this.isEditing()) {
+        this.statusMessage = result.message;
+      } else {
+        SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
+      }
       return;
     }
 
@@ -198,6 +286,11 @@ struct PlanAddPage {
 
   private async savePlan(): Promise<void> {
     if (this.isSaving) {
+      return;
+    }
+
+    if (this.isEditing()) {
+      await this.saveEditingSession();
       return;
     }
 
@@ -295,6 +388,102 @@ struct PlanAddPage {
       showToast('契约已签订，请务必遵守', uiContext);
     }
     this.isSaving = false;
+    backRoute();
+  }
+
+  private async saveEditingSession(): Promise<void> {
+    const session = this.editingSession;
+    if (!session) {
+      return;
+    }
+
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const uiContext = this.getUIContext();
+    if (!UserStore.isLoggedIn()) {
+      showErrorToast('请先登录', uiContext);
+      return;
+    }
+
+    if (session.viewer_role === 'initiator') {
+      if (this.planName.trim().length === 0) {
+        showErrorToast('请输入契约名称', uiContext);
+        return;
+      }
+      const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
+      if (startTimeError.length > 0) {
+        showErrorToast(startTimeError, uiContext);
+        return;
+      }
+      ScheduledListStore.hydrate();
+      const scheduleTimeError = validateScheduledPlanTime(
+        this.startTime,
+        this.endTime,
+        this.repeatDays,
+        ScheduledListStore.getAllSessions(),
+        session.session_id
+      );
+      if (scheduleTimeError.length > 0) {
+        showErrorToast(scheduleTimeError, uiContext);
+        return;
+      }
+    }
+
+    this.isSaving = true;
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      showErrorToast('未完成系统授权，无法同步本机屏时策略', uiContext);
+      this.isSaving = false;
+      return;
+    }
+
+    const mergedApps = mergeSessionAppsForHarmony(
+      session.my_apps ?? [],
+      this.selectedTokens
+    );
+    const payload: DuoScheduledUpdatePayload = session.viewer_role === 'initiator'
+      ? {
+        title: this.planName,
+        start: this.startTime,
+        start_min: this.timeToMinutes(this.startTime),
+        end: this.endTime,
+        end_min: this.timeToMinutes(this.endTime),
+        repeat: this.repeatDays.join(','),
+        mode: this.mode,
+        initiator_apps: mergedApps
+      }
+      : {
+        partner_apps: mergedApps
+      };
+
+    const response = await DuoApiService.scheduledUpdate(session.session_id, payload);
+    const nextSession = DuoApiService.parseSession(response);
+    if (!nextSession) {
+      showErrorToast(response.message ?? '保存失败', uiContext);
+      this.isSaving = false;
+      return;
+    }
+
+    const guardResult = await syncGuardForSession(hostContext, nextSession);
+    this.statusMessage = guardResult.ok ? '' : '已保存，但本机屏时策略未同步，请稍后重试';
+    this.editingSession = nextSession;
+    this.fillFormFromSession(nextSession);
+    ScheduledListStore.patchSession(nextSession);
+    const listResponse = await DuoApiService.getScheduledList();
+    const list = DuoApiService.parseScheduledList(listResponse);
+    if (listResponse.statusCode === 200) {
+      ScheduledListStore.setAllSessions(list.items);
+      ScheduledListStore.clearDirty();
+    } else {
+      ScheduledListStore.markDirty();
+    }
+    this.isSaving = false;
+    ScheduledListStore.clearEditingSession();
+    if (guardResult.ok) {
+      showToast('已保存', uiContext);
+    } else {
+      showErrorToast(this.statusMessage, uiContext);
+    }
     backRoute();
   }
 
@@ -509,7 +698,19 @@ struct PlanAddPage {
         .fontSize(14)
         .fontColor(AppTheme.colors.textMuted)
         .width('100%')
-        .padding({ left: 18, right: 18, bottom: 18 })
+        .padding({
+          left: 18,
+          right: 18,
+          bottom: this.shouldShowStatusLine() ? 8 : 18
+        })
+
+      if (this.shouldShowStatusLine()) {
+        Text(this.statusMessage)
+          .fontSize(12)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width('100%')
+          .padding({ left: 18, right: 18, bottom: 18 })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -563,15 +764,19 @@ struct PlanAddPage {
   @Builder
   buildContractBody(): void {
     Column({ space: 18 }) {
-      this.buildNameCard()
-      if (SHOW_PARTICIPATION_MODE) {
-        this.buildParticipationCard()
+      if (!this.isPartnerEdit()) {
+        this.buildNameCard()
+        if (!this.isEditing() && SHOW_PARTICIPATION_MODE) {
+          this.buildParticipationCard()
+        }
+        this.buildTimeCard()
       }
-      this.buildTimeCard()
       this.buildAppCard()
-      this.buildRepeatDaysCard()
+      if (!this.isPartnerEdit()) {
+        this.buildRepeatDaysCard()
+      }
 
-      Button(this.isSaving ? '生效中...' : '签定契约')
+      Button(this.getSubmitLabel())
         .width('100%')
         .height(52)
         .type(ButtonType.Normal)
@@ -659,11 +864,14 @@ struct PlanAddPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '创建契约',
+        title: this.getPageTitle(),
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,
-        onBack: () => backRoute(),
+        onBack: () => {
+          ScheduledListStore.clearEditingSession();
+          backRoute();
+        },
         content: (): void => {
           this.buildContractBody();
         }

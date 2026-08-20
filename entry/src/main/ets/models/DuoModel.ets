@@ -161,6 +161,7 @@ export interface DuoPushPayload {
   /** '1' 表示短场无效 */
   too_short?: string;
   message_id?: string;
+  classroom_id?: string;
 }
 
 export interface PushDispatchOptions {
@@ -201,6 +202,96 @@ export function parseStringArray(raw: Object | undefined): string[] {
     }
   }
   return result;
+}
+
+function sessionAppRefKey(ref: string): string {
+  const idx = ref.lastIndexOf(':');
+  if (idx <= 0) {
+    return ref;
+  }
+  const suffix = ref.substring(idx + 1);
+  if (suffix === 'application' || suffix === 'webDomain' || suffix === 'category') {
+    return ref.substring(0, idx);
+  }
+  return ref;
+}
+
+function isIosStableId(key: string): boolean {
+  if (key.length !== 24) {
+    return false;
+  }
+  for (let i = 0; i < 24; i++) {
+    const code = key.charCodeAt(i);
+    const isHex =
+      (code >= 48 && code <= 57) ||
+      (code >= 97 && code <= 102) ||
+      (code >= 65 && code <= 70);
+    if (!isHex) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** android 包名含 `.`；iOS 24 位 hex；鸿蒙线上为 8 位 token */
+function classifySessionAppRef(ref: string): string {
+  const key = sessionAppRefKey(ref.trim());
+  if (key.length === 0) {
+    return 'unknown';
+  }
+  if (key.includes('.')) {
+    return 'android';
+  }
+  if (isIosStableId(key)) {
+    return 'ios';
+  }
+  if (key.length === 8) {
+    return 'harmony';
+  }
+  return 'unknown';
+}
+
+export function getRawSessionApps(session: DuoSessionView): string[] {
+  if (session.my_apps && session.my_apps.length > 0) {
+    return session.my_apps;
+  }
+  if (session.viewer_role === 'partner' && session.partner_apps && session.partner_apps.length > 0) {
+    return session.partner_apps;
+  }
+  return session.initiator_apps ?? [];
+}
+
+export function filterSessionAppsForHarmony(apps: string[]): string[] {
+  const result: string[] = [];
+  for (let i = 0; i < apps.length; i++) {
+    if (classifySessionAppRef(apps[i]) === 'harmony') {
+      result.push(apps[i]);
+    }
+  }
+  return result;
+}
+
+export function getSessionApps(session: DuoSessionView): string[] {
+  return filterSessionAppsForHarmony(getRawSessionApps(session));
+}
+
+export function mergeSessionAppsForHarmony(existing: string[], localApps: string[]): string[] {
+  const kept: string[] = [];
+  for (let i = 0; i < existing.length; i++) {
+    if (classifySessionAppRef(existing[i]) !== 'harmony') {
+      kept.push(existing[i]);
+    }
+  }
+  const merged: string[] = [];
+  const source: string[] = kept.concat(localApps);
+  for (let i = 0; i < source.length; i++) {
+    const ref = source[i];
+    if (ref.length === 0 || merged.indexOf(ref) >= 0) {
+      continue;
+    }
+    merged.push(ref);
+  }
+  return merged;
 }
 
 export function getScheduleRepeatDays(repeat: string): number[] {
@@ -344,21 +435,108 @@ export function sortScheduledSessions(sessions: DuoSessionView[]): DuoSessionVie
   return sorted;
 }
 
+export function scheduledSessionPlanId(sessionId: string): string {
+  return `session_${sessionId}`;
+}
+
+export function isScheduledTornToday(
+  sessionId: string,
+  exitPlanIds: string[],
+  nowAt: number = Date.now()
+): boolean {
+  const date = new Date(nowAt);
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const dateKey = `${year}-${month}-${day}`;
+  return exitPlanIds.includes(`${dateKey}:${scheduledSessionPlanId(sessionId)}`);
+}
+
+export function getTodayScheduledRepeatWeekday(nowAt: number = Date.now()): number {
+  const jsWeekday = new Date(nowAt).getDay();
+  return jsWeekday === 0 ? 7 : jsWeekday;
+}
+
+/** 今日已撕毁时从 repeat 去掉当天，对齐 RN syncGuardForSession */
+export function applyTornTodayToRepeatDays(
+  sessionId: string,
+  repeatDays: number[],
+  exitPlanIds: string[],
+  nowAt: number = Date.now()
+): number[] {
+  if (!isScheduledTornToday(sessionId, exitPlanIds, nowAt)) {
+    return repeatDays;
+  }
+  const today = getTodayScheduledRepeatWeekday(nowAt);
+  return repeatDays.filter((day: number) => day !== today);
+}
+
+export function isScheduledSessionMatchesToday(
+  session: DuoSessionView,
+  nowAt: number = Date.now()
+): boolean {
+  const repeatRaw = session.schedule_repeat && session.schedule_repeat.length > 0
+    ? session.schedule_repeat
+    : String(session.schedule_json?.['repeat'] ?? '');
+  if (repeatRaw === 'once') {
+    return false;
+  }
+  const repeatDays = getScheduleRepeatDays(repeatRaw);
+  if (repeatDays.length === 0) {
+    return false;
+  }
+  return repeatDays.includes(getScheduledRepeatWeekday(nowAt));
+}
+
+export function isTodayScheduledWindowEnded(
+  session: DuoSessionView,
+  nowAt: number = Date.now()
+): boolean {
+  const startMin = getScheduledSessionStartMin(session);
+  const endMin = getScheduledSessionEndMin(session);
+  if (endMin <= startMin) {
+    return false;
+  }
+  const nowDate = new Date(nowAt);
+  const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes();
+  return nowMin >= endMin;
+}
+
+/** 列表/详情展示用，对齐 RN getScheduledListStatusLabel */
+export function getScheduledListStatusLabel(
+  session: DuoSessionView,
+  exitPlanIds: string[]
+): string {
+  if (isScheduledTornToday(session.session_id, exitPlanIds)) {
+    return '今日已撕毁';
+  }
+  if (session.status === 'breached') {
+    return '今日已撕毁';
+  }
+  const repeatRaw = session.schedule_repeat ?? '';
+  if (repeatRaw !== 'once' &&
+    (session.status === 'scheduled' || session.status === 'active')) {
+    if (!isScheduledSessionMatchesToday(session)) {
+      return '今日不生效';
+    }
+    if (isTodayScheduledWindowEnded(session)) {
+      return '今日已完成';
+    }
+  }
+  return getScheduledSessionStatusLabel(session);
+}
+
+export function isInactiveScheduledListSession(session: DuoSessionView): boolean {
+  return session.status === 'completed'
+    || session.status === 'failed'
+    || session.status === 'cancelled';
+}
+
 export function getScheduledSessionStatusLabel(session: DuoSessionView): string {
   if (session.status === 'active') {
-    // 窗口已结束但 complete-window 未回写时，勿误导为「进行中」
-    if (!isScheduledSessionActivationOpen(session)) {
-      if (session.expects_duo && session.participation_mode !== 'duo') {
-        return '等待搭子';
-      }
-      return '待开始';
-    }
     return '进行中';
   }
   if (session.status === 'scheduled') {
-    if (session.expects_duo && session.participation_mode !== 'duo') {
-      return '等待搭子';
-    }
     return '待开始';
   }
   if (session.status === 'cancelled') {
@@ -392,6 +570,44 @@ export function isDuoWaitPartnerJoined(
   }
   return partnerReady ||
     (session.status === 'active' && session.type !== 'scheduled');
+}
+
+const SCHEDULED_WEEKDAY_SHORT: string[] = ['日', '一', '二', '三', '四', '五', '六'];
+
+function jsWeekdayToServerDay(jsWeekday: number): number {
+  return jsWeekday === 0 ? 7 : jsWeekday;
+}
+
+/** 撕毁后详情页提示：明日还在重复日 → 每日正常生效；否则周x */
+export function getTornTodayResumeHint(
+  session: DuoSessionView,
+  exitPlanIds: string[],
+  nowAt: number = Date.now()
+): string | null {
+  if (!isScheduledTornToday(session.session_id, exitPlanIds, nowAt)) {
+    return null;
+  }
+  const days = getScheduleRepeatDays(session.schedule_repeat || '');
+  const jsToday = new Date(nowAt).getDay();
+  const tomorrowServer = jsWeekdayToServerDay((jsToday + 1) % 7);
+  if (days.includes(tomorrowServer)) {
+    return '今日已经撕毁，明日正常生效';
+  }
+  for (let i = 1; i <= 7; i++) {
+    const jsDay = (jsToday + i) % 7;
+    if (days.includes(jsWeekdayToServerDay(jsDay))) {
+      return `今日已经撕毁，周${SCHEDULED_WEEKDAY_SHORT[jsDay]}正常生效`;
+    }
+  }
+  return '今日已经撕毁，明日正常生效';
+}
+
+export function getScheduledParticipationLabel(session: DuoSessionView): string {
+  if (!session.expects_duo) {
+    return '单人专注';
+  }
+  const joined = isDuoWaitPartnerJoined(session, true);
+  return joined ? '搭子互督（搭子已加入）' : '搭子互督（等待搭子）';
 }
 
 function parsePartnerBrief(raw: Object | undefined | null): DuoPartnerBrief | undefined {

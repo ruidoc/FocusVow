@@ -13,6 +13,7 @@ import { ExtendApiService } from '../services/ExtendApiService';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
 import { clearAllScheduledGuardOnLogout, syncAllScheduledGuardOnLogin } from '../services/ScheduledCovenantService';
+import { clearExitPlanIds } from '../services/ExitPlanIdsService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { HuaweiAccountService } from '../services/HuaweiAccountService';
 import { PlanStore } from './PlanStore';
@@ -117,6 +118,8 @@ export class UserStore {
     );
   }
 
+  static lastLoginUserId: string = '';
+
   /** 微信新用户需绑邮箱时的标记，非错误文案 */
   static readonly WECHAT_NEED_BIND: string = 'WECHAT_NEED_BIND';
 
@@ -135,7 +138,7 @@ export class UserStore {
     if (token.length === 0) {
       return '登录失败：未返回 token';
     }
-
+    UserStore.lastLoginUserId = String(response.data?.['user_id'] ?? '');
     return UserStore.applySessionToken(context, token, 'email', isNew);
   }
 
@@ -164,6 +167,7 @@ export class UserStore {
     if (token.length === 0) {
       return '微信登录失败：未返回 token';
     }
+    UserStore.lastLoginUserId = String(response.data?.['user_id'] ?? '');
     UserStore.setWxPendingInfo(null);
     return UserStore.applySessionToken(
       context,
@@ -195,6 +199,7 @@ export class UserStore {
     if (token.length === 0) {
       return '华为账号登录失败：未返回 token';
     }
+    UserStore.lastLoginUserId = String(response.data?.['user_id'] ?? '');
     return UserStore.applySessionToken(
       context,
       token,
@@ -227,6 +232,7 @@ export class UserStore {
     if (token.length === 0) {
       return '绑定失败：未返回 token';
     }
+    UserStore.lastLoginUserId = String(response.data?.['user_id'] ?? '');
     UserStore.setWxPendingInfo(null);
     return UserStore.applySessionToken(context, token, 'wechat');
   }
@@ -251,6 +257,7 @@ export class UserStore {
     if (token.length === 0) {
       return '注册失败：未返回 token';
     }
+    UserStore.lastLoginUserId = String(response.data?.['user_id'] ?? '');
     UserStore.setWxPendingInfo(null);
     return UserStore.applySessionToken(
       context,
@@ -496,6 +503,7 @@ export class UserStore {
     AnalyticsService.trackLogout(context);
     clearDuoWaitContext();
     clearSignupTrialEligible(context);
+    clearExitPlanIds(context);
     clearUserSession(context);
     BenefitStore.reset();
     InboxStore.reset();

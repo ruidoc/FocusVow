@@ -40,10 +40,14 @@ export class StoreKeys {
   static readonly DuoWaitExpireAtMs: string = 'duo.wait.expire_at_ms';
   /** 即时等待开始时刻（ms），用于进度圆环 */
   static readonly DuoWaitStartedAtMs: string = 'duo.wait.started_at_ms';
+  static readonly PendingQuickStartTitle: string = 'pending.quick_start.title';
+  static readonly PendingQuickStartDelayMin: string = 'pending.quick_start.delay_min';
+  static readonly PendingQuickStartStartAtMs: string = 'pending.quick_start.start_at_ms';
   static readonly ScheduledSessionCurrentId: string = 'scheduled.session.currentId';
   static readonly ScheduledListAll: string = 'scheduled.list.all';
   static readonly ScheduledListFilter: string = 'scheduled.list.filter';
   static readonly ScheduledListDirty: string = 'scheduled.list.dirty';
+  static readonly ScheduledListEditingSession: string = 'scheduled.list.editingSession';
   static readonly StatsDetailPeriod: string = 'stats.detail.period';
   static readonly StatsDetailSection: string = 'stats.detail.section';
   static readonly OrgDetailId: string = 'org.detail.id';

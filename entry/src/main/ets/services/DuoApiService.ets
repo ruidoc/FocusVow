@@ -16,6 +16,7 @@ import {
   parseDuoStatsTimeline
 } from '../models/DuoModel';
 import { ApiEnvelope } from '../models/UserModel';
+import { ExtensionNetworkService } from './ExtensionNetworkService';
 import { HttpService } from './HttpService';
 
 export class DuoApiService {
@@ -197,13 +198,11 @@ export class DuoApiService {
     context?: common.Context
   ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {};
-    return HttpService.post(
-      `/duo/scheduled/${encodeURIComponent(sessionId)}/activate`,
-      body,
-      true,
-      true,
-      context
-    );
+    const path = `/duo/scheduled/${encodeURIComponent(sessionId)}/activate`;
+    if (context) {
+      return ExtensionNetworkService.post(context, path, body);
+    }
+    return HttpService.post(path, body, true, true);
   }
 
   static async completeScheduledWindow(

@@ -1,18 +1,25 @@
 import { bundleManager } from '@kit.AbilityKit';
 import deviceInfo from '@ohos.deviceInfo';
 
+let cachedAppVersion: string = 'unknown';
+
+export function getAppVersionSync(): string {
+  return cachedAppVersion;
+}
+
 export async function getAppVersion(): Promise<string> {
   try {
     const bundleInfo = await bundleManager.getBundleInfoForSelf(
       bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION
     );
     if (bundleInfo.versionName && bundleInfo.versionName.length > 0) {
-      return bundleInfo.versionName;
+      cachedAppVersion = bundleInfo.versionName;
+      return cachedAppVersion;
     }
-    return 'unknown';
+    return cachedAppVersion;
   } catch (error) {
     console.error(`getAppVersion failed: ${String(error)}`);
-    return 'unknown';
+    return cachedAppVersion;
   }
 }
 

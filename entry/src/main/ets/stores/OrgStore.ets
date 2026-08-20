@@ -1,8 +1,10 @@
 import {
+  OrgClassroomActive,
   OrgDetail,
   OrgListItem,
   OrgLive,
   OrgRank,
+  parseOrgClassroomActive,
   parseOrgListItem,
   parseOrgListItems
 } from '../models/OrgModel';
@@ -262,5 +264,69 @@ export class OrgStore {
       }
     }
     return response;
+  }
+
+  static async getActiveClassroom(orgId: string): Promise<OrgClassroomActive | null> {
+    const response = await OrgApiService.getActiveClassroom(orgId);
+    if (response.statusCode !== 200 || !response.data) {
+      return null;
+    }
+    return parseOrgClassroomActive(response.data);
+  }
+
+  static async createClassroom(
+    orgId: string,
+    title: string,
+    maxApps: number,
+    allowExit: boolean
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'title': title,
+      'duration_min': 60,
+      'max_apps': maxApps,
+      'allow_exit': allowExit
+    };
+    return OrgApiService.createClassroom(orgId, body);
+  }
+
+  static async joinClassroom(orgId: string, classroomId: string): Promise<ApiEnvelope> {
+    return OrgApiService.joinClassroom(orgId, classroomId);
+  }
+
+  static async startClassroom(
+    orgId: string,
+    classroomId: string,
+    apps: string[],
+    startedAt: number
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'started_at': startedAt
+    };
+    body['apps'] = apps;
+    return OrgApiService.startClassroom(orgId, classroomId, body);
+  }
+
+  static async endClassroom(orgId: string, classroomId: string): Promise<ApiEnvelope> {
+    return OrgApiService.endClassroom(orgId, classroomId);
+  }
+
+  static async leaveClassroom(orgId: string, classroomId: string): Promise<ApiEnvelope> {
+    return OrgApiService.leaveClassroom(orgId, classroomId);
+  }
+
+  static async approveExitRequest(
+    orgId: string,
+    classroomId: string,
+    requestId: string
+  ): Promise<ApiEnvelope> {
+    return OrgApiService.approveExitRequest(orgId, classroomId, requestId);
+  }
+
+  static async rejectExitRequest(
+    orgId: string,
+    classroomId: string,
+    requestId: string
+  ): Promise<ApiEnvelope> {
+    return OrgApiService.rejectExitRequest(orgId, classroomId, requestId);
   }
 }

@@ -5,8 +5,7 @@ import { AgreementConsentRow } from '../../components/common/AgreementConsentRow
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
-  fetchHasOnboardingProfile,
-  markOnboardingCompleted
+  routeAfterWelcomeOldUserLogin
 } from '../../services/OnboardingApiService';
 import { backRoute, PageRoutes, pushRoute, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -55,17 +54,15 @@ struct LoginPage {
   private async afterLoginSuccess(hostContext: common.UIAbilityContext): Promise<void> {
     showToast('登录成功', this.getUIContext());
     if (this.loginFrom === 'welcome_old_user') {
-      const hasProfile = await fetchHasOnboardingProfile(hostContext);
-      if (hasProfile) {
-        markOnboardingCompleted(hostContext);
-        AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
-        AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+      const goHome = await routeAfterWelcomeOldUserLogin(
+        hostContext,
+        UserStore.lastLoginUserId
+      );
+      if (goHome) {
         returnToMainTab('focus');
-        return;
+      } else {
+        replaceRoute(PageRoutes.Onboarding);
       }
-      AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
-      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
-      replaceRoute(PageRoutes.Onboarding);
       return;
     }
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');

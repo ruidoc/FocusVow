@@ -20,6 +20,11 @@ export interface QuickFocusOptions {
   timerMode?: string;
   /** 正计时最短时长（分钟）；倒计时为 0 */
   minDurationMin?: number;
+  planId?: string;
+  /** 为 true 时跳过开始锁机飞书上报（由调用方自行上报） */
+  skipStartedNotify?: boolean;
+  /** 单人延时预约到点后开始的专注 */
+  isDelayedSolo?: boolean;
 }
 
 export const CYCLE_GUARD_STRATEGY_NAME: string = 'cycle_quota_strategy';
@@ -43,6 +48,8 @@ export interface ActiveLockState {
   timerMode: string;
   /** 正计时最短时长（分钟）；倒计时为 0 */
   minDurationMin: number;
+  /** 单人延时预约开始后为 true */
+  isDelayedSolo: boolean;
 }
 
 export function createIdleLockState(): ActiveLockState {
@@ -62,7 +69,8 @@ export function createIdleLockState(): ActiveLockState {
     participationMode: '',
     partnerNickname: '',
     timerMode: 'countdown',
-    minDurationMin: 0
+    minDurationMin: 0,
+    isDelayedSolo: false
   };
 }
 
@@ -88,7 +96,8 @@ export function normalizeActiveLockState(state?: Partial<ActiveLockState> | null
     participationMode: state.participationMode ?? idle.participationMode,
     partnerNickname: state.partnerNickname ?? idle.partnerNickname,
     timerMode: state.timerMode === 'countup' ? 'countup' : 'countdown',
-    minDurationMin: state.minDurationMin ?? idle.minDurationMin
+    minDurationMin: state.minDurationMin ?? idle.minDurationMin,
+    isDelayedSolo: state.isDelayedSolo ?? idle.isDelayedSolo
   };
 }
 
@@ -112,7 +121,8 @@ export function withLockPartnerNickname(state: ActiveLockState, partnerNickname:
     participationMode: state.participationMode,
     partnerNickname: partnerNickname.trim().length > 0 ? partnerNickname.trim() : '搭子',
     timerMode: state.timerMode,
-    minDurationMin: state.minDurationMin
+    minDurationMin: state.minDurationMin,
+    isDelayedSolo: state.isDelayedSolo
   });
 }
 
@@ -164,10 +174,6 @@ export function isTimedLockFinished(state: ActiveLockState, nowAt: number): bool
   if (state.kind !== 'covenant' && state.kind !== 'quick_focus') {
     return false;
   }
-  // 正计时不因到点自动完成
-  if (state.kind === 'quick_focus' && isCountupLock(state)) {
-    return false;
-  }
 
   return state.endAt > 0 && getRemainingSeconds(state, nowAt) === 0;
 }
@@ -212,7 +218,9 @@ export function createQuickFocusLockState(
   startedAtMs?: number,
   endAtMs?: number,
   timerMode: string = 'countdown',
-  minDurationMin: number = 0
+  minDurationMin: number = 0,
+  planId: string = '',
+  isDelayedSolo: boolean = false
 ): ActiveLockState {
   const normalizedMode = timerMode === 'countup' ? 'countup' : 'countdown';
   const lockMinutes = resolveInstantLockMinutes(durationMinutes, normalizedMode);
@@ -227,9 +235,9 @@ export function createQuickFocusLockState(
 
   return {
     kind: 'quick_focus',
-    strategyName: '',
+    strategyName: planId,
     title,
-    planId: '',
+    planId,
     selectedTokens: [...selectedTokens],
     selectedCount: selectedTokens.length,
     mode,
@@ -241,7 +249,8 @@ export function createQuickFocusLockState(
     participationMode,
     partnerNickname,
     timerMode: normalizedMode,
-    minDurationMin: resolvedMin
+    minDurationMin: resolvedMin,
+    isDelayedSolo
   };
 }
 
@@ -274,7 +283,8 @@ export function createCovenantLockState(
     participationMode,
     partnerNickname,
     timerMode: 'countdown',
-    minDurationMin: 0
+    minDurationMin: 0,
+    isDelayedSolo: false
   };
 }
 
@@ -299,6 +309,7 @@ export function createCycleGuardLockState(
     participationMode: '',
     partnerNickname: '',
     timerMode: 'countdown',
-    minDurationMin: 0
+    minDurationMin: 0,
+    isDelayedSolo: false
   };
 }

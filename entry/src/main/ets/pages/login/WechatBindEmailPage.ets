@@ -6,8 +6,7 @@ import { AppTheme } from '../../constants/Theme';
 import { createEmptyWxPendingInfo, WxPendingInfo } from '../../models/UserModel';
 import { backRoute, PageRoutes, pushRoute, replaceRoute, returnToMainTab } from '../../router/PageRoutes';
 import {
-  fetchHasOnboardingProfile,
-  markOnboardingCompleted
+  routeAfterWelcomeOldUserLogin
 } from '../../services/OnboardingApiService';
 import { ExtendApiService } from '../../services/ExtendApiService';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -89,17 +88,15 @@ struct WechatBindEmailPage {
     AppStorage.setOrCreate(StoreKeys.BindEmailFrom, '');
     const loginFrom = String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '');
     if (loginFrom === 'welcome_old_user') {
-      const hasProfile = await fetchHasOnboardingProfile(hostContext);
-      if (hasProfile) {
-        markOnboardingCompleted(hostContext);
-        AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
-        AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+      const goHome = await routeAfterWelcomeOldUserLogin(
+        hostContext,
+        UserStore.lastLoginUserId
+      );
+      if (goHome) {
         returnToMainTab('focus');
-        return;
+      } else {
+        replaceRoute(PageRoutes.Onboarding);
       }
-      AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
-      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
-      replaceRoute(PageRoutes.Onboarding);
       return;
     }
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');

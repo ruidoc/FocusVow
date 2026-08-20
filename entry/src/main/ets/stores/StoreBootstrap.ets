@@ -3,6 +3,7 @@ import { createHiddenInAppMessage } from '../models/InAppMessageModel';
 import { createDefaultCycleGuardState } from '../models/CycleGuardModel';
 import { createDefaultSettingsState } from '../models/PermissionModel';
 import { createEmptyUserInfo, createEmptyWxPendingInfo } from '../models/UserModel';
+import { DuoSessionView } from '../models/DuoModel';
 import { StoreKeys } from './StoreKeys';
 
 let bootstrapped: boolean = false;
@@ -44,6 +45,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.ScheduledListAll, []);
   AppStorage.setOrCreate(StoreKeys.ScheduledListFilter, 'all');
   AppStorage.setOrCreate(StoreKeys.ScheduledListDirty, true);
+  AppStorage.setOrCreate<DuoSessionView | null>(StoreKeys.ScheduledListEditingSession, null);
   AppStorage.setOrCreate(StoreKeys.MainTabTarget, '');
   AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
   AppStorage.setOrCreate(StoreKeys.DuoWaitSessionId, '');
@@ -54,6 +56,9 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.DuoWaitDurationMin, 0);
   AppStorage.setOrCreate(StoreKeys.DuoWaitExpireAtMs, 0);
   AppStorage.setOrCreate(StoreKeys.DuoWaitStartedAtMs, 0);
+  AppStorage.setOrCreate(StoreKeys.PendingQuickStartTitle, '');
+  AppStorage.setOrCreate(StoreKeys.PendingQuickStartDelayMin, 0);
+  AppStorage.setOrCreate(StoreKeys.PendingQuickStartStartAtMs, 0);
   AppStorage.setOrCreate(StoreKeys.OrgDetailId, '');
   AppStorage.setOrCreate(StoreKeys.OrgList, []);
   AppStorage.setOrCreate(StoreKeys.OrgDefaults, []);

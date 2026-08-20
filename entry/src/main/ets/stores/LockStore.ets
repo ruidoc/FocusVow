@@ -165,7 +165,9 @@ export class LockStore {
       options?.startedAtMs,
       options?.endAtMs,
       timerMode,
-      minDurationMin
+      minDurationMin,
+      options?.planId ?? '',
+      options?.isDelayedSolo ?? false
     );
     LockStore.setState(context, nextState);
     // 偏好记住用户选的分钟（正计时=最短；倒计时=总时长），勿写 23h
@@ -176,7 +178,7 @@ export class LockStore {
     const isDuo =
       duoSessionId.length > 0 ||
       options?.participationMode === 'duo';
-    if (!isDuo) {
+    if (!isDuo && options?.skipStartedNotify !== true) {
       FocusStartedNotifyService.reportSoloStarted(
         context,
         durationMinutes,

@@ -175,7 +175,8 @@ export async function startOrAlignInstantDuoFocus(
           timerMode: focusOptions.timerMode === 'countup' ? 'countup' : current.timerMode,
           minDurationMin: focusOptions.minDurationMin && focusOptions.minDurationMin > 0
             ? focusOptions.minDurationMin
-            : current.minDurationMin
+            : current.minDurationMin,
+          isDelayedSolo: current.isDelayedSolo
         };
         LockStore.setState(context, aligned);
       }

@@ -2,9 +2,10 @@ import { common } from '@kit.AbilityKit';
 import { ActiveLockState, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
 import {
   DuoSessionView,
+  applyTornTodayToRepeatDays,
   getScheduleRepeatDays,
-  parseStringArray,
   resolveDuoCounterpartName,
+  getSessionApps,
   shouldCompleteStaleScheduledWindow
 } from '../models/DuoModel';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
@@ -32,6 +33,7 @@ import {
   ScheduledGuardSnapshot,
   ScheduledGuardSyncIssue
 } from './ScheduledSessionPersistenceService';
+import { loadExitPlanIds } from './ExitPlanIdsService';
 
 export function scheduledSessionStrategyName(sessionId: string): string {
   return `session_${sessionId}`;
@@ -61,11 +63,14 @@ function normalizeGuardIssueMessage(message: string): string {
   return message.length > 0 ? message : `${LOCAL_GUARD_SYNC_WARNING_PREFIX}，请稍后重试`;
 }
 
-export function buildGuardSnapshotFromSession(session: DuoSessionView): ScheduledGuardSnapshot | null {
+export function buildGuardSnapshotFromSession(
+  session: DuoSessionView,
+  context?: common.Context
+): ScheduledGuardSnapshot | null {
   if (session.session_id.length === 0) {
     return null;
   }
-  const apps = parseStringArray(session.my_apps);
+  const apps = getSessionApps(session);
   const startTime = session.schedule_start && session.schedule_start.length > 0
     ? session.schedule_start
     : String(session.schedule_json?.['start'] ?? '09:00');
@@ -75,6 +80,14 @@ export function buildGuardSnapshotFromSession(session: DuoSessionView): Schedule
   const repeatRaw = session.schedule_repeat && session.schedule_repeat.length > 0
     ? session.schedule_repeat
     : String(session.schedule_json?.['repeat'] ?? '1,2,3,4,5');
+  let repeatDays = getScheduleRepeatDays(repeatRaw);
+  if (context) {
+    repeatDays = applyTornTodayToRepeatDays(
+      session.session_id,
+      repeatDays,
+      loadExitPlanIds(context)
+    );
+  }
   // 空 apps（换机未重选）仍挂策略；强制 allow = 全锁，不可跳过不执行
   const modeValue = apps.length === 0
     ? 'allow'
@@ -85,7 +98,7 @@ export function buildGuardSnapshotFromSession(session: DuoSessionView): Schedule
     title: session.title,
     startTime,
     endTime,
-    repeatDays: getScheduleRepeatDays(repeatRaw),
+    repeatDays,
     selectedTokens: apps,
     mode: modeValue
   };
@@ -95,7 +108,7 @@ export async function syncGuardForSession(
   context: common.Context,
   session: DuoSessionView
 ): Promise<GuardResult<boolean>> {
-  const snapshot = buildGuardSnapshotFromSession(session);
+  const snapshot = buildGuardSnapshotFromSession(session, context);
   if (!snapshot) {
     await removeGuardForSession(context, session.session_id);
     return { ok: false, data: false, message: '契约无效，无法同步屏时策略' };
@@ -131,7 +144,7 @@ export function markGuardSyncIssue(
   session: DuoSessionView,
   message: string
 ): void {
-  const snapshot = buildGuardSnapshotFromSession(session);
+  const snapshot = buildGuardSnapshotFromSession(session, context);
   if (snapshot) {
     saveScheduledGuardSnapshot(context, snapshot);
   }
@@ -300,7 +313,8 @@ function enrichLockFromSession(lock: ActiveLockState, session: DuoSessionView): 
       ? resolveDuoCounterpartName(session)
       : lock.partnerNickname,
     timerMode: lock.timerMode,
-    minDurationMin: lock.minDurationMin
+    minDurationMin: lock.minDurationMin,
+    isDelayedSolo: lock.isDelayedSolo
   };
 }
 

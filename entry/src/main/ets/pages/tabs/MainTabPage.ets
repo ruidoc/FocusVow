@@ -18,10 +18,11 @@ import {
   afterGuestSoloFocusEnded,
   onCertificateGuideDismissed,
 } from "../../services/GuestSoloFocusService";
-import { isOnboardingCompleted, markOnboardingCompleted } from "../../services/OnboardingApiService";
+import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
 import { warmUpPreferencesStore } from "../../services/PreferencesService";
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
+import { hydratePendingQuickStart } from "../../services/PendingQuickStartService";
 import { CycleGuardStore } from "../../stores/CycleGuardStore";
 import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
@@ -43,14 +44,21 @@ struct MainTabPage {
   @State private bottomGestureInsetVp: number = 0;
   @State private useImmersiveTab: boolean = false;
   @StorageLink(StoreKeys.LockActiveState)
-  @Watch("onActiveLockChanged")
+  @Watch("onHideTabBarSourceChanged")
   activeLock: ActiveLockState = createIdleLockState();
+  @StorageLink(StoreKeys.PendingQuickStartTitle)
+  @Watch("onHideTabBarSourceChanged")
+  pendingQuickStartTitle: string = "";
+  @StorageLink(StoreKeys.PendingQuickStartStartAtMs)
+  @Watch("onHideTabBarSourceChanged")
+  pendingQuickStartStartAtMs: number = 0;
   @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
   @StorageLink(StoreKeys.MainTabTarget) @Watch("onMainTabTargetChanged") pendingTab: string = "";
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
   private lastClipboardProbeAt: number = 0;
+  private wasHidingTabBar: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -63,12 +71,9 @@ struct MainTabPage {
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
-    if (!isOnboardingCompleted(hostContext)) {
-      // 老用户（已登录或已授权）跳过新引导，避免升版后被强制重走
-      if (UserStore.isLoggedIn() || SettingsStore.getState().hasAuthorized) {
-        markOnboardingCompleted(hostContext);
-      }
-    }
+    hydratePendingQuickStart(hostContext);
+    this.wasHidingTabBar = this.shouldHideTabBar();
+    void reconcileOnboardingOnLaunch(hostContext);
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
       void FocusSyncService.flushPending(hostContext);
@@ -184,15 +189,26 @@ struct MainTabPage {
     this.isEndingLock = false;
   }
 
+  private shouldHideTabBar(): boolean {
+    return shouldHideMainTabBar(
+      this.activeLock,
+      this.pendingQuickStartStartAtMs,
+      this.pendingQuickStartTitle
+    );
+  }
+
   private handleTabChange(tab: MainTabKey): void {
-    if (shouldHideMainTabBar(this.activeLock) && tab !== "focus") {
+    if (this.shouldHideTabBar() && tab !== "focus") {
       return;
     }
     this.currentTab = tab;
   }
 
-  private onActiveLockChanged(): void {
-    if (!shouldHideMainTabBar(this.activeLock)) {
+  private onHideTabBarSourceChanged(): void {
+    const hiding = this.shouldHideTabBar();
+    const justStartedHiding = hiding && !this.wasHidingTabBar;
+    this.wasHidingTabBar = hiding;
+    if (!justStartedHiding) {
       return;
     }
     if (this.currentTab !== "focus") {
@@ -209,7 +225,7 @@ struct MainTabPage {
         MainTabImmersiveLayout({
           currentTab: this.currentTab,
           bottomGestureInsetVp: this.bottomGestureInsetVp,
-          hideTabBar: shouldHideMainTabBar(this.activeLock),
+          hideTabBar: this.shouldHideTabBar(),
           onTabChange: (tab: MainTabKey) => {
             this.handleTabChange(tab);
           },
@@ -218,7 +234,7 @@ struct MainTabPage {
         MainTabLegacyLayout({
           currentTab: this.currentTab,
           bottomGestureInsetVp: this.bottomGestureInsetVp,
-          hideTabBar: shouldHideMainTabBar(this.activeLock),
+          hideTabBar: this.shouldHideTabBar(),
           onTabChange: (tab: MainTabKey) => {
             this.handleTabChange(tab);
           },

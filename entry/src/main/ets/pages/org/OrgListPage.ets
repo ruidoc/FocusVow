@@ -207,18 +207,26 @@ struct OrgListPage {
   @Builder
   private buildPageBody(): void {
     Refresh({ refreshing: $$this.refreshing }) {
-      Column() {
-        this.buildListContent()
+      Scroll() {
+        Column() {
+          this.buildListContent()
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: 32 })
+        .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 32 })
-      .alignItems(HorizontalAlign.Start)
+      .height('100%')
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      .align(Alignment.TopStart)
     }
     .onRefreshing(() => {
       void this.onRefresh();
     })
     .pullToRefresh(true)
     .width('100%')
+    .height('100%')
   }
 
   build() {
@@ -229,6 +237,7 @@ struct OrgListPage {
         showAction: true,
         actionIcon: $r('sys.symbol.plus'),
         showActionIcon: true,
+        usePageScroll: false,
         horizontalPadding: 0,
         onBack: (): void => {
           backRoute();

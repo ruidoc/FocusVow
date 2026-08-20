@@ -4,8 +4,8 @@ import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { UsersIcon } from '../../components/common/UsersIcon';
 import { AppTheme } from '../../constants/Theme';
-import { ORG_DEFAULT_INTRO, ORG_DEFAULT_THEME, OrgListItem } from '../../models/OrgModel';
-import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
+import { isOrgClassroomJoinable, ORG_DEFAULT_INTRO, ORG_DEFAULT_THEME, OrgListItem } from '../../models/OrgModel';
+import { PageRoutes, backRoute, pushOrgClassroomCreate, pushRoute } from '../../router/PageRoutes';
 import { OrgStore } from '../../stores/OrgStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -33,6 +33,7 @@ struct OrgManagePage {
   @State org: OrgListItem | null = null;
   @State nameDraft: string = '';
   @State introDraft: string = '';
+  @State classroomActive: boolean = false;
 
   private nameDialogController: CustomDialogController = new CustomDialogController({
     builder: CustomContentDialog({
@@ -110,7 +111,10 @@ struct OrgManagePage {
     if (!owned) {
       showToast('仅组织创建者可管理', this.getUIContext());
       backRoute();
+      return;
     }
+    const active = await OrgStore.getActiveClassroom(owned.id);
+    this.classroomActive = isOrgClassroomJoinable(active);
   }
 
   private getThemeColor(): string {
@@ -328,6 +332,14 @@ struct OrgManagePage {
             this.org.intro.length > 0 ? this.org.intro : '未设置',
             (): void => {
               this.openIntroDialog();
+            },
+            true
+          )
+          this.buildFieldRow(
+            '组织课堂',
+            this.classroomActive ? '进行中' : '发起',
+            (): void => {
+              pushOrgClassroomCreate();
             },
             false
           )

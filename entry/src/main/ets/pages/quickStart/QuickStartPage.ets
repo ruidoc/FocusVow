@@ -1,7 +1,7 @@
 import { common } from "@kit.AbilityKit";
 import { router } from "@kit.ArkUI";
 import { QuickFocusOptions } from "../../models/ActiveLockModel";
-import { showErrorToast } from "../../common/Toast";
+import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
@@ -14,6 +14,11 @@ import {
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
 import { AnalyticsService } from "../../services/AnalyticsService";
+import {
+  hasPendingQuickStart,
+  getQuickStartDelayOptions,
+  schedulePendingQuickStart,
+} from "../../services/PendingQuickStartService";
 import { LockStore } from "../../stores/LockStore";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
@@ -35,6 +40,7 @@ struct QuickStartPage {
   @StorageLink(StoreKeys.SettingsSelectedTokens) selectedTokens: string[] = [];
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State durationMinutes: number = 15;
+  @State startDelayMinutes: number = 0;
   @State timerMode: TimerMode = "countdown";
   @State mode: "shield" | "allow" = "allow";
   @State title: string = "";
@@ -148,6 +154,15 @@ struct QuickStartPage {
     if (!ensureSoloFocusAccess(hostContext)) {
       return;
     }
+    if (hasPendingQuickStart(hostContext)) {
+      showErrorToast("已有预约中的专注，请等待开始", this.getUIContext());
+      return;
+    }
+    if (this.title.trim().length === 0) {
+      showErrorToast("请先填写本次契约要做什么");
+      return;
+    }
+
     const needMinutes = this.timerMode === 'countup' ? 0 : this.durationMinutes;
     if (!(await ensureDailyFocusQuota(this.getUIContext(), needMinutes))) {
       return;
@@ -157,16 +172,29 @@ struct QuickStartPage {
       return;
     }
 
-    if (this.title.trim().length === 0) {
-      this.toastError("请先填写本次契约要做什么");
-      return;
-    }
-
     if (!this.hasAuthorized) {
       await this.authorize();
       if (!SettingsStore.getState().hasAuthorized) {
         return;
       }
+    }
+
+    if (this.startDelayMinutes > 0) {
+      const scheduled = await schedulePendingQuickStart(hostContext, {
+        title: this.title.trim(),
+        durationMinutes: this.durationMinutes,
+        timerMode: this.timerMode,
+        mode: this.mode,
+        delayMinutes: this.startDelayMinutes,
+        fromOnboarding: this.fromOnboarding,
+      });
+      if (!scheduled) {
+        this.toastError("预约失败，请检查健康使用设备权限");
+        return;
+      }
+      showToast(`${this.startDelayMinutes} 分钟后开始专注`, this.getUIContext());
+      returnToMainTab("focus");
+      return;
     }
 
     const result = await applyScreenRestriction(this.selectedTokens, this.mode);
@@ -207,6 +235,95 @@ struct QuickStartPage {
     this.durationMinutes = next;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     LockStore.setQuickFocusDurationMinutes(hostContext, next);
+  }
+
+  private getStartDelayPickerLabel(minutes: number): string {
+    if (minutes === 0) {
+      return "立即";
+    }
+    if (minutes === 60) {
+      return "1 小时后";
+    }
+    return `${minutes} 分钟后`;
+  }
+
+  private getStartDelayPickerLabels(): string[] {
+    const labels: string[] = [];
+    getQuickStartDelayOptions().forEach((minutes: number) => {
+      labels.push(this.getStartDelayPickerLabel(minutes));
+    });
+    return labels;
+  }
+
+  private getStartDelayPickerSelectedIndex(): number {
+    const options = getQuickStartDelayOptions();
+    const idx = options.indexOf(this.startDelayMinutes);
+    return idx >= 0 ? idx : 0;
+  }
+
+  private resolvePickerIndex(raw: number | number[]): number {
+    if (raw instanceof Array) {
+      if (raw.length > 0) {
+        return raw[0];
+      }
+      return -1;
+    }
+    return raw;
+  }
+
+  private openStartDelayPicker(): void {
+    this.getUIContext().showTextPickerDialog({
+      range: this.getStartDelayPickerLabels(),
+      selected: this.getStartDelayPickerSelectedIndex(),
+      canLoop: false,
+      onAccept: (value: TextPickerResult) => {
+        const index = this.resolvePickerIndex(value.index);
+        const options = getQuickStartDelayOptions();
+        if (index >= 0 && index < options.length) {
+          this.startDelayMinutes = options[index];
+        }
+      },
+    });
+  }
+
+  @Builder
+  buildStartDelayCard(): void {
+    Column({ space: 14 }) {
+      Row() {
+        Text("开始时间")
+          .layoutWeight(1)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+
+        Text(this.getStartDelayPickerLabel(this.startDelayMinutes))
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .margin({ right: 4 })
+
+        SymbolGlyph($r("sys.symbol.chevron_right"))
+          .fontSize(14)
+          .fontColor([AppTheme.colors.textMuted])
+      }
+      .width("100%")
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.openStartDelayPicker();
+      })
+
+      if (this.startDelayMinutes > 0) {
+        Text(`可以玩一会手机，${this.startDelayMinutes}分钟后自动进入专注`)
+          .fontSize(13)
+          .fontColor(AppTheme.colors.warning)
+          .width("100%")
+      }
+    }
+    .width("100%")
+    .padding(20)
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.border })
+    .borderRadius(AppTheme.radius.lg);
   }
 
   @Builder
@@ -368,7 +485,8 @@ struct QuickStartPage {
 
       this.buildAppCard()
       this.buildDurationCard()
-      Button("开始单人专注")
+      this.buildStartDelayCard()
+      Button(this.startDelayMinutes > 0 ? "预约开始" : "开始单人专注")
         .width("100%")
         .height(52)
         .type(ButtonType.Normal)

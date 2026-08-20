@@ -120,6 +120,9 @@ struct OnboardingPage {
 
   private async syncPermission(): Promise<void> {
     this.screenTimeOk = await checkScreenTimeAuthorized();
+    if (this.screenTimeOk) {
+      this.screenTimeDenied = false;
+    }
   }
 
   private upsert(payload: Record<string, Object>): void {
@@ -373,7 +376,9 @@ struct OnboardingPage {
       authorized ? '系统授权已开启' : result.message
     );
     this.screenTimeOk = authorized;
-    if (!authorized) {
+    if (authorized) {
+      this.screenTimeDenied = false;
+    } else {
       this.screenTimeDenied = true;
     }
     AnalyticsService.trackEvent('permission_result', {
@@ -707,7 +712,7 @@ struct OnboardingPage {
           .fontColor(AppTheme.colors.textPrimary)
           .textAlign(TextAlign.Center)
           .width('100%')
-        Text('注册并完成第一次专注后，领取 7 天会员')
+        Text('注册并完成首次专注后，领取 7 天会员')
           .fontSize(15)
           .fontColor(AppTheme.colors.textSecondary)
           .lineHeight(22)
@@ -957,26 +962,72 @@ struct OnboardingPage {
       .padding({ left: 32, right: 32, top: 8 })
 
       Column({ space: 8 }) {
-        Button(this.screenTimeOk || this.screenTimeDenied
-          ? '开始第一次专注'
-          : '去开启')
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Normal)
-          .buttonStyle(ButtonStyleMode.NORMAL)
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .backgroundColor(AppTheme.colors.primary)
-          .borderRadius(AppTheme.radius.button)
-          .clip(true)
-          .onClick(() => {
-            if (!this.screenTimeOk && !this.screenTimeDenied) {
+        if (this.screenTimeOk) {
+          Button('开始第一次专注')
+            .width('100%')
+            .height(52)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .backgroundColor(AppTheme.colors.primary)
+            .borderRadius(AppTheme.radius.button)
+            .clip(true)
+            .onClick(() => {
+              this.finish();
+            })
+        } else if (this.screenTimeDenied) {
+          Button(this.busy ? '授权中...' : '重新授权')
+            .width('100%')
+            .height(52)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .backgroundColor(AppTheme.colors.primary)
+            .borderRadius(AppTheme.radius.button)
+            .clip(true)
+            .enabled(!this.busy)
+            .opacity(this.busy ? 0.6 : 1)
+            .onClick(() => {
               void this.requestScreenTime();
-              return;
-            }
-            this.finish();
-          })
+            })
+
+          Button('开始第一次专注')
+            .width('100%')
+            .height(52)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.primary)
+            .backgroundColor(AppTheme.colors.surface)
+            .border({ width: 1, color: AppTheme.colors.primary })
+            .borderRadius(AppTheme.radius.button)
+            .clip(true)
+            .onClick(() => {
+              this.finish();
+            })
+        } else {
+          Button(this.busy ? '授权中...' : '去开启')
+            .width('100%')
+            .height(52)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .backgroundColor(AppTheme.colors.primary)
+            .borderRadius(AppTheme.radius.button)
+            .clip(true)
+            .enabled(!this.busy)
+            .opacity(this.busy ? 0.6 : 1)
+            .onClick(() => {
+              void this.requestScreenTime();
+            })
+        }
       }
       .width('100%')
       .padding({

@@ -17,13 +17,17 @@ import { restartCycleGuardIfEnabled } from './CycleGuardService';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { getPlanWindow } from './PlanWindowService';
 import { FocusPlan } from '../models/PlanModel';
-import { DuoSessionView, resolveDuoCounterpartName } from '../models/DuoModel';
+import { DuoSessionView, isScheduledTornToday, resolveDuoCounterpartName } from '../models/DuoModel';
 import { loadPersistedPlans } from './PlanPersistenceService';
 import { loadPersistedSettings, savePersistedSettings } from './SettingsPersistenceService';
 import {
   loadScheduledGuardSnapshot,
   ScheduledGuardSnapshot
 } from './ScheduledSessionPersistenceService';
+import { activateDelayedOnceIfNeeded } from './PendingQuickStartService';
+import { completeOnceQuickFocusFromGuardStop } from './ActiveLockLifecycleService';
+import { isOnceStrategyName } from './ScreenTimeService';
+import { loadExitPlanIds } from './ExitPlanIdsService';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'PlanGuardRuntime';
@@ -227,6 +231,7 @@ async function finalizeScheduledCovenantStart(
   ScheduledListStore.markNeedsRefreshPersisted(context);
   const activationMeta = await resolveScheduledActivationMeta(context, sessionId);
   if (activationMeta.duoSessionId.length === 0) {
+    hilog.warn(DOMAIN, TAG, 'activate scheduled failed session=%{public}s', sessionId);
     return;
   }
 
@@ -242,8 +247,17 @@ async function finalizeScheduledCovenantStart(
 }
 
 export async function handlePlanStrategyStart(context: common.Context, strategyName: string): Promise<void> {
+  if (await activateDelayedOnceIfNeeded(context, strategyName)) {
+    hilog.info(DOMAIN, TAG, 'onStart delayed once %{public}s', strategyName);
+    return;
+  }
+
   if (isSessionStrategyName(strategyName)) {
     const sessionId = sessionIdFromStrategy(strategyName);
+    if (isScheduledTornToday(sessionId, loadExitPlanIds(context))) {
+      hilog.info(DOMAIN, TAG, 'onStart skipped torn today %{public}s', strategyName);
+      return;
+    }
     const snapshot = loadScheduledGuardSnapshot(context, sessionId);
     if (!snapshot) {
       hilog.warn(DOMAIN, TAG, 'onStart missing snapshot %{public}s', strategyName);
@@ -303,6 +317,19 @@ export async function handlePlanStrategyStart(context: common.Context, strategyN
 export async function handlePlanStrategyStop(context: common.Context, strategyName: string): Promise<void> {
   const nowMs = Date.now();
   const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
+
+  if (isOnceStrategyName(strategyName)) {
+    if (currentLock.kind === 'quick_focus' && currentLock.planId === strategyName) {
+      // 对齐 RN：原生到点停锁，不依赖 App 打开
+      await completeOnceQuickFocusFromGuardStop(context, currentLock);
+      updateSettingsStatusMessage(context, '当前没有进行中的系统锁定');
+      hilog.info(DOMAIN, TAG, 'onStop completed once quick focus %{public}s', strategyName);
+    } else {
+      savePersistedActiveLockState(context, createIdleLockState());
+      updateSettingsStatusMessage(context, '当前没有进行中的系统锁定');
+    }
+    return;
+  }
 
   if (isSessionStrategyName(strategyName)) {
     const sessionId = sessionIdFromStrategy(strategyName);

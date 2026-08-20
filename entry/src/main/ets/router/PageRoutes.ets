@@ -45,6 +45,8 @@ export class PageRoutes {
   static readonly OrgDetail: string = 'pages/org/OrgDetailPage';
   static readonly OrgMembers: string = 'pages/org/OrgMembersPage';
   static readonly OrgManage: string = 'pages/org/OrgManagePage';
+  static readonly OrgClassroomCreate: string = 'pages/org/OrgClassroomCreatePage';
+  static readonly OrgClassroomJoin: string = 'pages/org/OrgClassroomJoinPage';
   static readonly InboxList: string = 'pages/inbox/InboxListPage';
   static readonly InboxDetail: string = 'pages/inbox/InboxDetailPage';
 }
@@ -90,6 +92,15 @@ export function pushOrgDetail(orgId: string): void {
 export function pushInboxDetail(id: string): void {
   AppStorage.setOrCreate(StoreKeys.InboxDetailId, id);
   pushRoute(PageRoutes.InboxDetail);
+}
+
+export function pushOrgClassroomJoin(orgId: string): void {
+  AppStorage.setOrCreate(StoreKeys.OrgDetailId, orgId);
+  pushRoute(PageRoutes.OrgClassroomJoin);
+}
+
+export function pushOrgClassroomCreate(): void {
+  pushRoute(PageRoutes.OrgClassroomCreate);
 }
 
 export function pushOrgMembers(orgId: string): void {

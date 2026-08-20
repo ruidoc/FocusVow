@@ -4,42 +4,36 @@ import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
-  DuoScheduledUpdatePayload,
   DuoSessionView,
   getScheduleRepeatDays,
-  getScheduledSessionStatusLabel,
-  isScheduledSessionActivationOpen
+  getScheduledListStatusLabel,
+  getScheduledParticipationLabel,
+  getSessionApps,
+  getTornTodayResumeHint,
+  isInactiveScheduledListSession,
+  isScheduledSessionActivationOpen,
 } from '../../models/DuoModel';
-import { PLAN_REPEAT_DAY_OPTIONS, getRepeatDayShortLabel, summarizeRepeatDays, validateScheduledStartTime } from '../../models/PlanModel';
-import { PageRoutes, backRoute, navigateToMainTab } from '../../router/PageRoutes';
+import { summarizeRepeatDays } from '../../models/PlanModel';
+import { PageRoutes, backRoute, navigateToMainTab, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
   getGuardSyncIssue,
   removeGuardForSession,
   reconcileStaleScheduledWindows,
-  syncGuardForSession
 } from '../../services/ScheduledCovenantService';
-import {
-  DEFAULT_SCHEDULED_PLAN_MINUTES,
-  MIN_SCHEDULED_PLAN_MINUTES,
-  validateScheduledPlanTime
-} from '../../services/ScheduledPlanValidation';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
-import {
-  chooseRestrictedApps,
-  ensureScreenTimeAuthorization
-} from '../../services/ScreenTimeService';
+import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { loadExitPlanIds } from '../../services/ExitPlanIdsService';
 
 bootstrapStores();
 
-/** 与 TimePicker.onChange 入参结构对齐 */
-interface PlanTimePickerResult {
-  hour: number;
-  minute: number;
+interface ScheduledStatusTagStyle {
+  textColor: string;
+  backgroundColor: string;
 }
 
 @Entry
@@ -48,8 +42,6 @@ struct PlanDetailPage {
   @State sessionId: string = '';
   @State session: DuoSessionView | null = null;
   @State isLoading: boolean = true;
-  @State isEditing: boolean = false;
-  @State isSaving: boolean = false;
   @State statusMessage: string = '';
 
   @State planName: string = '';
@@ -58,17 +50,15 @@ struct PlanDetailPage {
   @State repeatDays: number[] = [1, 2, 3, 4, 5];
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'allow';
-  @State timePickerVisible: boolean = false;
-  @State timePickerTarget: 'start' | 'end' = 'start';
-  @State timePickerDraft: Date = new Date();
+  @State private statusTick: number = 0;
 
-  private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
-  private nameInputController: TextInputController = new TextInputController();
+  private statusTimerId: number = -1;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
     UserStore.hydrate(hostContext);
+    LockStore.hydrate(hostContext);
     this.sessionId = AppStorage.get<string>(StoreKeys.ScheduledSessionCurrentId) ?? '';
     if (this.sessionId.length === 0 || !UserStore.isLoggedIn()) {
       navigateToMainTab('plans');
@@ -76,10 +66,29 @@ struct PlanDetailPage {
   }
 
   onPageShow(): void {
+    this.startStatusTimer();
     if (this.sessionId.length === 0 || !UserStore.isLoggedIn()) {
       return;
     }
     void this.loadSession();
+  }
+
+  onPageHide(): void {
+    this.clearStatusTimer();
+  }
+
+  private startStatusTimer(): void {
+    this.clearStatusTimer();
+    this.statusTimerId = setInterval(() => {
+      this.statusTick += 1;
+    }, 60_000);
+  }
+
+  private clearStatusTimer(): void {
+    if (this.statusTimerId !== -1) {
+      clearInterval(this.statusTimerId);
+      this.statusTimerId = -1;
+    }
   }
 
   private async loadSession(): Promise<void> {
@@ -111,7 +120,7 @@ struct PlanDetailPage {
       ? session.schedule_end
       : '18:00';
     this.repeatDays = getScheduleRepeatDays(session.schedule_repeat ?? '');
-    this.selectedTokens = [...(session.my_apps ?? [])];
+    this.selectedTokens = getSessionApps(session);
     this.mode = session.mode === 'shield' ? 'shield' : 'allow';
   }
 
@@ -143,14 +152,73 @@ struct PlanDetailPage {
     if (this.session === null) {
       return '';
     }
-    return getScheduledSessionStatusLabel(this.session);
+    const _tick = this.statusTick;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    return getScheduledListStatusLabel(this.session, loadExitPlanIds(hostContext));
+  }
+
+  @Builder
+  private buildStatusTag(label: string): void {
+    Text(label)
+      .fontSize(12)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.getStatusTagStyleForLabel(label).textColor)
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .backgroundColor(this.getStatusTagStyleForLabel(label).backgroundColor)
+      .borderRadius(AppTheme.radius.pill)
+  }
+
+  private getStatusTagStyleForLabel(label: string): ScheduledStatusTagStyle {
+    if (label === '今日已撕毁') {
+      const style: ScheduledStatusTagStyle = {
+        textColor: AppTheme.colors.danger,
+        backgroundColor: AppTheme.colors.dangerSoft
+      };
+      return style;
+    }
+    if (label === '今日已完成') {
+      const style: ScheduledStatusTagStyle = {
+        textColor: AppTheme.colors.success,
+        backgroundColor: AppTheme.colors.successSoft
+      };
+      return style;
+    }
+    if (label === '今日不生效') {
+      const style: ScheduledStatusTagStyle = {
+        textColor: AppTheme.colors.textMuted,
+        backgroundColor: AppTheme.colors.surfaceRaised
+      };
+      return style;
+    }
+    if (this.session?.status === 'active') {
+      const style: ScheduledStatusTagStyle = {
+        textColor: AppTheme.colors.primary,
+        backgroundColor: AppTheme.colors.primarySoft
+      };
+      return style;
+    }
+    const style: ScheduledStatusTagStyle = {
+      textColor: '#2563EB',
+      backgroundColor: '#EEF5FF'
+    };
+    return style;
+  }
+
+  private getTornTodayResumeHintText(): string {
+    if (this.session === null) {
+      return '';
+    }
+    const _tick = this.statusTick;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const hint = getTornTodayResumeHint(this.session, loadExitPlanIds(hostContext));
+    return hint ?? '';
   }
 
   private getParticipationLabel(): string {
-    if (this.session?.expects_duo) {
-      return '搭子互督';
+    if (this.session === null) {
+      return '单人专注';
     }
-    return '单人专注';
+    return getScheduledParticipationLabel(this.session);
   }
 
   private getModeLabel(): string {
@@ -173,11 +241,11 @@ struct PlanDetailPage {
   }
 
   private shouldShowEditAction(): boolean {
-    return !this.isLoading && !this.isEditing && this.canShowEditEntry();
+    return !this.isLoading && this.canShowEditEntry();
   }
 
   private shouldShowDestructiveFooter(): boolean {
-    if (this.isLoading || this.isEditing) {
+    if (this.isLoading) {
       return false;
     }
     // 真正履约中（窗口内 active）隐藏作废/退出；滞留 active 允许操作
@@ -232,153 +300,30 @@ struct PlanDetailPage {
   }
 
   private getPageTitle(): string {
-    if (this.isEditing) {
-      return '编辑契约';
-    }
     return this.planName.length > 0 ? this.planName : '契约详情';
   }
 
-  private enterEditMode(): void {
-    if (!this.canShowEditEntry() || this.session === null) {
+  private goToEdit(): void {
+    if (!this.session || !this.canShowEditEntry()) {
       return;
     }
-    this.fillFormFromSession(this.session);
-    this.isEditing = true;
-  }
-
-  private cancelEditMode(): void {
-    if (this.session !== null) {
-      this.fillFormFromSession(this.session);
-    }
-    this.isEditing = false;
-    this.statusMessage = '';
-  }
-
-  private timeToMinutes(time: string): number {
-    const parts = time.split(':');
-    return Math.floor(Number(parts[0]) || 0) * 60 + Math.floor(Number(parts[1]) || 0);
-  }
-
-  private padTimePart(value: number): string {
-    return value.toString().padStart(2, '0');
-  }
-
-  private formatTime(date: Date): string {
-    return `${this.padTimePart(date.getHours())}:${this.padTimePart(date.getMinutes())}`;
-  }
-
-  private timeStringToDate(time: string): Date {
-    const normalized = time.trim();
-    const result = new Date();
-    if (!normalized.includes(':')) {
-      return result;
-    }
-    const parts = normalized.split(':');
-    const hour = Math.min(23, Math.max(0, Math.floor(Number(parts[0]) || 0)));
-    const minute = Math.min(59, Math.max(0, Math.floor(Number(parts[1]) || 0)));
-    result.setHours(hour, minute, 0, 0);
-    return result;
-  }
-
-  private minutesToTime(totalMinutes: number): string {
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
-    return `${this.padTimePart(hour)}:${this.padTimePart(minute)}`;
-  }
-
-  private blurNameInput(): void {
-    this.nameInputController.stopEditing();
-  }
-
-  private openTimePicker(target: 'start' | 'end'): void {
-    this.blurNameInput();
-    this.timePickerTarget = target;
-    this.timePickerDraft = this.timeStringToDate(target === 'start' ? this.startTime : this.endTime);
-    this.timePickerVisible = true;
-  }
-
-  private confirmTimePicker(): void {
-    const nextTime = this.formatTime(this.timePickerDraft);
-    const uiContext = this.getUIContext();
-    if (this.timePickerTarget === 'start') {
-      const startMin = this.timeToMinutes(nextTime);
-      const endMin = startMin + DEFAULT_SCHEDULED_PLAN_MINUTES;
-      if (endMin > 24 * 60 - 1) {
-        showErrorToast('暂不支持跨日，请改早一点的开始时间', uiContext);
-        this.timePickerVisible = false;
-        return;
-      }
-      this.startTime = nextTime;
-      this.endTime = this.minutesToTime(endMin);
-    } else {
-      const startMin = this.timeToMinutes(this.startTime);
-      const endMin = this.timeToMinutes(nextTime);
-      if (endMin <= startMin) {
-        showErrorToast('暂不支持跨日，请将结束时间设在当天内', uiContext);
-        this.timePickerVisible = false;
-        return;
-      }
-      if (endMin - startMin < MIN_SCHEDULED_PLAN_MINUTES) {
-        showErrorToast(`时长至少${MIN_SCHEDULED_PLAN_MINUTES}分钟`, uiContext);
-        this.timePickerVisible = false;
-        return;
-      }
-      this.endTime = nextTime;
-    }
-    this.timePickerVisible = false;
-  }
-
-  private cancelTimePicker(): void {
-    this.timePickerVisible = false;
-  }
-
-  private toggleRepeatDay(day: number): void {
-    if (!this.canEditAll()) {
+    if (isInactiveScheduledListSession(this.session)) {
       return;
     }
-    if (this.repeatDays.includes(day)) {
-      this.repeatDays = this.repeatDays.filter((item: number) => item !== day);
+    if (this.session.editable === false) {
+      showToast('当前契约不可编辑', this.getUIContext());
       return;
     }
-    this.repeatDays = [...this.repeatDays, day].sort((left: number, right: number) => left - right);
-  }
-
-  private appCardTitle(): string {
-    return this.mode === 'allow' ? '允许使用的应用' : '要锁定的应用';
-  }
-
-  private shouldShowStatusLine(): boolean {
-    if (this.statusMessage.length === 0) {
-      return false;
-    }
-    const m = /^已选择 (\d+) 个应用$/.exec(this.statusMessage);
-    if (m !== null && Number(m[1]) === this.selectedTokens.length) {
-      return false;
-    }
-    return true;
-  }
-
-  private async chooseApps(): Promise<void> {
-    if (!this.canEditApps()) {
+    if (LockStore.isLocked()) {
+      showToast('专注进行中，不可以修改契约', this.getUIContext());
       return;
     }
-    this.blurNameInput();
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const authResult = await ensureScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (!authResult.ok) {
-      if (authResult.message.length > 0) {
-        showErrorToast(authResult.message, this.getUIContext());
-      }
+    if (isScheduledSessionActivationOpen(this.session)) {
+      showToast('当前处于契约执行时间内，无法修改', this.getUIContext());
       return;
     }
-
-    const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
-    this.blurNameInput();
-    if (result.data) {
-      this.selectedTokens = [...result.data];
-      this.statusMessage = result.message;
-    }
+    ScheduledListStore.setEditingSession(this.session);
+    pushRoute(PageRoutes.PlanAdd);
   }
 
   private async copyInvite(): Promise<void> {
@@ -400,87 +345,6 @@ struct PlanDetailPage {
       : this.session.token;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     await shareDuoInviteText(hostContext, this.getUIContext(), inviteText);
-  }
-
-  private async saveChanges(): Promise<void> {
-    if (!this.session || this.isSaving) {
-      return;
-    }
-
-    if (this.isInitiator()) {
-      const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
-      if (startTimeError.length > 0) {
-        showErrorToast(startTimeError, this.getUIContext());
-        return;
-      }
-      ScheduledListStore.hydrate();
-      const scheduleTimeError = validateScheduledPlanTime(
-        this.startTime,
-        this.endTime,
-        this.repeatDays,
-        ScheduledListStore.getAllSessions(),
-        this.session.session_id
-      );
-      if (scheduleTimeError.length > 0) {
-        showErrorToast(scheduleTimeError, this.getUIContext());
-        return;
-      }
-    }
-
-    this.isSaving = true;
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const authResult = await ensureScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (!authResult.ok) {
-      showErrorToast('未完成系统授权，无法同步本机屏时策略', this.getUIContext());
-      this.isSaving = false;
-      return;
-    }
-
-    const payload: DuoScheduledUpdatePayload = this.isInitiator()
-      ? {
-        title: this.planName,
-        start: this.startTime,
-        start_min: this.timeToMinutes(this.startTime),
-        end: this.endTime,
-        end_min: this.timeToMinutes(this.endTime),
-        repeat: this.repeatDays.join(','),
-        mode: this.mode,
-        initiator_apps: this.selectedTokens
-      }
-      : {
-        partner_apps: this.selectedTokens
-      };
-
-    const response = await DuoApiService.scheduledUpdate(this.session.session_id, payload);
-    const nextSession = DuoApiService.parseSession(response);
-    if (!nextSession) {
-      showErrorToast(response.message ?? '保存失败', this.getUIContext());
-      this.isSaving = false;
-      return;
-    }
-
-    const guardResult = await syncGuardForSession(hostContext, nextSession);
-    this.statusMessage = guardResult.ok ? '' : '已保存，但本机屏时策略未同步，请稍后重试';
-
-    this.session = nextSession;
-    this.fillFormFromSession(nextSession);
-    this.isEditing = false;
-    this.isSaving = false;
-    ScheduledListStore.patchSession(nextSession);
-    const listResponse = await DuoApiService.getScheduledList();
-    const list = DuoApiService.parseScheduledList(listResponse);
-    if (listResponse.statusCode === 200) {
-      ScheduledListStore.setAllSessions(list.items);
-      ScheduledListStore.clearDirty();
-    } else {
-      ScheduledListStore.markDirty();
-    }
-    if (guardResult.ok) {
-      showToast('已保存', this.getUIContext());
-    } else {
-      showErrorToast(this.statusMessage, this.getUIContext());
-    }
   }
 
   private async leaveSession(): Promise<void> {
@@ -542,13 +406,7 @@ struct PlanDetailPage {
             .fontColor(AppTheme.colors.textPrimary)
             .layoutWeight(1)
 
-          Text(this.getDisplayStatusLabel())
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.primary)
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .backgroundColor(AppTheme.colors.primarySoft)
-            .borderRadius(AppTheme.radius.pill)
+          this.buildStatusTag(this.getDisplayStatusLabel())
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
@@ -578,6 +436,16 @@ struct PlanDetailPage {
       .backgroundColor(AppTheme.colors.surface)
       .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(AppTheme.radius.lg)
+
+      if (this.getTornTodayResumeHintText().length > 0) {
+        Text(this.getTornTodayResumeHintText())
+          .fontSize(14)
+          .fontColor(AppTheme.colors.warning)
+          .lineHeight(22)
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .padding({ left: 8, right: 8 })
+      }
 
       this.buildInviteCard()
     }
@@ -714,286 +582,10 @@ struct PlanDetailPage {
   }
 
   @Builder
-  private buildNameCard(): void {
-    Row() {
-      Text('契约名称')
-        .fontSize(16)
-        .fontColor(AppTheme.colors.textPrimary)
-
-      TextInput({
-        text: this.planName,
-        placeholder: '请输入',
-        controller: this.nameInputController
-      })
-        .layoutWeight(1)
-        .height(40)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textPrimary)
-        .placeholderColor(AppTheme.colors.textMuted)
-        .backgroundColor(Color.Transparent)
-        .borderRadius(0)
-        .border({ width: 0 })
-        .showUnderline(false)
-        .cancelButton({ style: CancelButtonStyle.INVISIBLE })
-        .defaultFocus(false)
-        .textAlign(TextAlign.End)
-        .padding({ left: 12, right: 8 })
-        .enterKeyType(EnterKeyType.Done)
-        .onChange((value: string) => {
-          this.planName = value;
-        })
-        .onSubmit(() => {
-          this.blurNameInput();
-        })
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 54 })
-    .padding({ left: 16, right: 16 })
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(12)
-  }
-
-  @Builder
-  private buildTimeCard(): void {
-    Row() {
-      Text('起始时间')
-        .fontSize(16)
-        .fontColor(AppTheme.colors.textPrimary)
-
-      Blank()
-
-      Row({ space: 8 }) {
-        Text(this.startTime)
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textPrimary)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .borderRadius(8)
-          .backgroundColor(AppTheme.colors.surfaceRaised)
-          .onClick(() => {
-            this.openTimePicker('start');
-          })
-
-        Text('至')
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-
-        Text(this.endTime)
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textPrimary)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .borderRadius(8)
-          .backgroundColor(AppTheme.colors.surfaceRaised)
-          .onClick(() => {
-            this.openTimePicker('end');
-          })
-      }
-      .alignItems(VerticalAlign.Center)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 15, bottom: 15 })
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(12)
-  }
-
-  @Builder
-  private buildAppCard(): void {
-    Column() {
-      Row() {
-        Text(this.appCardTitle())
-          .layoutWeight(1)
-          .fontSize(16)
-          .fontColor(AppTheme.colors.textPrimary)
-
-        Row({ space: 4 }) {
-          SymbolGlyph($r('sys.symbol.plus'))
-            .fontSize(14)
-            .fontColor([AppTheme.colors.textMuted])
-          Text('选择')
-            .fontSize(13)
-            .fontColor(AppTheme.colors.textSecondary)
-        }
-        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-        .borderRadius(16)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .onClick(() => {
-          void this.chooseApps();
-        })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 15, bottom: 8 })
-      .alignItems(VerticalAlign.Center)
-
-      Text(this.selectedTokens.length === 0 ? '未选择应用' : `已选 ${this.selectedTokens.length} 个应用`)
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textMuted)
-        .width('100%')
-        .padding({ left: 16, right: 16, bottom: this.shouldShowStatusLine() ? 8 : 16 })
-
-      if (this.shouldShowStatusLine()) {
-        Text(this.statusMessage)
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
-          .padding({ left: 16, right: 16, bottom: 16 })
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(12)
-    .clip(true)
-  }
-
-  @Builder
-  private buildRepeatDaysCard(): void {
-    Column() {
-      Row() {
-        Text('每周几重复')
-          .fontSize(16)
-          .fontColor(AppTheme.colors.textPrimary)
-        Blank()
-        Text(`已选${this.repeatDays.length}天`)
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textMuted)
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 15, bottom: 8 })
-
-      Row({ space: 8 }) {
-        ForEach(this.dayOptions, (item: number) => {
-          Stack() {
-            Text(getRepeatDayShortLabel(item))
-              .fontSize(15)
-              .fontColor(this.repeatDays.includes(item) ? '#FFFFFF' : AppTheme.colors.textPrimary)
-          }
-          .width(38)
-          .height(38)
-          .borderRadius(19)
-          .clip(true)
-          .backgroundColor(this.repeatDays.includes(item) ? AppTheme.colors.primary : AppTheme.colors.border)
-          .onClick(() => {
-            this.toggleRepeatDay(item);
-          })
-        }, (item: number) => item.toString())
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 8, bottom: 20 })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(12)
-    .clip(true)
-  }
-
-  @Builder
-  private buildEditBody(): void {
-    Column({ space: 16 }) {
-      if (this.canEditAll()) {
-        this.buildNameCard()
-        this.buildTimeCard()
-      }
-      if (this.canEditApps()) {
-        this.buildAppCard()
-      }
-      if (this.canEditAll()) {
-        this.buildRepeatDaysCard()
-      }
-
-      Button(this.isSaving ? '保存中...' : '保存修改')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Normal)
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .borderRadius(AppTheme.radius.button)
-        .clip(true)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
-        .enabled(!this.isSaving)
-        .opacity(this.isSaving ? 0.7 : 1)
-        .margin({ top: 8 })
-        .onClick(() => {
-          void this.saveChanges();
-        })
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  @Builder
-  private buildTimePickerSheet(): void {
-    Column({ space: 18 }) {
-      Text(this.timePickerTarget === 'start' ? '选择开始时间' : '选择结束时间')
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      TimePicker({
-        selected: this.timePickerDraft,
-        format: TimePickerFormat.HOUR_MINUTE
-      })
-        .width('100%')
-        .useMilitaryTime(true)
-        .onChange((value: PlanTimePickerResult) => {
-          const next = new Date(this.timePickerDraft);
-          next.setHours(value.hour, value.minute, 0, 0);
-          this.timePickerDraft = next;
-        })
-
-      Row({ space: 12 }) {
-        Button('取消')
-          .layoutWeight(1)
-          .height(48)
-          .type(ButtonType.Normal)
-          .buttonStyle(ButtonStyleMode.NORMAL)
-          .borderRadius(AppTheme.radius.button)
-          .clip(true)
-          .fontSize(16)
-          .fontColor(AppTheme.colors.textSecondary)
-          .backgroundColor(AppTheme.colors.surfaceRaised)
-          .onClick(() => {
-            this.cancelTimePicker();
-          })
-
-        Button('确定')
-          .layoutWeight(1)
-          .height(48)
-          .type(ButtonType.Normal)
-          .buttonStyle(ButtonStyleMode.NORMAL)
-          .borderRadius(AppTheme.radius.button)
-          .clip(true)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
-          .backgroundColor(AppTheme.colors.primary)
-          .onClick(() => {
-            this.confirmTimePicker();
-          })
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding({
-      left: 20,
-      right: 20,
-      top: 20,
-      bottom: 28
-    })
-  }
-
-  @Builder
   private buildBody(): void {
     if (this.isLoading) {
       Text('加载中...')
         .fontColor(AppTheme.colors.textSecondary)
-    } else if (this.isEditing) {
-      this.buildEditBody()
     } else {
       this.buildViewBody()
     }
@@ -1010,13 +602,9 @@ struct PlanDetailPage {
         actionLabel: '编辑',
         actionIcon: $r('sys.symbol.square_and_pencil'),
         onAction: () => {
-          this.enterEditMode();
+          this.goToEdit();
         },
         onBack: () => {
-          if (this.isEditing) {
-            this.cancelEditMode();
-            return;
-          }
           backRoute();
         },
         content: (): void => {
@@ -1032,17 +620,6 @@ struct PlanDetailPage {
         .height('100%')
         .hitTestBehavior(HitTestMode.Transparent)
       }
-
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.timePickerVisible, this.buildTimePickerSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          preferType: SheetType.BOTTOM,
-          showClose: false,
-          dragBar: true,
-          backgroundColor: AppTheme.colors.backgroundSoft
-        })
     }
     .width('100%')
     .height('100%')
