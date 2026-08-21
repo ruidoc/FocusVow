@@ -78,11 +78,7 @@ export struct MainTabImmersiveLayout {
   build() {
     HdsTabs({ controller: this.tabsController, index: this.selectedTabIndex }) {
       TabContent() {
-        FocusHomePage({
-          onSelectTab: (tab: "plans") => {
-            this.onTabChange?.(tab);
-          },
-        })
+        FocusHomePage()
           .width("100%")
           .height("100%")
       }.tabBar(this.buildSymbolTabBar("focus", "专注"))
@@ -90,7 +86,7 @@ export struct MainTabImmersiveLayout {
         ContractTabPage({ isPageActive: this.currentTab === "plans" })
           .width("100%")
           .height("100%")
-      }.tabBar(this.buildSymbolTabBar("plans", "定时"))
+      }.tabBar(this.buildSymbolTabBar("plans", "任务"))
       TabContent() {
         StatsPage()
           .width("100%")

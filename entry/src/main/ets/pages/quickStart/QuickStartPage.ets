@@ -1,12 +1,13 @@
 import { common } from "@kit.AbilityKit";
 import { router } from "@kit.ArkUI";
 import { QuickFocusOptions } from "../../models/ActiveLockModel";
+import { QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
 import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
 import { ApiConfig } from "../../config/ApiConfig";
-import { backRoute, returnToMainTab } from "../../router/PageRoutes";
+import { backRoute, openQuickTaskTabOnce, returnToMainTab } from "../../router/PageRoutes";
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
@@ -21,7 +22,9 @@ import {
   schedulePendingQuickStart,
 } from "../../services/PendingQuickStartService";
 import { LockStore } from "../../stores/LockStore";
+import { QuickTaskStore } from "../../stores/QuickTaskStore";
 import { SettingsStore } from "../../stores/SettingsStore";
+import { UserStore } from "../../stores/UserStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { TimerMode } from "../../utils/TimerMode";
@@ -45,6 +48,7 @@ struct QuickStartPage {
   @State timerMode: TimerMode = "countdown";
   @State mode: "shield" | "allow" = "allow";
   @State title: string = "";
+  @State saveToQuickTask: boolean = false;
   private fromOnboarding: boolean = false;
 
   private readonly durationMin: number = 5;
@@ -54,6 +58,7 @@ struct QuickStartPage {
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
+    UserStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     const params = router.getParams() as QuickStartRouteParams;
     if (params) {
@@ -152,6 +157,49 @@ struct QuickStartPage {
 
   private async startFocus(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+
+    if (this.saveToQuickTask) {
+      if (!UserStore.isLoggedIn()) {
+        showErrorToast("登录后才能保存到快捷任务", this.getUIContext());
+        return;
+      }
+      if (this.title.trim().length === 0) {
+        showErrorToast("请先填写本次契约要做什么", this.getUIContext());
+        return;
+      }
+      if (QuickTaskStore.isDirty()) {
+        await QuickTaskStore.loadAll();
+      }
+      if (QuickTaskStore.titleExists(this.title.trim())) {
+        showErrorToast("已有同名快捷任务，请修改名称", this.getUIContext());
+        return;
+      }
+      const payload: QuickTaskUpsertPayload = {
+        title: this.title.trim(),
+        duration_min: this.durationMinutes,
+        timer_mode: this.timerMode,
+        mode: this.mode,
+        delay_min: this.startDelayMinutes,
+        no_stop: false,
+        apps: [...this.selectedTokens],
+      };
+      try {
+        const response = await QuickTaskStore.createTask(payload);
+        if (response.statusCode !== 200) {
+          const errMsg = typeof response.message === 'string' && response.message.length > 0
+            ? response.message
+            : "保存快捷任务失败";
+          showErrorToast(errMsg, this.getUIContext());
+          return;
+        }
+        showToast("已保存到快捷任务", this.getUIContext());
+        openQuickTaskTabOnce();
+      } catch (_error) {
+        showErrorToast("保存快捷任务失败", this.getUIContext());
+      }
+      return;
+    }
+
     if (!ensureSoloFocusAccess(hostContext)) {
       return;
     }
@@ -490,21 +538,42 @@ struct QuickStartPage {
       this.buildAppCard()
       this.buildDurationCard()
       this.buildStartDelayCard()
-      Button(this.startDelayMinutes > 0 ? "预约开始" : "开始单人专注")
+
+      Column({ space: 6 }) {
+        Row({ space: 4 }) {
+          Checkbox()
+            .select(this.saveToQuickTask)
+            .selectedColor(AppTheme.colors.primary)
+            .onChange((checked: boolean) => {
+              this.saveToQuickTask = checked;
+            })
+          Text("保存到快捷任务，下次一键开启专注")
+            .fontSize(14)
+            .fontColor(AppTheme.colors.textSecondary)
+            .layoutWeight(1)
+        }
         .width("100%")
-        .height(52)
-        .type(ButtonType.Normal)
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .borderRadius(AppTheme.radius.button)
-        .clip(true)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor("#FFFFFF")
-        .margin({ top: 8 })
-        .onClick(() => {
-          this.startFocus();
-        })
+        .alignItems(VerticalAlign.Center)
+
+        Button(this.saveToQuickTask
+          ? "保存到快捷任务"
+          : (this.startDelayMinutes > 0 ? "预约开始" : "开始单人专注"))
+          .width("100%")
+          .height(52)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .backgroundColor(AppTheme.colors.primary)
+          .fontColor("#FFFFFF")
+          .onClick(() => {
+            this.startFocus();
+          })
+      }
+      .width("100%")
+      .margin({ top: 14 })
     }
     .width("100%")
     .alignItems(HorizontalAlign.Start);

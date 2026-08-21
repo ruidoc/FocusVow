@@ -9,7 +9,7 @@ import { ApiEnvelope } from '../models/UserModel';
 import { FocusSyncService } from './FocusSyncService';
 import { loadAccessToken } from './UserPersistenceService';
 
-type HttpVerb = 'GET' | 'POST' | 'PATCH';
+type HttpVerb = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 const LOG_TAG: string = 'HttpService';
 const UPLOAD_TIMEOUT_MS: number = 60000;
@@ -115,6 +115,25 @@ export class HttpService {
     context?: common.Context
   ): Promise<ApiEnvelope> {
     return HttpService.request('PATCH', path, body, requiresAuth, skipPendingFlush, context);
+  }
+
+  static async put(
+    path: string,
+    body: Record<string, Object>,
+    requiresAuth: boolean = true,
+    skipPendingFlush: boolean = false,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    return HttpService.request('PUT', path, body, requiresAuth, skipPendingFlush, context);
+  }
+
+  static async delete(
+    path: string,
+    requiresAuth: boolean = true,
+    skipPendingFlush: boolean = false,
+    context?: common.Context
+  ): Promise<ApiEnvelope> {
+    return HttpService.request('DELETE', path, undefined, requiresAuth, skipPendingFlush, context);
   }
 
   /**
@@ -414,6 +433,10 @@ export class HttpService {
         method = http.RequestMethod.POST;
       } else if (verb === 'PATCH') {
         method = 'PATCH' as http.RequestMethod;
+      } else if (verb === 'PUT') {
+        method = 'PUT' as http.RequestMethod;
+      } else if (verb === 'DELETE') {
+        method = http.RequestMethod.DELETE;
       }
       const requestOptions: http.HttpRequestOptions = {
         method: method,
@@ -422,7 +445,7 @@ export class HttpService {
         connectTimeout: ApiConfig.CONNECT_TIMEOUT_MS,
         readTimeout: ApiConfig.READ_TIMEOUT_MS
       };
-      if ((verb === 'POST' || verb === 'PATCH') && body) {
+      if ((verb === 'POST' || verb === 'PATCH' || verb === 'PUT') && body) {
         requestOptions.extraData = JSON.stringify(body);
       }
 

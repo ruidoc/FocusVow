@@ -46,19 +46,53 @@ export function getStatsDetailPageTitle(period: StatsPeriod, section: StatsDetai
   return `${periodLabel}履约荣誉墙`;
 }
 
-export function formatSuccessDurationLabel(minutes: number): string {
-  if (minutes <= 0) {
-    return '0 分钟';
+export interface DurationLabelPart {
+  kind: 'number' | 'unit';
+  value: string;
+}
+
+/** 履约时长拆成数字 / 单位，方便分组件排版调间距 */
+export function formatSuccessDurationParts(minutes: number): DurationLabelPart[] {
+  const mins = Math.max(0, Math.floor(minutes));
+  if (mins < 60) {
+    return [
+      { kind: 'number', value: String(mins) },
+      { kind: 'unit', value: '分钟' }
+    ];
   }
-  if (minutes < 60) {
-    return `${minutes} 分钟`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const remainMinutes = minutes % 60;
+  const hours = Math.floor(mins / 60);
+  const remainMinutes = mins % 60;
   if (remainMinutes === 0) {
-    return `${hours} 小时`;
+    return [
+      { kind: 'number', value: String(hours) },
+      { kind: 'unit', value: '小时' }
+    ];
   }
-  return `${hours} 小时 ${remainMinutes} 分`;
+  return [
+    { kind: 'number', value: String(hours) },
+    { kind: 'unit', value: 'h' },
+    { kind: 'number', value: String(remainMinutes) },
+    { kind: 'unit', value: 'm' }
+  ];
+}
+
+export function formatSuccessDurationLabel(minutes: number): string {
+  const parts = formatSuccessDurationParts(minutes);
+  let out = '';
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.kind === 'number') {
+      if (out.length > 0) {
+        out += ' ';
+      }
+      out += part.value;
+    } else if (part.value === 'h' || part.value === 'm') {
+      out += part.value;
+    } else {
+      out += ` ${part.value}`;
+    }
+  }
+  return out;
 }
 
 export function formatStatsDateTimeLabel(raw: string, fallbackDate: string): string {

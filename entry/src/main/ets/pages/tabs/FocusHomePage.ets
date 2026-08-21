@@ -1,5 +1,5 @@
 import { common } from "@kit.AbilityKit";
-import { window } from "@kit.ArkUI";
+import { window, display } from "@kit.ArkUI";
 import { showToast } from "../../common/Toast";
 import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
@@ -84,7 +84,6 @@ import { StoreKeys } from "../../stores/StoreKeys";
 bootstrapStores();
 @Component
 export struct FocusHomePage {
-  onSelectTab?: (tab: "plans") => void;
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
   @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
   @StorageLink(StoreKeys.DuoWaitSessionId) duoWaitSessionId: string = "";
@@ -100,8 +99,10 @@ export struct FocusHomePage {
   @State pendingRemainTick: number = 0;
   @State showTearConfirm: boolean = false;
   @State topSafeInsetVp: number = 0;
+  @State homeContentLiftVp: number = 0;
   /** 单人入口按压缩放透明度，对齐 iOS activeOpacity=0.7 */
   @State soloLinkPressed: boolean = false;
+  @State isRefreshing: boolean = false;
 
   private timerId: number = -1;
   private postOnboardingFlowStarted: boolean = false;
@@ -130,6 +131,7 @@ export struct FocusHomePage {
     }
     this.startTimer();
     this.loadTopSafeInset(hostContext);
+    this.loadHomeContentLift();
     void this.runPostOnboardingHomeFlow(hostContext);
   }
 
@@ -208,6 +210,13 @@ export struct FocusHomePage {
       const systemAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       this.topSafeInsetVp = ui.px2vp(systemAvoid.topRect.height);
     });
+  }
+
+  /** 首页内容相对垂直居中上移约 10%（底部留白 20% 屏高） */
+  private loadHomeContentLift(): void {
+    const ui = this.getUIContext();
+    const screen = display.getDefaultDisplaySync();
+    this.homeContentLiftVp = ui.px2vp(Math.floor(screen.height * 0.1));
   }
 
   aboutToDisappear(): void {
@@ -414,6 +423,23 @@ export struct FocusHomePage {
     SettingsStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     this.remainingLabel = LockStore.getRemainingLabel();
+  }
+
+  /** 对齐 RN 首页下拉刷新：专注中不刷新，否则拉权益与消息未读 */
+  private async onHomeRefresh(): Promise<void> {
+    if (this.isActiveLocked()) {
+      this.isRefreshing = false;
+      return;
+    }
+    this.isRefreshing = true;
+    try {
+      if (UserStore.isLoggedIn()) {
+        await BenefitStore.refresh();
+        await InboxStore.fetchUnread();
+      }
+    } finally {
+      this.isRefreshing = false;
+    }
   }
 
   private isActiveLocked(): boolean {
@@ -1082,27 +1108,6 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildScheduledLink(): void {
-    Row({ space: 4 }) {
-      SymbolGlyph($r('sys.symbol.calendar'))
-        .fontSize(15)
-        .fontColor([AppTheme.colors.textSecondary])
-      Text('定时契约 · 到点自动开始')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textSecondary)
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(14)
-        .fontColor([AppTheme.colors.textMuted])
-    }
-    .justifyContent(FlexAlign.Center)
-    .height(40)
-    .margin({ top: 8 })
-    .onClick(() => {
-      this.onSelectTab?.('plans');
-    })
-  }
-
-  @Builder
   private buildPendingQuickStartState(): void {
     Column({ space: 0 }) {
       Row({ space: 4 }) {
@@ -1197,7 +1202,6 @@ export struct FocusHomePage {
 
       Column({ space: 4 }) {
         this.buildSoloFocusLink()
-        this.buildScheduledLink()
       }
       .width('100%')
       .alignItems(HorizontalAlign.Center)
@@ -1328,28 +1332,48 @@ export struct FocusHomePage {
         this.buildLockedState()
       }
       .width("100%")
-      .height("100%")
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center);
-    } else if (this.hasPendingQuickStart()) {
-      Column() {
-        this.buildPendingQuickStartState()
-      }
-      .width("100%")
-      .height("100%")
+      .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .padding({ left: 24, right: 24 })
-      .offset({ y: -20 });
     } else {
-      Column() {
-        this.buildEmptyState()
+      Refresh({ refreshing: $$this.isRefreshing }) {
+        Scroll() {
+          Column() {
+            if (this.hasPendingQuickStart()) {
+              Column() {
+                this.buildPendingQuickStartState()
+              }
+              .width("100%")
+              .constraintSize({ minHeight: '100%' })
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+              .padding({ left: 24, right: 24, bottom: this.homeContentLiftVp });
+            } else {
+              Column() {
+                this.buildEmptyState()
+              }
+              .width("100%")
+              .constraintSize({ minHeight: '100%' })
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+              .padding({ bottom: this.homeContentLiftVp });
+            }
+          }
+          .width("100%")
+          .constraintSize({ minHeight: '100%' })
+        }
+        .width("100%")
+        .height("100%")
+        .align(Alignment.Top)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
       }
+      .pullToRefresh(true)
+      .onRefreshing(() => {
+        void this.onHomeRefresh();
+      })
       .width("100%")
       .height("100%")
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .offset({ y: -20 });
     }
   }
 
@@ -1359,6 +1383,8 @@ export struct FocusHomePage {
         title: "专注",
         showTitleBar: false,
         usePageScroll: false,
+        horizontalPadding: 0,
+        hiddenTitleTopPadding: this.isActiveLocked() ? 0 : 12,
         content: (): void => {
           this.buildHomeContent();
         },

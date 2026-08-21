@@ -17,6 +17,7 @@ import { clearExitPlanIds } from '../services/ExitPlanIdsService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { HuaweiAccountService } from '../services/HuaweiAccountService';
 import { PlanStore } from './PlanStore';
+import { QuickTaskStore } from './QuickTaskStore';
 import { CycleGuardStore } from './CycleGuardStore';
 import { BenefitStore } from './BenefitStore';
 import { InboxStore } from './InboxStore';
@@ -507,6 +508,7 @@ export class UserStore {
     clearUserSession(context);
     BenefitStore.reset();
     InboxStore.reset();
+    QuickTaskStore.clearTasks();
     UserStore.setWxPendingInfo(null);
     syncAppStorageValue(StoreKeys.UserAccessToken, '');
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, false);
@@ -535,6 +537,7 @@ export class UserStore {
       return refreshError;
     }
     void FocusSyncService.flushPending(context);
+    void QuickTaskStore.loadAll();
     void UserStore.syncGuardsOnLogin(context);
     void UserStore.flushPendingReferral(context);
     if (loginMethod) {

@@ -9,6 +9,8 @@ import { BenefitStore } from '../../stores/BenefitStore';
 import { OrgStore } from '../../stores/OrgStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { SettingsStore } from '../../stores/SettingsStore';
+import { FeatureFlagKeys } from '../../config/FeatureFlags';
+import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 
@@ -41,6 +43,7 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = 'none';
   @StorageLink(StoreKeys.OrgList) orgList: OrgListItem[] = [];
+  @StorageLink(StoreKeys.FeatureFlagsOff) featuresOff: string[] = [];
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -48,6 +51,8 @@ export struct ProfilePage {
     SettingsStore.hydrate(hostContext);
     CycleGuardStore.hydrate(hostContext);
     BenefitStore.hydrate(hostContext);
+    FeatureFlagStore.hydrate(hostContext);
+    void FeatureFlagStore.sync(hostContext);
     OrgStore.hydrate();
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
@@ -104,12 +109,24 @@ export struct ProfilePage {
     pushRoute(PageRoutes.ProfileEdit);
   }
 
-  private openRedeemPage(): void {
+  private openMembershipPage(): void {
     if (!this.isLoggedIn) {
       pushLogin();
       return;
     }
-    pushRoute(PageRoutes.Redeem);
+    if (this.isMembershipActive()) {
+      pushRoute(PageRoutes.Redeem);
+      return;
+    }
+    pushRoute(this.isPromoVipEnabled() ? PageRoutes.Paywall : PageRoutes.Redeem);
+  }
+
+  private isPromoVipEnabled(): boolean {
+    return !this.featuresOff.includes(FeatureFlagKeys.PROMO_VIP);
+  }
+
+  private getMembershipActionLabel(): string {
+    return this.isPromoVipEnabled() ? '开通' : '兑换';
   }
 
   private getPermissionLabel(): string {
@@ -132,7 +149,9 @@ export struct ProfilePage {
     if (this.isMembershipActive()) {
       return '邀请搭子加入，再领60天会员！';
     }
-    return '兑换会员，解锁每日无限专注';
+    return this.isPromoVipEnabled()
+      ? '开通会员，解锁每日无限专注'
+      : '兑换会员，解锁每日无限专注';
   }
 
   private getQuotaProgress(): number {
@@ -244,7 +263,7 @@ export struct ProfilePage {
           .alignItems(HorizontalAlign.Start)
 
           if (!this.isMembershipActive()) {
-            Button('兑换')
+            Button(this.getMembershipActionLabel())
               .height(32)
               .padding({ left: 14, right: 14 })
               .type(ButtonType.Normal)
@@ -256,7 +275,7 @@ export struct ProfilePage {
               .borderRadius(16)
               .clip(true)
               .onClick(() => {
-                this.openRedeemPage();
+                this.openMembershipPage();
               })
           } else {
             SymbolGlyph($r('sys.symbol.chevron_right'))
@@ -300,7 +319,7 @@ export struct ProfilePage {
       .borderRadius(AppTheme.radius.lg)
       .clip(true)
       .onClick(() => {
-        this.openRedeemPage();
+        this.openMembershipPage();
       })
     }
   }

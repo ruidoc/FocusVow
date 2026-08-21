@@ -23,6 +23,8 @@ import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
 import { warmUpPreferencesStore } from "../../services/PreferencesService";
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
 import { hydratePendingQuickStart } from "../../services/PendingQuickStartService";
+import { getAppVersion } from "../../common/AppInfo";
+import { FeatureFlagStore } from "../../stores/FeatureFlagStore";
 import { CycleGuardStore } from "../../stores/CycleGuardStore";
 import { LockStore } from "../../stores/LockStore";
 import { PlanStore } from "../../stores/PlanStore";
@@ -67,6 +69,8 @@ struct MainTabPage {
     AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
     warmUpPreferencesStore(hostContext);
     UserStore.hydrate(hostContext);
+    FeatureFlagStore.hydrate(hostContext);
+    void getAppVersion().then(() => FeatureFlagStore.sync(hostContext));
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);

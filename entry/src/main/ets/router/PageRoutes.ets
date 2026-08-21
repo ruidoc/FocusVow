@@ -20,6 +20,8 @@ export class PageRoutes {
   static readonly PlanList: string = 'pages/plans/PlanListPage';
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
+  static readonly QuickTaskForm: string = 'pages/plans/QuickTaskFormPage';
+  static readonly QuickTaskDetail: string = 'pages/plans/QuickTaskDetailPage';
   static readonly StatsDetail: string = 'pages/stats/StatsDetailPage';
   static readonly CertificatePreview: string = 'pages/certificate/CertificatePreviewPage';
   static readonly Settings: string = 'pages/settings/SettingsPage';
@@ -37,6 +39,7 @@ export class PageRoutes {
   static readonly WechatBindEmail: string = 'pages/login/WechatBindEmailPage';
   static readonly WechatBind: string = 'pages/login/WechatBindPage';
   static readonly Redeem: string = 'pages/user/RedeemPage';
+  static readonly Paywall: string = 'pages/user/PaywallPage';
   static readonly InviteRecord: string = 'pages/user/InviteRecordPage';
   static readonly ProfileEdit: string = 'pages/user/ProfileEditPage';
   static readonly AvatarCrop: string = 'pages/user/AvatarCropPage';
@@ -200,4 +203,11 @@ function isMainTabInStack(): boolean {
 /** 从二级页返回主 Tab，并打开指定 Tab */
 export function navigateToMainTab(tab: MainTabKey = 'plans'): void {
   returnToMainTab(tab);
+}
+
+/** 保存快捷任务后跳任务 Tab 并定位快捷子 Tab */
+export function openQuickTaskTabOnce(): void {
+  AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, true);
+  AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 0);
+  returnToMainTab('plans');
 }

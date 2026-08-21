@@ -47,11 +47,7 @@ export struct MainTabLegacyLayout {
   build() {
     Column() {
       Stack() {
-        FocusHomePage({
-          onSelectTab: (tab: 'plans') => {
-            this.onTabChange?.(tab);
-          }
-        })
+        FocusHomePage()
           .width('100%')
           .height('100%')
           .visibility(this.currentTab === 'focus' ? Visibility.Visible : Visibility.Hidden)
@@ -76,7 +72,7 @@ export struct MainTabLegacyLayout {
 
       Row() {
         this.buildTabItem('focus', '专注')
-        this.buildTabItem('plans', '定时')
+        this.buildTabItem('plans', '任务')
         this.buildTabItem('stats', '统计')
         this.buildTabItem('profile', '我的')
       }

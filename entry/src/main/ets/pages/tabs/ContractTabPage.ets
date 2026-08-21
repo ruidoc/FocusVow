@@ -1,4 +1,4 @@
-import { PlanCollectionPage } from '../../components/plans/PlanCollectionPage';
+import { TasksCollectionPage } from '../../components/plans/TasksCollectionPage';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -8,8 +8,7 @@ export struct ContractTabPage {
   @Prop isPageActive: boolean = true;
 
   build() {
-    PlanCollectionPage({
-      title: '定时契约',
+    TasksCollectionPage({
       showBack: false,
       isPageActive: this.isPageActive
     })

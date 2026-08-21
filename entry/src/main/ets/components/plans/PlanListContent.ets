@@ -279,6 +279,7 @@ export struct PlanListContent {
     .width('100%')
     .height('100%')
     .align(Alignment.TopStart)
+    .padding({ left: 20, right: 20 })
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean) => {
       if (isVisible && this.isPageActive) {
         void this.syncOnVisible();

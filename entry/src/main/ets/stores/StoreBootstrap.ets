@@ -41,11 +41,18 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.BenefitCommunityQrUrl, '');
   AppStorage.setOrCreate(StoreKeys.BenefitCommunityHint, '');
   AppStorage.setOrCreate(StoreKeys.BenefitFeatures, '');
+  AppStorage.setOrCreate(StoreKeys.FeatureFlagsOff, []);
   AppStorage.setOrCreate(StoreKeys.InAppMessage, createHiddenInAppMessage());
   AppStorage.setOrCreate(StoreKeys.ScheduledListAll, []);
   AppStorage.setOrCreate(StoreKeys.ScheduledListFilter, 'all');
   AppStorage.setOrCreate(StoreKeys.ScheduledListDirty, true);
   AppStorage.setOrCreate<DuoSessionView | null>(StoreKeys.ScheduledListEditingSession, null);
+  AppStorage.setOrCreate(StoreKeys.QuickTaskList, []);
+  AppStorage.setOrCreate(StoreKeys.QuickTaskDirty, true);
+  AppStorage.setOrCreate(StoreKeys.QuickTaskLoading, false);
+  AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
+  AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 0);
+  AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
   AppStorage.setOrCreate(StoreKeys.MainTabTarget, '');
   AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
   AppStorage.setOrCreate(StoreKeys.DuoWaitSessionId, '');

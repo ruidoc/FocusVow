@@ -1,4 +1,4 @@
-import { PlanCollectionPage } from '../../components/plans/PlanCollectionPage';
+import { TasksCollectionPage } from '../../components/plans/TasksCollectionPage';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -8,9 +8,9 @@ bootstrapStores();
 struct PlanListPage {
   build() {
     Stack() {
-      PlanCollectionPage({
-        title: '契约列表',
-        showBack: true
+      TasksCollectionPage({
+        showBack: true,
+        isPageActive: true
       })
     }
     .width('100%')

@@ -25,6 +25,7 @@ export class StoreKeys {
   static readonly BenefitCommunityQrUrl: string = 'benefit.communityQrUrl';
   static readonly BenefitCommunityHint: string = 'benefit.communityHint';
   static readonly BenefitFeatures: string = 'benefit.features';
+  static readonly FeatureFlagsOff: string = 'feature.flagsOff';
   static readonly AppForegroundAt: string = 'app.foregroundAt';
   static readonly AppIsForeground: string = 'app.isForeground';
   static readonly InAppMessage: string = 'app.inAppMessage';
@@ -48,6 +49,12 @@ export class StoreKeys {
   static readonly ScheduledListFilter: string = 'scheduled.list.filter';
   static readonly ScheduledListDirty: string = 'scheduled.list.dirty';
   static readonly ScheduledListEditingSession: string = 'scheduled.list.editingSession';
+  static readonly QuickTaskList: string = 'quickTask.list';
+  static readonly QuickTaskDirty: string = 'quickTask.dirty';
+  static readonly QuickTaskLoading: string = 'quickTask.loading';
+  static readonly QuickTaskCurrentId: string = 'quickTask.currentId';
+  static readonly TasksSubTabIndex: string = 'tasks.subTab.index';
+  static readonly OpenQuickTaskTabOnce: string = 'tasks.openQuickTabOnce';
   static readonly StatsDetailPeriod: string = 'stats.detail.period';
   static readonly StatsDetailSection: string = 'stats.detail.section';
   static readonly OrgDetailId: string = 'org.detail.id';

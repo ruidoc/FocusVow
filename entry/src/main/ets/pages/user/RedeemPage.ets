@@ -156,7 +156,7 @@ struct RedeemPage {
       }
     }
     await BenefitStore.refresh();
-    showToast("兑换成功", this.getUIContext());
+    showToast("订阅成功", this.getUIContext());
   }
 
   private onCopyWechat(): void {
@@ -216,7 +216,7 @@ struct RedeemPage {
           SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
             .fontSize(22)
             .fontColor([SUCCESS])
-          Text("兑换成功")
+          Text("订阅成功")
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
             .fontColor(SUCCESS)
@@ -497,7 +497,7 @@ struct RedeemPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: "兑换会员",
+        title: "会员权益",
         showBack: true,
         usePageScroll: true,
         horizontalPadding: 20,

@@ -1,6 +1,7 @@
 import { showErrorToast } from "../common/Toast";
-import { PageRoutes, pushRoute } from "../router/PageRoutes";
+import { pushRoute } from "../router/PageRoutes";
 import { BenefitStore } from "../stores/BenefitStore";
+import { FeatureFlagStore } from "../stores/FeatureFlagStore";
 import { UserStore } from "../stores/UserStore";
 
 /** 免费用户今日总专注时长是否已用完（会员不限制） */
@@ -53,7 +54,7 @@ export async function ensureDailyFocusQuota(
 
   if (isDailyFocusQuotaExhausted()) {
     showErrorToast("今日专注时长已用完", uiContext);
-    pushRoute(PageRoutes.Redeem);
+    pushRoute(FeatureFlagStore.getVipPurchaseRoute());
     return false;
   }
 
@@ -64,7 +65,7 @@ export async function ensureDailyFocusQuota(
         `今日剩余免费专注时长不足（剩 ${remaining} 分钟），兑换会员可无限专注`,
         uiContext,
       );
-      pushRoute(PageRoutes.Redeem);
+      pushRoute(FeatureFlagStore.getVipPurchaseRoute());
       return false;
     }
   }
