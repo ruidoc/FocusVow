@@ -152,13 +152,20 @@ export class LockStore {
         ? options.minDurationMin
         : durationMinutes)
       : 0;
+    const duoSessionId = options?.duoSessionId ?? '';
+    const isDuo =
+      duoSessionId.length > 0 ||
+      options?.participationMode === 'duo';
+    const planId = options?.planId && options.planId.length > 0
+      ? options.planId
+      : (!isDuo ? `once_${Date.now()}` : '');
     const nextState = createQuickFocusLockState(
       selectedTokens,
       durationMinutes,
       mode,
       Date.now(),
       options?.title ?? '单人专注',
-      options?.duoSessionId ?? '',
+      duoSessionId,
       options?.recordId ?? '',
       options?.participationMode ?? '',
       options?.partnerNickname ?? '',
@@ -166,7 +173,7 @@ export class LockStore {
       options?.endAtMs,
       timerMode,
       minDurationMin,
-      options?.planId ?? '',
+      planId,
       options?.isDelayedSolo ?? false
     );
     LockStore.setState(context, nextState);
@@ -174,16 +181,14 @@ export class LockStore {
     LockStore.setQuickFocusDurationMinutes(context, durationMinutes);
 
     // 互督由服务端推送；客户端只报单人锁机（含未登录）
-    const duoSessionId = options?.duoSessionId ?? '';
-    const isDuo =
-      duoSessionId.length > 0 ||
-      options?.participationMode === 'duo';
     if (!isDuo && options?.skipStartedNotify !== true) {
       FocusStartedNotifyService.reportSoloStarted(
         context,
         durationMinutes,
         options?.title,
-        timerMode
+        timerMode,
+        planId,
+        nextState.startedAt
       );
     }
 

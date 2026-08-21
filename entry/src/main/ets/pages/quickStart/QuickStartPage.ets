@@ -5,6 +5,7 @@ import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
+import { ApiConfig } from "../../config/ApiConfig";
 import { backRoute, returnToMainTab } from "../../router/PageRoutes";
 import {
   applyScreenRestriction,
@@ -240,6 +241,9 @@ struct QuickStartPage {
   private getStartDelayPickerLabel(minutes: number): string {
     if (minutes === 0) {
       return "立即";
+    }
+    if (minutes === 1 && ApiConfig.isDevEnvironment()) {
+      return "1 分钟";
     }
     if (minutes === 60) {
       return "1 小时后";

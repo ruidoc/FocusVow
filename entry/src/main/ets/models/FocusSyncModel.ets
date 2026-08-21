@@ -17,10 +17,17 @@ export interface FocusSyncPending {
   fail_reason?: string;
   duo_session_id?: string;
   record_id?: string;
+  timer_mode?: string;
 }
 
-export function buildSoloInstantClientKey(startedAt: number): string {
-  return `solo_${startedAt}`;
+export function buildSoloInstantClientKey(planIdOrStartedAt: string | number): string {
+  if (
+    typeof planIdOrStartedAt === 'string' &&
+    planIdOrStartedAt.startsWith('once_')
+  ) {
+    return `solo_plan_${planIdOrStartedAt}`;
+  }
+  return `solo_${planIdOrStartedAt}`;
 }
 
 export function buildSessionTerminalClientKey(duoSessionId: string): string {

@@ -60,7 +60,9 @@ export class FocusSyncService {
 
     const pending: FocusSyncPending = {
       kind: 'solo_instant',
-      client_key: buildSoloInstantClientKey(state.startedAt),
+      client_key: buildSoloInstantClientKey(
+        state.planId.startsWith('once_') ? state.planId : state.startedAt
+      ),
       result,
       started_at: state.startedAt,
       ended_at: endedAt,
@@ -70,6 +72,7 @@ export class FocusSyncService {
       mode: state.mode,
       apps: [...state.selectedTokens],
       participation_mode: resolveParticipationMode(state),
+      timer_mode: state.timerMode,
       fail_reason: failReason.length > 0
         ? failReason
         : (result === 'VIOLATION' ? 'tear' : '')
@@ -100,6 +103,7 @@ export class FocusSyncService {
       mode: state.mode,
       apps: [...state.selectedTokens],
       participation_mode: resolveParticipationMode(state),
+      timer_mode: state.timerMode,
       duo_session_id: state.duoSessionId,
       record_id: state.recordId,
       fail_reason: failReason.length > 0
@@ -161,6 +165,9 @@ export class FocusSyncService {
       }
       if (pending.record_id) {
         body['record_id'] = pending.record_id;
+      }
+      if (pending.timer_mode) {
+        body['timer_mode'] = pending.timer_mode;
       }
 
       const response = await HttpService.post('/focus/sync', body, true, true);

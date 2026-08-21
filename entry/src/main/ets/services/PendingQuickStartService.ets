@@ -13,6 +13,7 @@ import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
+import { DuoBgSyncService } from './DuoBgSyncService';
 
 const PENDING_KEY: string = 'pending.quick_start';
 
@@ -75,7 +76,7 @@ const PROD_QUICK_START_DELAY_OPTIONS: number[] = [0, 10, 15, 20, 30, 45, 60];
 const DEV_QUICK_START_DELAY_OPTIONS: number[] = [0, 1, 10, 15, 20, 30, 45, 60];
 
 export function getQuickStartDelayOptions(): number[] {
-  return ApiConfig.BASE_URL.includes('/dev-api')
+  return ApiConfig.isDevEnvironment()
     ? DEV_QUICK_START_DELAY_OPTIONS
     : PROD_QUICK_START_DELAY_OPTIONS;
 }
@@ -140,6 +141,7 @@ function syncPendingToAppStorage(pending: PendingQuickStartState | null): void {
 export function hydratePendingQuickStart(context: common.Context): void {
   bootstrapStores();
   syncPendingToAppStorage(loadPending(context));
+  DuoBgSyncService.ensure();
 }
 
 export function hasPendingQuickStart(context: common.Context): boolean {
@@ -157,6 +159,7 @@ export function getPendingRemainSeconds(context: common.Context, nowMs: number =
 export function clearPendingQuickStart(context: common.Context): void {
   removeStoredKey(context, PENDING_KEY);
   syncPendingToAppStorage(null);
+  DuoBgSyncService.ensure();
 }
 
 export async function cancelPendingQuickStart(context: common.Context): Promise<void> {
@@ -201,6 +204,7 @@ export async function schedulePendingQuickStart(
     await cancelPendingQuickStart(context);
     return false;
   }
+  DuoBgSyncService.ensure();
   AnalyticsService.trackEvent('quick_start_delayed_scheduled', {
     'delay_minutes': payload.delayMinutes,
     'duration_minutes': payload.durationMinutes,

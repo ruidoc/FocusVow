@@ -7,4 +7,9 @@ export class ApiConfig {
   static readonly OS_TAG: string = 'harmony';
   static readonly CONNECT_TIMEOUT_MS: number = 12000;
   static readonly READ_TIMEOUT_MS: number = 20000;
+
+  /** debug 包指向 dev-api；release 为 /api */
+  static isDevEnvironment(): boolean {
+    return ApiConfig.BASE_URL.includes('/dev-api');
+  }
 }

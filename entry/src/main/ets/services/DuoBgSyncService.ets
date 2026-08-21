@@ -70,11 +70,23 @@ function needsBgSync(context: common.Context): boolean {
     return true;
   }
 
+  if (hasPendingQuickStartWait()) {
+    return true;
+  }
+
   return isFocusLockActive(context);
 }
 
 function isAppForeground(): boolean {
   return AppStorage.get<boolean>(StoreKeys.AppIsForeground) === true;
+}
+
+function hasPendingQuickStartWait(): boolean {
+  const startAtMs = AppStorage.get<number>(StoreKeys.PendingQuickStartStartAtMs) ?? 0;
+  if (startAtMs <= 0) {
+    return false;
+  }
+  return startAtMs > Date.now();
 }
 
 /** 已完成比例 0~100（圆环随时间前进填充） */
@@ -122,6 +134,18 @@ function buildStatusCopy(context: common.Context): StatusCopy {
       progress: 99,
       showProgress: true,
       progressSettled: true
+    };
+  }
+
+  if (hasPendingQuickStartWait()) {
+    const startAtMs = AppStorage.get<number>(StoreKeys.PendingQuickStartStartAtMs) ?? 0;
+    const remainSec = Math.max(0, Math.ceil((startAtMs - Date.now()) / 1000));
+    return {
+      title: '等待开始',
+      text: `剩余 ${formatRemainingSeconds(remainSec)}`,
+      progress: 0,
+      showProgress: false,
+      progressSettled: false
     };
   }
 

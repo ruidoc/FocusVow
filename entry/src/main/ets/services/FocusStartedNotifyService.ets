@@ -35,14 +35,18 @@ export class FocusStartedNotifyService {
     context: common.Context | undefined,
     durationMin: number,
     title?: string,
-    timerMode?: string
+    timerMode?: string,
+    planId?: string,
+    startedAtMs?: number
   ): void {
     const params: FocusStartedReportParams = {
       scene: 'solo_start',
       durationMin: durationMin,
       sessionType: 'solo_once',
       title: title,
-      timerMode: timerMode
+      timerMode: timerMode,
+      planId: planId,
+      startedAtMs: startedAtMs
     };
     FocusStartedNotifyService.report(context, params);
   }

@@ -5,6 +5,7 @@ import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
+import { ApiConfig } from "../../config/ApiConfig";
 import { TEAR_CONFIRM_REQUIRED_TEXT, TEAR_CONFIRM_REQUIRED_TEXT_DUO } from "../../constants/TearConfirm";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { UsersIcon } from "../../components/common/UsersIcon";
@@ -742,6 +743,17 @@ export struct FocusHomePage {
     );
   }
 
+  /** 开发环境：跳过输入确认，方便调试撕毁流程 */
+  private canShowInstantTearButton(): boolean {
+    if (!ApiConfig.isDevEnvironment() || this.isEndingLock) {
+      return false;
+    }
+    if (this.activeLock.kind === "quick_focus" && this.isPastCountupMin()) {
+      return false;
+    }
+    return this.activeLock.kind === "quick_focus" || this.activeLock.kind === "covenant";
+  }
+
   private getEndLockButtonLabel(): string {
     if (isOrgClassroomLockPlanId(this.activeLock.planId)) {
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -819,6 +831,41 @@ export struct FocusHomePage {
     .onClick(() => {
       void this.endCurrentLock();
     });
+  }
+
+  @Builder
+  private buildInstantTearButton(): void {
+    Row() {
+      Text("立即撕毁")
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.danger)
+    }
+    .height(40)
+    .padding({ left: 16, right: 16 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(AppTheme.colors.surface)
+    .border({ width: 1, color: AppTheme.colors.danger })
+    .borderRadius(AppTheme.radius.button)
+    .clip(true)
+    .opacity(this.isEndingLock ? 0.5 : 1)
+    .enabled(!this.isEndingLock)
+    .onClick(() => {
+      void this.performTearLock();
+    });
+  }
+
+  @Builder
+  private buildTearActions(): void {
+    if (this.canShowInstantTearButton()) {
+      Row({ space: 10 }) {
+        this.buildWeakTearButton();
+        this.buildInstantTearButton();
+      }
+    } else if (this.canShowTearButton()) {
+      this.buildWeakTearButton();
+    }
   }
 
   @Builder
@@ -912,8 +959,8 @@ export struct FocusHomePage {
         if (this.canOpenWhitelist()) {
           this.buildOpenWhitelistButton();
         }
-        if (this.canShowTearButton()) {
-          this.buildWeakTearButton();
+        if (this.canShowTearButton() || this.canShowInstantTearButton()) {
+          this.buildTearActions();
         }
       }
       .margin({ top: 48 })
