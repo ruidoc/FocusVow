@@ -12,7 +12,7 @@ import { compressAvatarForUpload } from '../services/AvatarCompressService';
 import { ExtendApiService } from '../services/ExtendApiService';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
-import { clearAllScheduledGuardOnLogout, syncAllScheduledGuardOnLogin } from '../services/ScheduledCovenantService';
+import { clearAllScheduledGuardOnLogout, clearScheduledGuardSyncFlags, loadScheduledListOnLogin, markAwaitingScheduledGuardSyncCheck } from '../services/ScheduledCovenantService';
 import { clearExitPlanIds } from '../services/ExitPlanIdsService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { HuaweiAccountService } from '../services/HuaweiAccountService';
@@ -504,6 +504,7 @@ export class UserStore {
     AnalyticsService.trackLogout(context);
     clearDuoWaitContext();
     clearSignupTrialEligible(context);
+    clearScheduledGuardSyncFlags(context);
     clearExitPlanIds(context);
     clearUserSession(context);
     BenefitStore.reset();
@@ -530,6 +531,7 @@ export class UserStore {
     syncAppStorageValue(StoreKeys.UserAccessToken, token);
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, true);
     setSignupTrialEligible(context, isNew);
+    markAwaitingScheduledGuardSyncCheck(context);
 
     const refreshError = await UserStore.refreshUserInfo(context);
     if (refreshError) {
@@ -540,6 +542,7 @@ export class UserStore {
     void QuickTaskStore.loadAll();
     void UserStore.syncGuardsOnLogin(context);
     void UserStore.flushPendingReferral(context);
+    refreshStats();
     if (loginMethod) {
       if (isNew) {
         AnalyticsService.trackRegisterCompleted(loginMethod, context);
@@ -552,10 +555,7 @@ export class UserStore {
 
   static async syncGuardsOnLogin(context: common.UIAbilityContext): Promise<void> {
     PlanStore.hydrate(context);
-    const scheduledResult = await syncAllScheduledGuardOnLogin(context);
-    if (!scheduledResult.ok) {
-      console.warn(`Scheduled guard sync on login skipped: ${scheduledResult.message}`);
-    }
+    await loadScheduledListOnLogin(context);
     const planResult = await syncAllPlanGuardStrategies(PlanStore.getPlans());
     if (!planResult.ok) {
       console.warn(`Plan guard sync on login skipped: ${planResult.message}`);

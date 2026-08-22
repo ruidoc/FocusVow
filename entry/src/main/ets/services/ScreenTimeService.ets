@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FocusPlan } from '../models/PlanModel';
 import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
 import { resolveInstantLockMinutes } from '../utils/TimerMode';
+import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
 
 export interface GuardResult<T> {
   ok: boolean;
@@ -227,12 +228,22 @@ async function pollUserAuthGranted(maxRetry: number = 5, intervalMs: number = 80
 
 /** 查询屏时守护系统授权是否已授予 */
 export async function checkScreenTimeAuthorized(): Promise<boolean> {
+  if (isHarmonyPcOr2in1()) {
+    return true;
+  }
   return getUserAuthGranted();
 }
 
 export async function requestScreenTimeAuthorization(
   context: common.UIAbilityContext
 ): Promise<GuardResult<boolean>> {
+  if (isHarmonyPcOr2in1()) {
+    return {
+      ok: true,
+      data: true,
+      message: 'PC/二合一设备无需屏时授权'
+    };
+  }
   try {
     await guardService.requestUserAuth(context);
   } catch (error) {
@@ -250,6 +261,9 @@ export async function requestScreenTimeAuthorization(
 export async function ensureScreenTimeAuthorization(
   context: common.UIAbilityContext
 ): Promise<GuardResult<boolean>> {
+  if (isHarmonyPcOr2in1()) {
+    return { ok: true, data: true, message: 'PC/二合一设备无需屏时授权' };
+  }
   if (await getUserAuthGranted()) {
     return { ok: true, data: true, message: '系统授权已开启' };
   }
@@ -261,6 +275,13 @@ export async function chooseRestrictedApps(
   context: common.UIAbilityContext,
   selectedTokens: string[]
 ): Promise<GuardResult<string[]>> {
+  if (isHarmonyPcOr2in1()) {
+    return {
+      ok: true,
+      data: [...selectedTokens],
+      message: 'PC/二合一设备暂不支持选择应用'
+    };
+  }
   try {
     const tokens = await appPicker.startAppPicker(context, { appTokens: selectedTokens });
     return {
@@ -304,6 +325,9 @@ export async function applyScreenRestriction(
   selectedTokens: string[],
   mode: 'shield' | 'allow'
 ): Promise<GuardResult<boolean>> {
+  if (isHarmonyPcOr2in1()) {
+    return { ok: true, data: true, message: '专注已开始（PC/二合一仅计时）' };
+  }
   try {
     const restrictionType: guardService.RestrictionType = getRestrictionType(mode);
 
@@ -322,6 +346,9 @@ export async function releaseScreenRestriction(
   selectedTokens: string[],
   mode: 'shield' | 'allow'
 ): Promise<GuardResult<boolean>> {
+  if (isHarmonyPcOr2in1()) {
+    return { ok: true, data: true, message: '已解除应用限制' };
+  }
   try {
     const restrictionType: guardService.RestrictionType = getRestrictionType(mode);
 
@@ -372,6 +399,11 @@ export async function syncDelayedOnceGuardStrategy(
   selectedTokens: string[],
   mode: 'shield' | 'allow'
 ): Promise<GuardResult<number>> {
+  if (isHarmonyPcOr2in1()) {
+    const lockMinutes = resolveInstantLockMinutes(durationMinutes, timerMode);
+    const endAtMs = ceilToNextMinuteMs(startAtMs + lockMinutes * 60_000);
+    return { ok: true, data: endAtMs, message: '已预约延迟开始（PC/二合一仅计时）' };
+  }
   if (selectedTokens.length === 0 && mode !== 'allow') {
     return { ok: false, data: 0, message: toBusinessMessage('请先选择要限制的应用') };
   }
@@ -594,6 +626,9 @@ export async function pruneSessionGuardStrategies(activeSessionIds: Set<string>)
 }
 
 export async function syncAllPlanGuardStrategies(plans: FocusPlan[]): Promise<GuardResult<boolean>> {
+  if (isHarmonyPcOr2in1()) {
+    return { ok: true, data: true, message: 'PC/二合一设备跳过系统契约策略同步' };
+  }
   if (!(await getUserAuthGranted())) {
     return { ok: false, data: false, message: '未完成系统授权，跳过系统契约策略同步' };
   }

@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { SettingsState, createDefaultSettingsState } from '../models/PermissionModel';
 import { loadPersistedSettings, savePersistedSettings } from '../services/SettingsPersistenceService';
 import { UserAppApiService } from '../services/UserAppApiService';
+import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
@@ -20,6 +21,10 @@ export class SettingsStore {
     bootstrapStores();
     const persistedState = loadPersistedSettings(context);
     const nextState = persistedState ?? createDefaultSettingsState();
+    if (isHarmonyPcOr2in1()) {
+      nextState.hasAuthorized = true;
+      nextState.statusMessage = 'PC/二合一设备无需屏时授权';
+    }
 
     syncAppStorageValue(StoreKeys.SettingsHasAuthorized, nextState.hasAuthorized);
     syncAppStorageValue(StoreKeys.SettingsSelectedTokens, nextState.selectedTokens);

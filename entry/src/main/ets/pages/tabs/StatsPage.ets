@@ -89,7 +89,9 @@ export struct StatsPage {
   private onLoginChanged(): void {
     if (!this.isLoggedIn) {
       this.resetStatsView();
+      return;
     }
+    void this.reload();
   }
 
   private resetStatsView(): void {
@@ -99,7 +101,7 @@ export struct StatsPage {
     this.timeline = [];
     this.shame = [];
     this.byTask = [];
-    this.errorMessage = '登录后可查看履约荣誉墙与耻辱柱';
+    this.errorMessage = '';
     this.isLoading = false;
     this.isRefreshing = false;
   }

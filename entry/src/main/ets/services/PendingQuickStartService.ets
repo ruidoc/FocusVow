@@ -72,8 +72,8 @@ async function startDelayedQuickFocus(
   await notifyTask;
 }
 
-const PROD_QUICK_START_DELAY_OPTIONS: number[] = [0, 10, 15, 20, 30, 45, 60];
-const DEV_QUICK_START_DELAY_OPTIONS: number[] = [0, 1, 10, 15, 20, 30, 45, 60];
+const PROD_QUICK_START_DELAY_OPTIONS: number[] = [0, 5, 10, 15, 20, 30, 45, 60];
+const DEV_QUICK_START_DELAY_OPTIONS: number[] = [0, 1, 5, 10, 15, 20, 30, 45, 60];
 
 export function getQuickStartDelayOptions(): number[] {
   return ApiConfig.isDevEnvironment()

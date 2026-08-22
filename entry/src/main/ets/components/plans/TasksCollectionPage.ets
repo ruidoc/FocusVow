@@ -11,13 +11,18 @@ import { UserStore } from '../../stores/UserStore';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import {
+  consumeOpenQuickTaskTabOnce,
+  hydrateScheduledGuardSyncFlags,
+  needsScheduledGuardSync
+} from '../../services/ScheduledCovenantService';
 
 bootstrapStores();
 
 @Component
 export struct TasksCollectionPage {
   @Prop showBack: boolean = false;
-  @Prop isPageActive: boolean = true;
+  @Prop @Watch('onIsPageActiveChanged') isPageActive: boolean = true;
 
   @State private subTabIndex: number = 0;
   /** 0=快捷任务，1=定时任务；跟手滑动时为连续值 */
@@ -33,19 +38,44 @@ export struct TasksCollectionPage {
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    hydrateScheduledGuardSyncFlags(hostContext);
     UserStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     ScheduledListStore.hydrate();
 
-    if (AppStorage.get<boolean>(StoreKeys.OpenQuickTaskTabOnce) === true) {
-      AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
-      this.subTabIndex = 0;
-      this.tabProgress = 0;
-    } else {
-      const saved = AppStorage.get<number>(StoreKeys.TasksSubTabIndex) ?? 0;
-      this.subTabIndex = saved === 1 ? 1 : 0;
-      this.tabProgress = this.subTabIndex;
+    const initialTab = this.resolveInitialTabIndex(hostContext);
+    this.subTabIndex = initialTab;
+    this.tabProgress = initialTab;
+  }
+
+  private resolveInitialTabIndex(context: common.UIAbilityContext): number {
+    if (consumeOpenQuickTaskTabOnce()) {
+      return 0;
     }
+    if (needsScheduledGuardSync(context)) {
+      return 1;
+    }
+    const saved = AppStorage.get<number>(StoreKeys.TasksSubTabIndex) ?? 0;
+    return saved === 1 ? 1 : 0;
+  }
+
+  private onIsPageActiveChanged(): void {
+    if (!this.isPageActive) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (consumeOpenQuickTaskTabOnce()) {
+      this.goToTab(0, false);
+      return;
+    }
+    this.goToScheduledIfNeeded(hostContext);
+  }
+
+  private goToScheduledIfNeeded(context: common.UIAbilityContext): void {
+    if (!needsScheduledGuardSync(context)) {
+      return;
+    }
+    this.goToTab(1, false);
   }
 
   private onSubTabChange(index: number): void {
@@ -81,11 +111,13 @@ export struct TasksCollectionPage {
     });
   }
 
-  private goToTab(index: number): void {
+  private goToTab(index: number, animate: boolean = true): void {
     if (this.subTabIndex === index) {
       return;
     }
-    this.swiperController.changeIndex(index, true);
+    this.subTabIndex = index;
+    this.tabProgress = index;
+    this.swiperController.changeIndex(index, animate);
   }
 
   private openCreate(): void {

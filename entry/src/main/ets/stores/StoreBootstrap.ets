@@ -53,6 +53,8 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
   AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 0);
   AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
+  AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, false);
+  AppStorage.setOrCreate(StoreKeys.AwaitingScheduledGuardSyncCheck, false);
   AppStorage.setOrCreate(StoreKeys.MainTabTarget, '');
   AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
   AppStorage.setOrCreate(StoreKeys.DuoWaitSessionId, '');

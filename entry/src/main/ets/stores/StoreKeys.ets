@@ -55,6 +55,8 @@ export class StoreKeys {
   static readonly QuickTaskCurrentId: string = 'quickTask.currentId';
   static readonly TasksSubTabIndex: string = 'tasks.subTab.index';
   static readonly OpenQuickTaskTabOnce: string = 'tasks.openQuickTabOnce';
+  static readonly NeedsScheduledGuardSync: string = 'tasks.needsScheduledGuardSync';
+  static readonly AwaitingScheduledGuardSyncCheck: string = 'tasks.awaitingScheduledGuardSyncCheck';
   static readonly StatsDetailPeriod: string = 'stats.detail.period';
   static readonly StatsDetailSection: string = 'stats.detail.section';
   static readonly OrgDetailId: string = 'org.detail.id';

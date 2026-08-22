@@ -65,7 +65,7 @@ export struct QuickTaskListContent {
     }
 
     if (!UserStore.isLoggedIn()) {
-      this.statusMessage = '登录后可查看快捷任务';
+      this.statusMessage = '';
       this.isLoading = false;
       this.isRefreshing = false;
       return;

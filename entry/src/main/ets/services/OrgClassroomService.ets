@@ -10,6 +10,7 @@ import { OrgStore } from '../stores/OrgStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { UserStore } from '../stores/UserStore';
 import { applyScreenRestriction, releaseScreenRestriction } from './ScreenTimeService';
+import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
 import { readStoredString, removeStoredKey, writeStoredString } from './PreferencesService';
 
 const META_KEY: string = 'org.classroom.active';
@@ -129,7 +130,7 @@ export async function joinAndStartOrgClassroom(
   if (LockStore.isLocked()) {
     return '已有专注任务正在进行中';
   }
-  if (tokens.length === 0) {
+  if (tokens.length === 0 && !isHarmonyPcOr2in1()) {
     return '请先选择白名单应用';
   }
   if (tokens.length > classroom.max_apps) {

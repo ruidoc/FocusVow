@@ -1,6 +1,6 @@
 import { AppTheme } from '../../constants/Theme';
 import { DuoStatsTaskItem } from '../../models/DuoModel';
-import { formatSuccessDurationLabel } from '../../services/StatsRecordUtil';
+import { formatTaskDurationMinutes } from '../../services/StatsRecordUtil';
 
 const BAR_PALETTE: string[] = [
   '#6366F1',
@@ -108,7 +108,7 @@ export struct TaskDurationChart {
         .margin({ right: 12 })
 
         Row({ space: 8 }) {
-          Text(formatSuccessDurationLabel(item.actual_mins))
+          Text(formatTaskDurationMinutes(item.actual_mins))
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
@@ -120,7 +120,6 @@ export struct TaskDurationChart {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // 纯色扁平进度条，避免 Progress 默认投影/材质
       Row() {
         Row()
           .width(`${this.getBarValue(item)}%`)
@@ -145,7 +144,7 @@ export struct TaskDurationChart {
           Text(this.title)
             .fontSize(14)
             .fontColor(AppTheme.colors.textSecondary)
-          Text(formatSuccessDurationLabel(this.totalMins))
+          Text(formatTaskDurationMinutes(this.totalMins))
             .fontSize(24)
             .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.colors.textPrimary)

@@ -76,6 +76,23 @@ export function formatSuccessDurationParts(minutes: number): DurationLabelPart[]
   ];
 }
 
+/** 对齐 RN TaskDurationChart.formatMinutes：如 1 小时 45 分钟 */
+export function formatTaskDurationMinutes(minutes: number): string {
+  const mins = Math.max(0, Math.floor(minutes));
+  if (mins <= 0) {
+    return '0 分钟';
+  }
+  if (mins < 60) {
+    return `${mins} 分钟`;
+  }
+  const hours = Math.floor(mins / 60);
+  const remainMinutes = mins % 60;
+  if (remainMinutes === 0) {
+    return `${hours} 小时`;
+  }
+  return `${hours} 小时 ${remainMinutes} 分钟`;
+}
+
 export function formatSuccessDurationLabel(minutes: number): string {
   const parts = formatSuccessDurationParts(minutes);
   let out = '';

@@ -1,10 +1,17 @@
 import { common } from '@kit.AbilityKit';
 import { ScheduledSessionCard } from './ScheduledSessionCard';
 import { AppTheme } from '../../constants/Theme';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { DuoSessionView, sortScheduledSessions } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
-import { getGuardSyncIssueCount, reconcileStaleScheduledWindows } from '../../services/ScheduledCovenantService';
+import {
+  getGuardSyncIssueCount,
+  hydrateScheduledGuardSyncFlags,
+  reconcileStaleScheduledWindows,
+  applyScheduledGuardSyncCheckAfterListLoad,
+  syncScheduledGuardsManually
+} from '../../services/ScheduledCovenantService';
 import { ScheduledListFilter, ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
@@ -30,8 +37,13 @@ export struct PlanListContent {
   @State statusMessage: string = '';
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
+  @State syncingGuards: boolean = false;
+  @StorageLink(StoreKeys.NeedsScheduledGuardSync) needsScheduledGuardSync: boolean = false;
+  @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
 
   aboutToAppear(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    hydrateScheduledGuardSyncFlags(hostContext);
     ScheduledListStore.hydrate();
     this.syncFilterFromStore();
     this.refreshDisplaySessions();
@@ -102,7 +114,7 @@ export struct PlanListContent {
     }
 
     if (!UserStore.isLoggedIn()) {
-      this.statusMessage = '登录后可查看云端契约';
+      this.statusMessage = '';
       this.isLoading = false;
       this.isRefreshing = false;
       return;
@@ -122,6 +134,7 @@ export struct PlanListContent {
       this.statusMessage = response.message;
     } else {
       ScheduledListStore.clearDirty();
+      applyScheduledGuardSyncCheckAfterListLoad(hostContext, reconciled.length);
       const guardIssueCount = getGuardSyncIssueCount(hostContext);
       if (guardIssueCount > 0) {
         this.statusMessage = `有 ${guardIssueCount} 条契约待完成本机屏时配置`;
@@ -144,6 +157,68 @@ export struct PlanListContent {
 
   private handleCreatePlan(): void {
     this.onCreatePlan?.();
+  }
+
+  private showPendingSync(): boolean {
+    return this.isLoggedIn && this.needsScheduledGuardSync && this.allSessions.length > 0;
+  }
+
+  private async syncLocalGuards(): Promise<void> {
+    if (this.syncingGuards) {
+      return;
+    }
+    this.syncingGuards = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      const result = await syncScheduledGuardsManually(hostContext);
+      if (result.ok) {
+        showToast('已同步到本机', this.getUIContext());
+        if (this.statusMessage.indexOf('待完成本机屏时配置') >= 0) {
+          this.statusMessage = '';
+        }
+      } else if (result.message.length > 0) {
+        showErrorToast(result.message, this.getUIContext());
+      }
+    } finally {
+      this.syncingGuards = false;
+    }
+  }
+
+  @Builder
+  private buildSyncButton(): void {
+    Column({ space: 8 }) {
+      Row({ space: 6 }) {
+        if (!this.syncingGuards) {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(18)
+            .fontColor([AppTheme.colors.primary])
+        }
+        Text(this.syncingGuards ? '同步中...' : '同步定时任务')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.primary)
+      }
+      .width('100%')
+      .height(44)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(AppTheme.colors.surface)
+      .borderRadius(AppTheme.radius.button)
+      .opacity(this.syncingGuards ? 0.6 : 1)
+      .onClick(() => {
+        if (!this.syncingGuards) {
+          void this.syncLocalGuards();
+        }
+      })
+
+      Text('登录后需要点击同步，否则定时任务不生效')
+        .width('100%')
+        .fontSize(12)
+        .lineHeight(18)
+        .fontColor(AppTheme.colors.textMuted)
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding({ top: 4, bottom: 4 })
   }
 
   @Builder
@@ -245,6 +320,12 @@ export struct PlanListContent {
               .width('100%')
               .fontSize(12)
               .fontColor(AppTheme.colors.textSecondary)
+          }
+        }
+
+        if (this.showPendingSync()) {
+          ListItem() {
+            this.buildSyncButton()
           }
         }
 

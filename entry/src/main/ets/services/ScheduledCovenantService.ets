@@ -34,6 +34,58 @@ import {
   ScheduledGuardSyncIssue
 } from './ScheduledSessionPersistenceService';
 import { loadExitPlanIds } from './ExitPlanIdsService';
+import { readStoredString, writeStoredString } from './PreferencesService';
+import { StoreKeys } from '../stores/StoreKeys';
+
+const NEEDS_SCHEDULED_GUARD_SYNC_KEY: string = 'needs_scheduled_guard_sync';
+const AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY: string = 'awaiting_scheduled_guard_sync_check';
+
+function readBoolPref(context: common.Context, key: string): boolean {
+  return readStoredString(context, key, '') === 'true';
+}
+
+function writeBoolPref(context: common.Context, key: string, value: boolean): void {
+  writeStoredString(context, key, value ? 'true' : 'false');
+}
+
+/** 登录后标记：下次拉取定时列表时决定是否提示同步本机策略 */
+export function markAwaitingScheduledGuardSyncCheck(context: common.Context): void {
+  writeBoolPref(context, AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY, true);
+  AppStorage.setOrCreate(StoreKeys.AwaitingScheduledGuardSyncCheck, true);
+}
+
+export function needsScheduledGuardSync(context: common.Context): boolean {
+  return readBoolPref(context, NEEDS_SCHEDULED_GUARD_SYNC_KEY);
+}
+
+export function clearScheduledGuardSyncFlags(context: common.Context): void {
+  writeBoolPref(context, NEEDS_SCHEDULED_GUARD_SYNC_KEY, false);
+  writeBoolPref(context, AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY, false);
+  AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, false);
+  AppStorage.setOrCreate(StoreKeys.AwaitingScheduledGuardSyncCheck, false);
+}
+
+/** 对齐 RN scheduled-list.loadAll：有待同步定时契约时任务 Tab 默认切到「定时任务」 */
+export function applyScheduledGuardSyncCheckAfterListLoad(
+  context: common.Context,
+  itemCount: number
+): void {
+  if (!readBoolPref(context, AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY)) {
+    return;
+  }
+  writeBoolPref(context, AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY, false);
+  writeBoolPref(context, NEEDS_SCHEDULED_GUARD_SYNC_KEY, itemCount > 0);
+  AppStorage.setOrCreate(StoreKeys.AwaitingScheduledGuardSyncCheck, false);
+  AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, itemCount > 0);
+}
+
+export function consumeOpenQuickTaskTabOnce(): boolean {
+  if (AppStorage.get<boolean>(StoreKeys.OpenQuickTaskTabOnce) !== true) {
+    return false;
+  }
+  AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
+  return true;
+}
 
 export function scheduledSessionStrategyName(sessionId: string): string {
   return `session_${sessionId}`;
@@ -284,6 +336,33 @@ export async function syncAllScheduledGuardOnLogin(context: common.Context): Pro
   ScheduledListStore.setAllSessions(reconciled);
   ScheduledListStore.clearDirty();
   return syncAllScheduledGuardStrategies(context, reconciled);
+}
+
+/** 对齐 RN scheduled-list.loadAll：登录后只拉列表并标记待同步，不自动挂本机策略 */
+export async function loadScheduledListOnLogin(context: common.Context): Promise<void> {
+  const response = await DuoApiService.getScheduledList();
+  if (response.statusCode !== 200) {
+    return;
+  }
+  const list = DuoApiService.parseScheduledList(response);
+  const reconciled = await reconcileStaleScheduledWindows(list.items, context);
+  ScheduledListStore.setAllSessions(reconciled);
+  ScheduledListStore.clearDirty();
+  applyScheduledGuardSyncCheckAfterListLoad(context, reconciled.length);
+}
+
+/** 对齐 RN syncScheduledGuardsManually：用户点击「同步定时任务」 */
+export async function syncScheduledGuardsManually(context: common.Context): Promise<GuardResult<boolean>> {
+  const result = await syncAllScheduledGuardOnLogin(context);
+  if (result.ok) {
+    writeBoolPref(context, NEEDS_SCHEDULED_GUARD_SYNC_KEY, false);
+    AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, false);
+  }
+  return result;
+}
+
+export function hydrateScheduledGuardSyncFlags(context: common.Context): void {
+  AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, needsScheduledGuardSync(context));
 }
 
 function resolveDuoSessionId(lock: ActiveLockState): string {
