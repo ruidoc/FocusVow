@@ -3,6 +3,8 @@ import { ActiveLockState, isLocked } from '../../models/ActiveLockModel';
 import { MainTabKey } from '../../router/PageRoutes';
 
 export const FLOATING_TAB_EXTRA_BOTTOM_VP: number = 72;
+/** 倒计时胶囊与底部 Tab 的额外间距 */
+export const CAPSULE_ABOVE_TAB_GAP_VP: number = 28;
 const IMMERSIVE_TAB_MIN_API_VERSION: number = 23;
 
 export interface MainTabIconPair {

@@ -150,7 +150,7 @@ export class AnalyticsService {
     properties?: Record<string, Object>
   ): void {
     const props: Record<string, Object> = {
-      'login_method': method
+      'register_method': method
     };
     AnalyticsService.trackEvent('register_completed', mergeProperties(props, properties), context);
   }

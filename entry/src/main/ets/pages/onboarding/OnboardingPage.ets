@@ -3,11 +3,11 @@ import { window } from '@kit.ArkUI';
 import { showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
 import { AppTheme } from '../../constants/Theme';
-import { PageRoutes, backRoute, pushQuickStart, pushRoute, returnToMainTab } from '../../router/PageRoutes';
+import { FeatureFlagKeys } from '../../config/FeatureFlags';
+import { backRoute, PageRoutes, pushQuickStart, pushRoute, returnToMainTab } from '../../router/PageRoutes';
 import {
   FIRST_FOCUS_MINUTES,
-  FIRST_FOCUS_TITLE,
-  markFirstFocusPromptDone
+  FIRST_FOCUS_TITLE
 } from '../../services/FirstFocusPromptService';
 import {
   isOnboardingCompleted,
@@ -21,8 +21,17 @@ import {
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { SettingsStore } from '../../stores/SettingsStore';
+import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
+import {
+  clearMembershipSignupSkipped,
+  hasSkippedMembershipSignup,
+  isOnboardingMembershipBenefitActive,
+  markMembershipSignupSkipped,
+  setPendingOnboardingActivationModal,
+} from '../../utils/OnboardingMembershipUtil';
+import { SIGNUP_TRIAL_EXISTING_USER_TOAST } from '../../utils/SignupTrialUtil';
 import {
   clearPendingReferralCode,
   getPendingReferralCode,
@@ -36,6 +45,12 @@ import {
   IDENTITY_OPTIONS,
   OnboardingOption
 } from '../../utils/OnboardingProfile';
+import {
+  buildOnboardingAnalyticsProps,
+  buildOnboardingMetaPatch,
+  OnboardingPath,
+  patchOnboardingMeta,
+} from '../../utils/OnboardingMetaUtil';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -71,7 +86,7 @@ struct OnboardingPage {
   @State hasBuddy: string = '';
   @State referralCode: string = '';
   @State referralStatus: string = 'idle'; // idle | checking | valid | invalid
-  @State showReferralInput: boolean = false;
+  @State showSkipConfirm: boolean = false;
   @State screenTimeOk: boolean = false;
   @State screenTimeDenied: boolean = false;
   @State busy: boolean = false;
@@ -83,13 +98,41 @@ struct OnboardingPage {
   @State goalOptions: OnboardingOption[] = [];
   @State partnerGuideTexts: string[] = [];
   @State private progressWidthPercent: number = 20;
+  @StorageLink(StoreKeys.FeatureFlagsOff) @Watch('onFeaturesOffChanged') featuresOff: string[] = [];
 
   aboutToAppear(): void {
+    void this.initOnboarding();
+  }
+
+  private async initOnboarding(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.hydrate(hostContext);
     SettingsStore.hydrate(hostContext);
+    FeatureFlagStore.hydrate(hostContext);
+    await FeatureFlagStore.sync(hostContext);
     this.viaOldUser = AppStorage.get<boolean>(StoreKeys.OnboardingViaOldUser) === true;
-    this.totalSteps = this.viaOldUser ? 4 : 5;
+    patchOnboardingMeta({
+      entry_source: this.viaOldUser ? 'welcome_old_user' : 'new_explore',
+    });
+    this.totalSteps = this.getTotalSteps();
+    if (AppStorage.get<boolean>(StoreKeys.OnboardingAfterRegister) === true) {
+      AppStorage.setOrCreate(StoreKeys.OnboardingAfterRegister, false);
+      patchOnboardingMeta({
+        onboarding_path: 'register_first',
+        benefit_eligible: true,
+        entry_source: 'new_explore',
+      });
+      AnalyticsService.trackEvent('onboarding_path_decided', buildOnboardingAnalyticsProps({
+        'action': 'email_register',
+        'login_method': 'email',
+      }));
+      if (UserStore.isLoggedIn()) {
+        AnalyticsService.trackEvent('onboarding_registered', buildOnboardingAnalyticsProps({
+          'login_method': 'email',
+        }));
+      }
+      this.step = this.getPermissionStepNumber();
+    }
     this.progressWidthPercent = Math.max(8, (this.step / this.totalSteps) * 100);
     if (isOnboardingCompleted(hostContext) && !this.viaOldUser) {
       replaceToHome();
@@ -108,8 +151,7 @@ struct OnboardingPage {
     void this.syncPermission();
     const pending = getPendingReferralCode(hostContext);
     if (pending.length > 0) {
-      this.referralCode = pending;
-      this.showReferralInput = true;
+      this.referralCode = pending.slice(0, 11);
       void this.onReferralBlur();
     }
   }
@@ -174,8 +216,58 @@ struct OnboardingPage {
       'problem': goalToProblem(id)
     });
     setTimeout(() => {
-      this.applyStep(3);
+      if (this.showPartnerStep()) {
+        this.applyStep(3);
+      } else {
+        void this.skipPartnerStep();
+      }
     }, 180);
+  }
+
+  private onFeaturesOffChanged(): void {
+    this.totalSteps = this.getTotalSteps();
+    if (!this.showPartnerStep() && this.isPartnerStep()) {
+      void this.skipPartnerStep();
+    }
+  }
+
+  private showPartnerStep(): boolean {
+    return !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.PARTNER);
+  }
+
+  private isScreenTimeRequired(): boolean {
+    return !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.SKIP_OVERLAY);
+  }
+
+  private getTotalSteps(): number {
+    if (this.viaOldUser) {
+      return this.showPartnerStep() ? 4 : 3;
+    }
+    return this.showPartnerStep() ? 5 : 4;
+  }
+
+  private getPermissionStepNumber(): number {
+    if (this.viaOldUser) {
+      return this.showPartnerStep() ? 4 : 3;
+    }
+    return this.showPartnerStep() ? 5 : 4;
+  }
+
+  private async skipPartnerStep(): Promise<void> {
+    if (this.viaOldUser) {
+      await this.syncPermission();
+      if (this.screenTimeOk) {
+        this.finish();
+        return;
+      }
+      this.applyStep(this.getPermissionStepNumber());
+      return;
+    }
+    AnalyticsService.trackEvent('signup_benefit_viewed', {
+      'entry_source': 'onboarding_signup_benefit',
+      'screen_name': 'onboarding_signup_benefit'
+    });
+    this.applyStep(this.showPartnerStep() ? 4 : 3);
   }
 
   private selectPartner(id: string): void {
@@ -213,8 +305,8 @@ struct OnboardingPage {
         this.finish();
         return;
       }
-      this.totalSteps = 4;
-      this.applyStep(4);
+      this.totalSteps = this.getTotalSteps();
+      this.applyStep(this.getPermissionStepNumber());
       return;
     }
     AnalyticsService.trackEvent('signup_benefit_viewed', {
@@ -244,21 +336,69 @@ struct OnboardingPage {
     }
   }
 
-  private trackSignupBenefitContinue(action: string, loginMethod?: string): void {
-    const props: Record<string, Object> = {
+  private trackSignupBenefitContinue(
+    action: string,
+    loginMethod?: string,
+    benefitEligible: boolean = true,
+    onboardingPath?: OnboardingPath,
+  ): void {
+    const path = onboardingPath ?? (action === 'skip' ? 'focus_first' : 'register_first');
+    const props: Record<string, Object> = buildOnboardingAnalyticsProps({
       'action': action,
       'referral_code_status': this.referralStatus,
       'has_valid_referral_code': this.referralStatus === 'valid',
       'entry_source': 'onboarding_signup_benefit',
-      'screen_name': 'onboarding_signup_benefit'
-    };
+      'screen_name': 'onboarding_signup_benefit',
+      'benefit_eligible': benefitEligible,
+      'onboarding_path': path,
+    });
     if (loginMethod && loginMethod.length > 0) {
       props['login_method'] = loginMethod;
     }
     AnalyticsService.trackEvent('signup_benefit_continued', props);
   }
 
-  private continueInviteToPermission(action: string = 'skip', loginMethod?: string): void {
+  private decideOnboardingPath(
+    onboardingPath: OnboardingPath,
+    action: string,
+    loginMethod?: string,
+    benefitEligible: boolean = true,
+  ): void {
+    patchOnboardingMeta({
+      onboarding_path: onboardingPath,
+      benefit_eligible: benefitEligible,
+      entry_source: 'new_explore',
+    });
+    const decidedProps: Record<string, Object> = buildOnboardingAnalyticsProps({
+      'onboarding_path': onboardingPath,
+      'action': action,
+      'benefit_eligible': benefitEligible,
+    });
+    if (loginMethod && loginMethod.length > 0) {
+      decidedProps['login_method'] = loginMethod;
+    }
+    AnalyticsService.trackEvent('onboarding_path_decided', decidedProps);
+    if (!benefitEligible) {
+      AnalyticsService.trackEvent('onboarding_benefit_ineligible', buildOnboardingAnalyticsProps({
+        'login_method': loginMethod ?? '',
+      }));
+    }
+    if (
+      onboardingPath === 'register_first' &&
+      benefitEligible &&
+      UserStore.isLoggedIn()
+    ) {
+      AnalyticsService.trackEvent('onboarding_registered', buildOnboardingAnalyticsProps({
+        'login_method': loginMethod ?? '',
+      }));
+    }
+  }
+
+  private continueInviteToPermission(
+    action: string = 'skip',
+    loginMethod?: string,
+    benefitEligible: boolean = true,
+  ): void {
     if (this.referralStatus === 'checking') {
       return;
     }
@@ -267,14 +407,23 @@ struct OnboardingPage {
     } else {
       clearPendingReferralCode();
     }
-    this.trackSignupBenefitContinue(action, loginMethod);
+    const onboardingPath: OnboardingPath = action === 'skip' ? 'focus_first' : 'register_first';
+    this.decideOnboardingPath(onboardingPath, action, loginMethod, benefitEligible);
+    this.trackSignupBenefitContinue(action, loginMethod, benefitEligible, onboardingPath);
+    const meta = buildOnboardingMetaPatch({
+      onboarding_path: onboardingPath,
+      benefit_eligible: benefitEligible,
+      entry_source: 'new_explore',
+    });
+    meta['has_study_buddy'] = this.hasBuddy === 'yes';
     this.upsert({
       'current_step': 'invite_login',
       'identity': this.identity,
       'goal': this.goal,
-      'problem': goalToProblem(this.goal)
+      'problem': goalToProblem(this.goal),
+      'meta': meta,
     });
-    this.applyStep(5);
+    this.applyStep(this.getPermissionStepNumber());
     void this.syncPermission();
   }
 
@@ -314,7 +463,7 @@ struct OnboardingPage {
       if (!UserStore.isLoggedIn()) {
         return;
       }
-      this.continueInviteToPermission('login', 'wechat');
+      this.afterInviteLoginSuccess('wechat');
       return;
     }
     this.wechatLoading = false;
@@ -325,8 +474,10 @@ struct OnboardingPage {
     if (!UserStore.isLoggedIn()) {
       return;
     }
-    showToast('7 天会员仅限新用户领取', this.getUIContext(), 3000);
-    this.continueInviteToPermission('login', 'wechat');
+    if (!UserStore.lastLoginIsNew) {
+      showToast(SIGNUP_TRIAL_EXISTING_USER_TOAST, this.getUIContext(), 3000);
+    }
+    this.afterInviteLoginSuccess('wechat');
   }
 
   private async onInviteHuaweiLogin(): Promise<void> {
@@ -352,7 +503,47 @@ struct OnboardingPage {
     if (!UserStore.isLoggedIn()) {
       return;
     }
-    this.continueInviteToPermission('login', 'huawei');
+    if (!UserStore.lastLoginIsNew) {
+      showToast(SIGNUP_TRIAL_EXISTING_USER_TOAST, this.getUIContext(), 3000);
+    }
+    this.afterInviteLoginSuccess('huawei');
+  }
+
+  private afterInviteLoginSuccess(loginMethod: string): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    clearMembershipSignupSkipped(hostContext);
+    const benefitEligible = UserStore.lastLoginIsNew;
+    this.continueInviteToPermission('login', loginMethod, benefitEligible);
+  }
+
+  private onInviteEmailRegister(): void {
+    if (this.referralStatus === 'checking') {
+      return;
+    }
+    if (this.referralStatus === 'valid') {
+      savePendingReferralCode(this.referralCode);
+    } else {
+      clearPendingReferralCode();
+    }
+    AppStorage.setOrCreate(StoreKeys.LoginFrom, 'onboarding_signup_benefit');
+    pushRoute(PageRoutes.Register);
+  }
+
+  private openSkipConfirm(): void {
+    if (this.referralStatus === 'checking') {
+      return;
+    }
+    AnalyticsService.trackEvent('onboarding_skip_modal_shown', {
+      'entry_source': 'onboarding_signup_benefit',
+    });
+    this.showSkipConfirm = true;
+  }
+
+  private confirmSkipMembership(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.showSkipConfirm = false;
+    markMembershipSignupSkipped(hostContext);
+    this.continueInviteToPermission('skip');
   }
 
   private async requestScreenTime(): Promise<void> {
@@ -361,7 +552,7 @@ struct OnboardingPage {
     }
     this.busy = true;
     AnalyticsService.trackEvent('permission_request_clicked', {
-      'permission_type': 'screen_time',
+      'permission_type': 'screen_time_harmony',
       'scene': 'onboarding',
       'entry_source': 'onboarding',
       'screen_name': 'onboarding_permission_setup'
@@ -382,7 +573,7 @@ struct OnboardingPage {
       this.screenTimeDenied = true;
     }
     AnalyticsService.trackEvent('permission_result', {
-      'permission_type': 'screen_time',
+      'permission_type': 'screen_time_harmony',
       'result': authorized ? 'approved' : 'denied',
       'scene': 'onboarding'
     });
@@ -402,18 +593,19 @@ struct OnboardingPage {
   private finish(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const screenTimeStatus = this.getScreenTimeStatus();
-    const meta: Record<string, Object> = {
-      'has_study_buddy': this.hasBuddy === 'yes'
-    };
-    AnalyticsService.trackEvent('onboarding_finished', {
+    const finishMeta = buildOnboardingMetaPatch({
+      entry_source: this.viaOldUser ? 'welcome_old_user' : 'new_explore',
+    });
+    finishMeta['has_study_buddy'] = this.hasBuddy === 'yes';
+    AnalyticsService.trackEvent('onboarding_finished', buildOnboardingAnalyticsProps({
       'with_login': UserStore.isLoggedIn(),
       'entry_source': this.viaOldUser ? 'welcome_old_user' : 'onboarding',
       'identity': this.identity,
       'goal': this.goal,
       'has_study_buddy': this.hasBuddy === 'yes',
       'via_old_user': this.viaOldUser,
-      'screen_time_status': screenTimeStatus
-    });
+      'screen_time_status': screenTimeStatus,
+    }));
     this.upsert({
       'current_step': 'done',
       'finished': true,
@@ -421,27 +613,42 @@ struct OnboardingPage {
       'goal': this.goal,
       'problem': goalToProblem(this.goal),
       'screen_time_status': screenTimeStatus,
-      'meta': meta
+      'meta': finishMeta
     });
     markOnboardingCompleted(hostContext);
-    markFirstFocusPromptDone(hostContext);
     AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
     AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+    if (hasSkippedMembershipSignup(hostContext)) {
+      returnToMainTab('focus');
+      setTimeout(() => {
+        pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES, true);
+      }, 80);
+      return;
+    }
+    if (isOnboardingMembershipBenefitActive(hostContext)) {
+      setPendingOnboardingActivationModal(hostContext);
+    }
     returnToMainTab('focus');
-    setTimeout(() => {
-      pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES, true);
-    }, 80);
   }
 
   private isInviteStep(): boolean {
-    return !this.viaOldUser && this.step === 4;
+    if (this.viaOldUser) {
+      return false;
+    }
+    return this.showPartnerStep() ? this.step === 4 : this.step === 3;
   }
 
   private isPermissionStep(): boolean {
-    if (this.viaOldUser) {
-      return this.step === 4;
-    }
-    return this.step === 5;
+    return this.step === this.getPermissionStepNumber();
+  }
+
+  private isPartnerStep(): boolean {
+    return this.showPartnerStep() && this.step === 3;
+  }
+
+  private getPermissionFinishLabel(): string {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    return hasSkippedMembershipSignup(hostContext) ? '开始第一次专注' : '完成';
   }
 
   @Builder
@@ -703,97 +910,89 @@ struct OnboardingPage {
   }
 
   @Builder
+  private buildInviteBenefitItem(indexLabel: string, title: string, desc: string, isInviteCode: boolean): void {
+    Row({ space: 10 }) {
+      Row() {
+        SymbolGlyph(isInviteCode ? $r('sys.symbol.person_badge_plus') : $r('sys.symbol.gift'))
+          .fontSize(15)
+          .fontColor([AppTheme.colors.primary])
+      }
+      .width(28)
+      .height(28)
+      .justifyContent(FlexAlign.Center)
+      .borderRadius(14)
+      .backgroundColor('rgba(122, 90, 248, 0.09)')
+      .margin({ top: 2 })
+
+      Column() {
+        Text(indexLabel)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.primary)
+          .lineHeight(28)
+          .width('100%')
+          .margin({ bottom: 8 })
+        Text(title)
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .lineHeight(24)
+          .width('100%')
+        Text(desc)
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .lineHeight(20)
+          .width('100%')
+          .margin({ top: 6 })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
   private buildInviteStep(): void {
     Column() {
-      Column({ space: 0 }) {
-        Text('新用户权益')
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-        Text('注册并完成首次专注后，领取 7 天会员')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.textSecondary)
-          .lineHeight(22)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .margin({ top: 12, bottom: 32 })
+      Scroll() {
+        Column() {
+          Text('新用户权益')
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
+            .textAlign(TextAlign.Center)
+            .width('100%')
+            .margin({ bottom: 40 })
 
-        Button() {
-          Row({ space: 8 }) {
-            Image($r('app.media.huawei'))
-              .width(22)
-              .height(22)
-              .objectFit(ImageFit.Contain)
-            Text(this.huaweiLoading ? '请稍候...' : '华为账号登录')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-          }
-        }
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Normal)
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .backgroundColor(HUAWEI_RED)
-        .borderRadius(AppTheme.radius.button)
-        .clip(true)
-        .enabled(this.referralStatus !== 'checking' && !this.wechatLoading && !this.huaweiLoading)
-        .opacity(this.referralStatus === 'checking' || this.wechatLoading || this.huaweiLoading ? 0.6 : 1)
-        .margin({ bottom: 12 })
-        .onClick(() => {
-          void this.onInviteHuaweiLogin();
-        })
+          this.buildInviteBenefitItem(
+            '权益一',
+            '+7天会员',
+            '注册并完成首次专注后领取',
+            false
+          )
 
-        Button() {
-          Row({ space: 8 }) {
-            Image($r('app.media.wechat'))
-              .width(22)
-              .height(22)
-              .objectFit(ImageFit.Contain)
-            Text(this.wechatLoading ? '请稍候...' : '微信登录/注册')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-          }
-        }
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Normal)
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .backgroundColor(WECHAT_GREEN)
-        .borderRadius(AppTheme.radius.button)
-        .clip(true)
-        .enabled(this.referralStatus !== 'checking' && !this.wechatLoading && !this.huaweiLoading)
-        .opacity(this.referralStatus === 'checking' || this.wechatLoading || this.huaweiLoading ? 0.6 : 1)
-        .onClick(() => {
-          void this.onInviteWechatLogin();
-        })
-
-        if (this.showReferralInput) {
           Column() {
-            Text('有邀请码，首次专注后再 +15 天')
-              .fontSize(13)
-              .fontColor(AppTheme.colors.textMuted)
-              .width('100%')
-              .margin({ bottom: 12 })
+            this.buildInviteBenefitItem(
+              '权益二',
+              '+15天会员',
+              '填写邀请码注册，首次专注后再加赠',
+              true
+            )
             Row({ space: 8 }) {
-              SymbolGlyph($r('sys.symbol.gift'))
-                .fontSize(18)
-                .fontColor([AppTheme.colors.textMuted])
-              TextInput({ placeholder: '输入邀请码', text: this.referralCode })
+              TextInput({ placeholder: '邀请码（选填）', text: this.referralCode })
                 .layoutWeight(1)
                 .height(48)
-                .fontSize(16)
+                .fontSize(17)
+                .maxLength(11)
                 .padding(0)
                 .backgroundColor(Color.Transparent)
                 .onChange((value: string) => {
-                  this.referralCode = value;
+                  this.referralCode = value.slice(0, 11);
                   if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
                     this.referralStatus = 'idle';
                   }
-                  if (normalizeReferralCode(value).length === 0) {
+                  if (normalizeReferralCode(this.referralCode).length === 0) {
                     this.referralStatus = 'idle';
                     clearPendingReferralCode();
                   }
@@ -812,11 +1011,11 @@ struct OnboardingPage {
                   .fontColor([AppTheme.colors.success])
               }
             }
-            .width('100%')
-            .height(52)
-            .padding({ left: 16, right: 16 })
+            .constraintSize({ minHeight: 48 })
+            .margin({ top: 12, left: 38, right: 38 })
+            .padding({ left: 14, right: 14 })
             .backgroundColor('rgba(0,0,0,0.04)')
-            .borderRadius(16)
+            .borderRadius(12)
 
             if (this.referralStatus === 'invalid') {
               Text('邀请码无效，注册时将忽略')
@@ -824,59 +1023,215 @@ struct OnboardingPage {
                 .fontColor(AppTheme.colors.danger)
                 .lineHeight(18)
                 .width('100%')
-                .textAlign(TextAlign.Start)
                 .margin({ top: 8 })
+                .padding({ left: 38, right: 38 })
             }
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
-          .margin({ top: 32 })
-        } else {
-          Text('我有邀请码')
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textMuted)
-            .margin({ top: 32 })
-            .onClick(() => {
-              this.showReferralInput = true;
-            })
+          .margin({ top: 32, bottom: 36 })
+
+          Button() {
+            Row({ space: 8 }) {
+              Image($r('app.media.huawei'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+              Text(this.huaweiLoading ? '请稍候...' : '华为账号登录')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+            }
+          }
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .backgroundColor(HUAWEI_RED)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
+          .enabled(this.referralStatus !== 'checking' && !this.wechatLoading && !this.huaweiLoading)
+          .opacity(this.referralStatus === 'checking' || this.wechatLoading || this.huaweiLoading ? 0.6 : 1)
+          .margin({ bottom: 12 })
+          .onClick(() => {
+            void this.onInviteHuaweiLogin();
+          })
+
+          Button() {
+            Row({ space: 8 }) {
+              Image($r('app.media.wechat'))
+                .width(22)
+                .height(22)
+                .objectFit(ImageFit.Contain)
+              Text(this.wechatLoading ? '请稍候...' : '微信登录/注册')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+            }
+          }
+          .width('100%')
+          .height(52)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .backgroundColor(WECHAT_GREEN)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
+          .enabled(this.referralStatus !== 'checking' && !this.wechatLoading && !this.huaweiLoading)
+          .opacity(this.referralStatus === 'checking' || this.wechatLoading || this.huaweiLoading ? 0.6 : 1)
+          .onClick(() => {
+            void this.onInviteWechatLogin();
+          })
+
+          AgreementConsentRow({
+            agreed: this.agreedToTerms,
+            centered: true,
+            onAgreedChange: (agreed: boolean) => {
+              this.agreedToTerms = agreed;
+            }
+          })
+          .margin({ top: 12 })
         }
+        .width('100%')
+        .padding({ left: 32, right: 32, top: 8, bottom: 24 })
+        .alignItems(HorizontalAlign.Center)
       }
       .layoutWeight(1)
-      .width('100%')
-      .padding({ left: 32, right: 32, top: 8 })
-      .alignItems(HorizontalAlign.Center)
-      .justifyContent(FlexAlign.Start)
+      .scrollBar(BarState.Off)
+      .align(Alignment.Top)
 
-      Column({ space: 8 }) {
-        AgreementConsentRow({
-          agreed: this.agreedToTerms,
-          centered: true,
-          onAgreedChange: (agreed: boolean) => {
-            this.agreedToTerms = agreed;
-          }
+      Text('放弃权益，去专注')
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textMuted)
+        .padding({ top: 8, bottom: 8 })
+        .opacity(this.referralStatus === 'checking' ? 0.4 : 1)
+        .onClick(() => {
+          this.openSkipConfirm();
         })
-        Text('先看看')
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textMuted)
-          .padding({ top: 12, bottom: 8 })
-          .opacity(this.referralStatus === 'checking' ? 0.4 : 1)
-          .onClick(() => {
-            if (this.referralStatus === 'checking') {
-              return;
-            }
-            this.continueInviteToPermission('skip');
-          })
-      }
-      .width('100%')
-      .padding({
-        left: 32,
-        right: 32,
-        bottom: Math.max(this.bottomInset, 8) + 16
-      })
-      .alignItems(HorizontalAlign.Center)
     }
     .width('100%')
     .layoutWeight(1)
+    .padding({
+      bottom: Math.max(this.bottomInset, 8) + 16
+    })
+  }
+
+  @Builder
+  private buildSkipConfirmModal(): void {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.45)')
+        .onClick(() => {
+          AnalyticsService.trackEvent('onboarding_skip_modal_dismissed', {
+            'action': 'close',
+            'entry_source': 'onboarding_signup_benefit',
+          });
+          this.showSkipConfirm = false;
+        })
+
+      Column() {
+        Row() {
+          Blank()
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([AppTheme.colors.textMuted])
+            .onClick(() => {
+              this.showSkipConfirm = false;
+            })
+        }
+        .width('100%')
+        .padding({ bottom: 4 })
+
+        Column() {
+          Row() {
+            SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
+              .fontSize(26)
+              .fontColor([AppTheme.colors.warning])
+          }
+          .width(56)
+          .height(56)
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(28)
+          .backgroundColor('#F5F7FB')
+          .margin({ bottom: 18 })
+
+          Text('暂不领取新用户权益？')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
+            .textAlign(TextAlign.Center)
+            .lineHeight(28)
+            .width('100%')
+            .margin({ bottom: 10 })
+
+          Text('暂时不想登录的话，可以先体验 5 分钟专注锁机。完成后再登录，权益仍可领取。')
+            .fontSize(15)
+            .fontColor(AppTheme.colors.textSecondary)
+            .lineHeight(22)
+            .textAlign(TextAlign.Center)
+            .width('100%')
+
+          Text('中途撕毁契约即放弃新用户权益，不可再领。')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.warning)
+            .lineHeight(19)
+            .textAlign(TextAlign.Center)
+            .width('100%')
+            .margin({ top: 10 })
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+        .padding({ left: 4, right: 4, bottom: 32 })
+
+        Row({ space: 12 }) {
+          Button('继续领取')
+            .layoutWeight(1)
+            .height(50)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Color.White)
+            .backgroundColor(AppTheme.colors.primary)
+            .borderRadius(30)
+            .onClick(() => {
+              AnalyticsService.trackEvent('onboarding_skip_modal_dismissed', {
+                'action': 'continue_claim',
+                'entry_source': 'onboarding_signup_benefit',
+              });
+              this.showSkipConfirm = false;
+            })
+          Button('先去专注')
+            .layoutWeight(1)
+            .height(50)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .backgroundColor('#F5F7FB')
+            .borderRadius(30)
+            .onClick(() => {
+              this.confirmSkipMembership();
+            })
+        }
+        .width('100%')
+      }
+      .width('88%')
+      .constraintSize({ maxWidth: 360, minHeight: 320 })
+      .padding({
+        left: 24,
+        right: 24,
+        top: 16,
+        bottom: 26
+      })
+      .backgroundColor(AppTheme.colors.surface)
+      .borderRadius(28)
+      .onClick(() => {})
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -954,6 +1309,16 @@ struct OnboardingPage {
           .textAlign(TextAlign.Center)
           .width('100%')
           .margin({ top: 8, bottom: 20 })
+          .visibility(this.isScreenTimeRequired() ? Visibility.Visible : Visibility.None)
+
+        Text('建议开启健康使用设备权限，专注体验更完整。也可稍后再授权。')
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textSecondary)
+          .lineHeight(24)
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .margin({ top: 8, bottom: 20 })
+          .visibility(this.isScreenTimeRequired() ? Visibility.None : Visibility.Visible)
 
         this.buildPermissionStepItem()
       }
@@ -963,7 +1328,7 @@ struct OnboardingPage {
 
       Column({ space: 8 }) {
         if (this.screenTimeOk) {
-          Button('开始第一次专注')
+          Button(this.getPermissionFinishLabel())
             .width('100%')
             .height(52)
             .type(ButtonType.Normal)
@@ -995,7 +1360,40 @@ struct OnboardingPage {
               void this.requestScreenTime();
             })
 
-          Button('开始第一次专注')
+          Button(this.getPermissionFinishLabel())
+            .width('100%')
+            .height(52)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.primary)
+            .backgroundColor(AppTheme.colors.surface)
+            .border({ width: 1, color: AppTheme.colors.primary })
+            .borderRadius(AppTheme.radius.button)
+            .clip(true)
+            .onClick(() => {
+              this.finish();
+            })
+        } else if (!this.isScreenTimeRequired()) {
+          Button(this.busy ? '授权中...' : '去开启')
+            .width('100%')
+            .height(52)
+            .type(ButtonType.Normal)
+            .buttonStyle(ButtonStyleMode.NORMAL)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .backgroundColor(AppTheme.colors.primary)
+            .borderRadius(AppTheme.radius.button)
+            .clip(true)
+            .enabled(!this.busy)
+            .opacity(this.busy ? 0.6 : 1)
+            .onClick(() => {
+              void this.requestScreenTime();
+            })
+
+          Button(this.getPermissionFinishLabel())
             .width('100%')
             .height(52)
             .type(ButtonType.Normal)
@@ -1047,7 +1445,7 @@ struct OnboardingPage {
       this.buildIdentityStep()
     } else if (this.step === 2) {
       this.buildGoalStep()
-    } else if (this.step === 3) {
+    } else if (this.isPartnerStep()) {
       this.buildPartnerStep()
     } else if (this.isInviteStep()) {
       this.buildInviteStep()
@@ -1057,14 +1455,22 @@ struct OnboardingPage {
   }
 
   build() {
-    Column() {
-      this.buildTopBar()
-      this.buildCurrentStep()
+    Stack() {
+      Column() {
+        this.buildTopBar()
+        this.buildCurrentStep()
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ top: this.topInset })
+      .backgroundColor(AppTheme.colors.background)
+
+      if (this.showSkipConfirm) {
+        this.buildSkipConfirmModal()
+      }
     }
     .width('100%')
     .height('100%')
-    .padding({ top: this.topInset })
-    .backgroundColor(AppTheme.colors.background)
   }
 }
 

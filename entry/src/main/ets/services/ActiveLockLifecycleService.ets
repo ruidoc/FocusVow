@@ -15,6 +15,7 @@ import { GuardResult, releaseScreenRestriction, removePlanGuardStrategy, stopPla
 import { LockStore } from '../stores/LockStore';
 import { refreshStats } from '../stores/StatsStore';
 import { UserStore } from '../stores/UserStore';
+import { buildOnboardingAnalyticsProps } from '../utils/OnboardingMetaUtil';
 import {
   clearScheduledActivationTracking,
   markScheduledListStale,
@@ -101,6 +102,24 @@ function saveQuickFocusPending(
     return;
   }
   FocusSyncService.saveSoloInstantPending(context, state, result, endedAt, failReason);
+  if (!UserStore.isLoggedIn()) {
+    const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
+    const actualMin = Math.max(0, Math.floor((endedAt - state.startedAt) / 60000));
+    if (result === 'SUCCESS') {
+      AnalyticsService.trackEvent('guest_focus_pending_saved', buildOnboardingAnalyticsProps({
+        'plan_id': state.planId,
+        'duration_min': durationMin,
+        'actual_min': actualMin,
+        'pending_saved': true,
+      }));
+    } else if (result === 'VIOLATION') {
+      AnalyticsService.trackEvent('guest_focus_failed', buildOnboardingAnalyticsProps({
+        'reason': failReason.length > 0 ? failReason : 'tear',
+        'plan_id': state.planId,
+        'pending_saved': false,
+      }));
+    }
+  }
 }
 
 /**
@@ -159,6 +178,12 @@ export async function endQuickFocus(
         const sessionId = resolveDuoSessionIdFromLock(state);
         if (sessionId.length > 0) {
           saveQuickFocusPending(context, state, 'VIOLATION', endedAt, 'too_short');
+        } else if (!UserStore.isLoggedIn()) {
+          AnalyticsService.trackEvent('guest_focus_failed', buildOnboardingAnalyticsProps({
+            'reason': 'too_short',
+            'plan_id': state.planId,
+            'pending_saved': false,
+          }));
         }
       } else {
         trackSessionFinished(state, endedAt, 'completed');

@@ -2,6 +2,7 @@ import { common } from "@kit.AbilityKit";
 import { window, display } from "@kit.ArkUI";
 import { showToast } from "../../common/Toast";
 import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
+import { OnboardingMembershipOverlay } from "../../components/home/OnboardingMembershipOverlay";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
@@ -37,6 +38,7 @@ import {
   queueShameCertificate,
   tryPresentCertificateGuide,
 } from "../../services/CertificatePendingService";
+import { handleSoloQuickFocusSuccess } from "../../services/FocusMembershipTerminalService";
 import { clearDuoWaitContext, openDuoWaitPage } from "../../services/DuoWaitContextService";
 import {
   DuoInstantLockOptions,
@@ -57,6 +59,8 @@ import {
 import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
 import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService";
+import { AnalyticsService } from "../../services/AnalyticsService";
+import { buildOnboardingAnalyticsProps } from "../../utils/OnboardingMetaUtil";
 import {
   cancelPendingQuickStart,
   hasPendingQuickStart,
@@ -70,7 +74,20 @@ import {
   shouldShowFirstFocusPrompt
 } from "../../services/FirstFocusPromptService";
 import { getPendingReferralCode } from "../../utils/ReferralUtil";
-import { isSignupTrialEligible } from "../../utils/SignupTrialUtil";
+import { SIGNUP_TRIAL_TEAR_WARNING } from "../../utils/SignupTrialUtil";
+import {
+  abandonOnboardingMembershipOnTear,
+  consumePendingOnboardingActivationModal,
+  hasPendingOnboardingActivationModal,
+  hasSkippedMembershipSignup,
+  isOnboardingMembershipBenefitActive,
+  shouldWarnSignupTrialOnTear as checkSignupTrialTearWarning,
+  startMembershipUrgencyCountdown,
+} from "../../utils/OnboardingMembershipUtil";
+import {
+  hasPendingSignupTrialCelebration,
+  tryPresentSignupTrialCelebration,
+} from "../../utils/SignupTrialCelebrationUtil";
 import { openTrustListAppForm } from "../../services/ScreenTimeService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { LockStore } from "../../stores/LockStore";
@@ -103,6 +120,8 @@ export struct FocusHomePage {
   /** 单人入口按压缩放透明度，对齐 iOS activeOpacity=0.7 */
   @State soloLinkPressed: boolean = false;
   @State isRefreshing: boolean = false;
+  @State showActivationModal: boolean = false;
+  @State activationGuestPath: boolean = false;
 
   private timerId: number = -1;
   private postOnboardingFlowStarted: boolean = false;
@@ -132,12 +151,19 @@ export struct FocusHomePage {
     this.startTimer();
     this.loadTopSafeInset(hostContext);
     this.loadHomeContentLift();
+    UserStore.hydrate(hostContext);
+    this.tryShowActivationModal(hostContext);
     void this.runPostOnboardingHomeFlow(hostContext);
   }
 
   onPageShow(): void {
     // 引导结束 returnToMainTab 时首页可能早已 aboutToAppear，需在回显时再申请
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    UserStore.hydrate(hostContext);
+    this.tryShowActivationModal(hostContext);
+    if (UserStore.isLoggedIn() && hasPendingSignupTrialCelebration(hostContext)) {
+      void tryPresentSignupTrialCelebration(hostContext);
+    }
     void this.runPostOnboardingHomeFlow(hostContext);
     void reconcileOrgClassroomOnForeground(hostContext);
     if (UserStore.isLoggedIn()) {
@@ -147,17 +173,68 @@ export struct FocusHomePage {
     }
   }
 
-  private async runPostOnboardingHomeFlow(hostContext: common.UIAbilityContext): Promise<void> {
-    if (this.postOnboardingFlowStarted) {
+  private tryShowActivationModal(hostContext: common.UIAbilityContext): void {
+    if (this.isActiveLocked() || this.showActivationModal) {
       return;
     }
-    this.postOnboardingFlowStarted = true;
-    await reconcileOnboardingOnLaunch(hostContext);
+    if (!consumePendingOnboardingActivationModal(hostContext)) {
+      return;
+    }
+    this.activationGuestPath = hasSkippedMembershipSignup(hostContext) && !UserStore.isLoggedIn();
+    this.showActivationModal = true;
+    AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, true);
+    AnalyticsService.trackEvent('onboarding_activation_modal_shown', buildOnboardingAnalyticsProps({
+      'is_logged_in': UserStore.isLoggedIn(),
+      'guest_path': this.activationGuestPath,
+    }));
+  }
+
+  private async runPostOnboardingHomeFlow(hostContext: common.UIAbilityContext): Promise<void> {
+    this.tryShowActivationModal(hostContext);
+    const deferNotify = this.showActivationModal
+      || hasPendingOnboardingActivationModal(hostContext)
+      || AppStorage.get<boolean>(StoreKeys.OnboardingActivationModalVisible) === true;
+
+    if (!this.postOnboardingFlowStarted) {
+      this.postOnboardingFlowStarted = true;
+      void reconcileOnboardingOnLaunch(hostContext).then(() => {
+        this.tryShowActivationModal(hostContext);
+      });
+    }
+
+    if (deferNotify) {
+      return;
+    }
+    if (this.isActiveLocked()) {
+      return;
+    }
     await ensureNotifyOnLaunch(hostContext);
-    if (this.isActiveLocked() || !shouldShowFirstFocusPrompt(hostContext)) {
+    if (this.isActiveLocked() || this.showActivationModal) {
+      return;
+    }
+    if (!shouldShowFirstFocusPrompt(hostContext)) {
+      return;
+    }
+    if (isOnboardingMembershipBenefitActive(hostContext)) {
       return;
     }
     this.presentFirstFocusPrompt();
+  }
+
+  continuePostOnboardingAfterActivationModal(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void ensureNotifyOnLaunch(hostContext).then(() => {
+      if (this.isActiveLocked() || this.showActivationModal) {
+        return;
+      }
+      if (!shouldShowFirstFocusPrompt(hostContext)) {
+        return;
+      }
+      if (isOnboardingMembershipBenefitActive(hostContext)) {
+        return;
+      }
+      this.presentFirstFocusPrompt();
+    });
   }
 
   private presentFirstFocusPrompt(): void {
@@ -199,6 +276,9 @@ export struct FocusHomePage {
   private onFirstFocusDismiss(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     markFirstFocusPromptDone(hostContext);
+    if (isOnboardingMembershipBenefitActive(hostContext)) {
+      startMembershipUrgencyCountdown(hostContext);
+    }
   }
 
   private loadTopSafeInset(hostContext: common.UIAbilityContext): void {
@@ -447,14 +527,8 @@ export struct FocusHomePage {
   }
 
   private shouldWarnSignupTrialOnTear(): boolean {
-    if (!UserStore.isLoggedIn()) {
-      return false;
-    }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!isSignupTrialEligible(hostContext)) {
-      return false;
-    }
-    return this.activeLock.title === FIRST_FOCUS_TITLE;
+    return checkSignupTrialTearWarning(hostContext, this.activeLock.title);
   }
 
   private getTearConfirmMessage(): string {
@@ -466,7 +540,7 @@ export struct FocusHomePage {
 
   private getTearExtraWarning(): string {
     if (this.shouldWarnSignupTrialOnTear()) {
-      return "撕毁后将无法领取 7 天会员。";
+      return SIGNUP_TRIAL_TEAR_WARNING;
     }
     return "";
   }
@@ -592,9 +666,13 @@ export struct FocusHomePage {
       "专注已结束，但解除限制失败",
       true,
     );
-    if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
-      queueHonorCertificate(lockSnapshot, endedAt);
-      tryPresentCertificateGuide(this.getUIContext());
+    if (endResult.ok && !endResult.tooShort) {
+      await handleSoloQuickFocusSuccess(
+        this.getUIContext(),
+        hostContext,
+        lockSnapshot,
+        endedAt,
+      );
     } else {
       afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
     }
@@ -614,6 +692,9 @@ export struct FocusHomePage {
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const endResult = await tearQuickFocus(hostContext, lockSnapshot);
+      if (endResult.ok && !endResult.tooShort) {
+        abandonOnboardingMembershipOnTear(hostContext);
+      }
       if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
         // 已登录：弹耻辱证；游客单人只走登录引导
         queueShameCertificate(lockSnapshot, endedAt, "violator", "tear");
@@ -1421,6 +1502,16 @@ export struct FocusHomePage {
           void this.performTearLock();
         },
         onCancel: () => {},
+      })
+
+      OnboardingMembershipOverlay({
+        showActivationModal: $showActivationModal,
+        activationGuestPath: $activationGuestPath,
+        hasActiveLock: this.isActiveLocked(),
+        hasPendingQuickStart: this.hasPendingQuickStart(),
+        onActivationModalClosed: () => {
+          this.continuePostOnboardingAfterActivationModal();
+        },
       })
     }
     .width("100%")

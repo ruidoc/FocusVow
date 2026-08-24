@@ -5,7 +5,10 @@ import { AppTheme } from "../constants/Theme";
 import { PageRoutes, pushRoute } from "../router/PageRoutes";
 import { StoreKeys } from "../stores/StoreKeys";
 import { UserStore } from "../stores/UserStore";
-import { readStoredString, writeStoredString } from "./PreferencesService";
+import { isMembershipReclaimEligible } from "../utils/OnboardingMembershipUtil";
+import { AnalyticsService } from "./AnalyticsService";
+import { readStoredString, writeStoredString } from "../services/PreferencesService";
+import { buildOnboardingAnalyticsProps } from "../utils/OnboardingMetaUtil";
 
 const GUEST_SOLO_FOCUS_USED_KEY: string = "guest_solo_focus_used";
 
@@ -76,7 +79,10 @@ export function showGuestSoloLoginPrompt(uiContext: UIContext): void {
     secondaryButton: {
       value: "稍后再说",
       action: () => {
-        // no-op
+        AnalyticsService.trackEvent('guest_focus_login_deferred', buildOnboardingAnalyticsProps({
+          'prompt_type': 'stats_dialog',
+          'has_pending': true,
+        }));
       },
     },
   });
@@ -98,7 +104,21 @@ export function afterGuestSoloFocusEnded(
   if (UserStore.isLoggedIn()) {
     return;
   }
-  markGuestSoloFocusUsed(context);
+  const host = context ?? AppContextHolder.get();
+  if (!host) {
+    return;
+  }
+  markGuestSoloFocusUsed(host);
+  if (isMembershipReclaimEligible(host)) {
+    pendingLoginPromptAfterCert = false;
+    AppStorage.setOrCreate(StoreKeys.ShowGuestMembershipReclaim, true);
+    AnalyticsService.trackEvent('onboarding_guest_focus_done', buildOnboardingAnalyticsProps({
+      'guest_path': true,
+      'api_synced': false,
+      'onboarding_path': 'focus_first',
+    }));
+    return;
+  }
   pendingLoginPromptAfterCert = true;
   loginPromptReadyAt = Date.now() + 200;
   if (willShowCertificate) {

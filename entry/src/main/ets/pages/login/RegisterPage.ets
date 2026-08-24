@@ -10,6 +10,7 @@ import { backRoute, PageRoutes, replaceRoute } from '../../router/PageRoutes';
 import { ExtendApiService } from '../../services/ExtendApiService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
+import { clearMembershipSignupSkipped } from '../../utils/OnboardingMembershipUtil';
 import { confirmPrivacyAgreementForAuth } from '../../utils/PrivacyConsentUtil';
 import { getPendingReferralCode } from '../../utils/ReferralUtil';
 
@@ -168,6 +169,14 @@ struct RegisterPage {
     }
 
     showToast('注册成功', this.getUIContext());
+    const loginFrom = String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '');
+    if (loginFrom === 'onboarding_signup_benefit') {
+      clearMembershipSignupSkipped(hostContext);
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+      AppStorage.setOrCreate(StoreKeys.OnboardingAfterRegister, true);
+      replaceRoute(PageRoutes.Onboarding);
+      return;
+    }
     replaceRoute(PageRoutes.WechatBind);
   }
 
@@ -287,24 +296,26 @@ struct RegisterPage {
         }
       })
 
-      Text('已有账号？去登录')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.primary)
-        .opacity(this.switchLinkPressed ? 0.6 : 1)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-        .margin({ top: 16, bottom: 16 })
-        .onTouch((event: TouchEvent) => {
-          if (event.type === TouchType.Down) {
-            this.switchLinkPressed = true;
-          } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-            this.switchLinkPressed = false;
-          }
-        })
-        .onClick(() => {
-          replaceRoute(PageRoutes.Login);
-        })
+      if (String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '') !== 'onboarding_signup_benefit') {
+        Text('已有账号？去登录')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.primary)
+          .opacity(this.switchLinkPressed ? 0.6 : 1)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 16, bottom: 16 })
+          .onTouch((event: TouchEvent) => {
+            if (event.type === TouchType.Down) {
+              this.switchLinkPressed = true;
+            } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+              this.switchLinkPressed = false;
+            }
+          })
+          .onClick(() => {
+            replaceRoute(PageRoutes.Login);
+          })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

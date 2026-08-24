@@ -3,6 +3,9 @@ import { readStoredString, removeStoredKey, writeStoredString } from '../service
 
 const ELIGIBLE_KEY: string = 'signup_trial_eligible';
 
+export const SIGNUP_TRIAL_EXISTING_USER_TOAST: string = '7 天会员仅限新用户领取';
+export const SIGNUP_TRIAL_TEAR_WARNING: string = '撕毁后将无法领取 7 天会员';
+
 export function setSignupTrialEligible(context: common.Context, eligible: boolean): void {
   writeStoredString(context, ELIGIBLE_KEY, eligible ? '1' : '0');
 }

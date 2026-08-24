@@ -179,6 +179,23 @@ export async function reconcileOnboardingOnLaunch(context: common.Context): Prom
 }
 
 export class OnboardingApiService {
+  static async reportWelcomeView(context: common.Context): Promise<void> {
+    try {
+      const deviceId = ensureOnboardingDeviceId(context);
+      const version = await getAppVersion();
+      const body: Record<string, Object> = {
+        'device_id': deviceId,
+        'device': getDeviceModel(),
+        'os_version': String(deviceInfo.osFullName ?? ''),
+        'platform': 'harmony',
+        'app_version': version
+      };
+      await HttpService.post('/onboarding/welcome-view', body, false);
+    } catch (error) {
+      console.warn(`[Onboarding] welcome-view failed: ${String(error)}`);
+    }
+  }
+
   static async upsert(
     context: common.Context,
     payload: Record<string, Object>

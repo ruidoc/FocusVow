@@ -14,6 +14,7 @@ import { SettingsStore } from '../stores/SettingsStore';
 import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
 import { DuoBgSyncService } from './DuoBgSyncService';
+import { clearMembershipUrgencyCountdown } from '../utils/OnboardingMembershipUtil';
 
 const PENDING_KEY: string = 'pending.quick_start';
 
@@ -204,6 +205,7 @@ export async function schedulePendingQuickStart(
     await cancelPendingQuickStart(context);
     return false;
   }
+  clearMembershipUrgencyCountdown(context);
   DuoBgSyncService.ensure();
   AnalyticsService.trackEvent('quick_start_delayed_scheduled', {
     'delay_minutes': payload.delayMinutes,

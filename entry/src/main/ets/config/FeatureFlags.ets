@@ -4,6 +4,10 @@ export class FeatureFlagKeys {
   static readonly WECHAT_LOGIN: string = 'wechat_login';
   /** 在 features_off 中则隐藏开通会员（走兑换页） */
   static readonly PROMO_VIP: string = 'promo_vip';
+  /** Onboarding 搭子步骤；在 features_off 黑名单中则隐藏 */
+  static readonly PARTNER: string = 'partner';
+  /** 在 features_off 黑名单中则允许跳过悬浮窗 */
+  static readonly SKIP_OVERLAY: string = 'skip_overlay';
 }
 
 /** Android / 鸿蒙微信支付会员商品 */

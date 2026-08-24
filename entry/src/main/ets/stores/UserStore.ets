@@ -44,8 +44,12 @@ import {
   clearSignupTrialEligible,
   setSignupTrialEligible
 } from '../utils/SignupTrialUtil';
-import { bootstrapStores } from './StoreBootstrap';
+import {
+  buildOnboardingAnalyticsProps,
+  resolveSignupPath,
+} from '../utils/OnboardingMetaUtil';
 import { StoreKeys } from './StoreKeys';
+import { bootstrapStores } from './StoreBootstrap';
 
 function syncAppStorageValue<T>(key: string, value: T): void {
   if (!AppStorage.set<T>(key, value)) {
@@ -120,6 +124,7 @@ export class UserStore {
   }
 
   static lastLoginUserId: string = '';
+  static lastLoginIsNew: boolean = false;
 
   /** 微信新用户需绑邮箱时的标记，非错误文案 */
   static readonly WECHAT_NEED_BIND: string = 'WECHAT_NEED_BIND';
@@ -260,12 +265,7 @@ export class UserStore {
     }
     UserStore.lastLoginUserId = String(response.data?.['user_id'] ?? '');
     UserStore.setWxPendingInfo(null);
-    return UserStore.applySessionToken(
-      context,
-      token,
-      'wechat',
-      response.data?.['is_new'] === true
-    );
+    return UserStore.applySessionToken(context, token, 'wechat', true);
   }
 
   /** 已登录用户绑定邮箱（资料页） */
@@ -527,6 +527,7 @@ export class UserStore {
     loginMethod?: LoginMethod,
     isNew: boolean = false
   ): Promise<string | null> {
+    UserStore.lastLoginIsNew = isNew;
     saveAccessToken(context, token);
     syncAppStorageValue(StoreKeys.UserAccessToken, token);
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, true);
@@ -544,10 +545,19 @@ export class UserStore {
     void UserStore.flushPendingReferral(context);
     refreshStats();
     if (loginMethod) {
+      const loginFrom = AppStorage.get<string>(StoreKeys.LoginFrom) ?? '';
+      const entrySource = loginFrom.length > 0 ? loginFrom : undefined;
+      const analyticsExtra: Record<string, Object> = {
+        'signup_path': resolveSignupPath(entrySource),
+      };
+      if (entrySource) {
+        analyticsExtra['entry_source'] = entrySource;
+      }
+      const enriched = buildOnboardingAnalyticsProps(analyticsExtra);
       if (isNew) {
-        AnalyticsService.trackRegisterCompleted(loginMethod, context);
+        AnalyticsService.trackRegisterCompleted(loginMethod, context, enriched);
       } else {
-        AnalyticsService.trackLoginCompleted(loginMethod, context);
+        AnalyticsService.trackLoginCompleted(loginMethod, context, enriched);
       }
     }
     return null;

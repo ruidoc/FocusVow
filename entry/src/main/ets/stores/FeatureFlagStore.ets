@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { getAppVersionSync } from '../common/AppInfo';
+import { getAppVersion, getAppVersionSync } from '../common/AppInfo';
 import { FeatureFlagKeys } from '../config/FeatureFlags';
 import { PageRoutes } from '../router/PageRoutes';
 import { HttpService } from '../services/HttpService';
@@ -94,6 +94,7 @@ export class FeatureFlagStore {
   static async sync(context?: common.Context): Promise<void> {
     bootstrapStores();
     try {
+      await getAppVersion();
       const version = getAppVersionSync();
       const query: Record<string, string> = {
         'platform': 'harmony',

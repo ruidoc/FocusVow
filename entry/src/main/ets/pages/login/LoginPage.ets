@@ -11,6 +11,11 @@ import { backRoute, PageRoutes, pushRoute, replaceRoute, returnToMainTab } from 
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { confirmPrivacyAgreementForAuth } from '../../utils/PrivacyConsentUtil';
+import { SIGNUP_TRIAL_EXISTING_USER_TOAST } from '../../utils/SignupTrialUtil';
+import {
+  clearPendingSignupTrialCelebration,
+  tryPresentSignupTrialCelebration,
+} from '../../utils/SignupTrialCelebrationUtil';
 
 const WECHAT_GREEN: string = '#07C160';
 const HUAWEI_RED: string = '#CF0A2C';
@@ -52,6 +57,20 @@ struct LoginPage {
   }
 
   private async afterLoginSuccess(hostContext: common.UIAbilityContext): Promise<void> {
+    if (this.loginFrom === 'guest_membership_reclaim') {
+      if (!UserStore.lastLoginIsNew) {
+        clearPendingSignupTrialCelebration(hostContext);
+        showToast(SIGNUP_TRIAL_EXISTING_USER_TOAST, this.getUIContext(), 3000);
+      } else {
+        showToast('登录成功', this.getUIContext());
+      }
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+      returnToMainTab('focus');
+      if (UserStore.lastLoginIsNew) {
+        void tryPresentSignupTrialCelebration(hostContext);
+      }
+      return;
+    }
     showToast('登录成功', this.getUIContext());
     if (this.loginFrom === 'welcome_old_user') {
       const goHome = await routeAfterWelcomeOldUserLogin(
@@ -105,11 +124,6 @@ struct LoginPage {
       return;
     }
     if (!UserStore.isLoggedIn()) {
-      return;
-    }
-    if (UserStore.getUserInfo().email.length === 0) {
-      AppStorage.setOrCreate(StoreKeys.BindEmailFrom, 'post_oauth');
-      pushRoute(PageRoutes.WechatBindEmail);
       return;
     }
     await this.afterLoginSuccess(hostContext);

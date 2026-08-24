@@ -4,7 +4,7 @@ import { readStoredString, writeStoredString } from './PreferencesService';
 const PENDING_KEY: string = 'first_focus_prompt_pending';
 const DISMISS_KEY: string = 'first_focus_prompt_dismissed_at';
 
-export const FIRST_FOCUS_TITLE: string = '第一次专注';
+export const FIRST_FOCUS_TITLE: string = '专注5分钟';
 export const FIRST_FOCUS_MINUTES: number = 5;
 
 /** 引导真正走完时标记，首页通知弹完后再出首次专注引导 */

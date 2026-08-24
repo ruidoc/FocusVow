@@ -140,7 +140,7 @@ export struct QuickTaskListContent {
         .width('100%')
         .textAlign(TextAlign.Center)
 
-      Text('把常用的即时、延时专注存成模版，每天点一下就开始。')
+      Text('把常用的专注存成模版，每天点一下就开始。')
         .fontSize(14)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textMuted)

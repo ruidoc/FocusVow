@@ -71,6 +71,7 @@ export class StoreKeys {
   static readonly InboxOpenId: string = 'inbox.openId';
   static readonly InboxDetailId: string = 'inbox.detailId';
   static readonly OnboardingViaOldUser: string = 'onboarding.via_old_user';
+  static readonly OnboardingAfterRegister: string = 'onboarding.after_register';
   static readonly LoginFrom: string = 'login.from';
   static readonly BindEmailFrom: string = 'bindEmail.from';
   static readonly WxPendingInfo: string = 'user.wxPendingInfo';
@@ -78,4 +79,9 @@ export class StoreKeys {
   static readonly CertificateHonor: string = 'certificate.honor';
   static readonly CertificateShame: string = 'certificate.shame';
   static readonly CertificatePending: string = 'certificate.pending';
+  static readonly MembershipUrgencyTick: string = 'membership.urgencyTick';
+  static readonly ShowGuestMembershipReclaim: string = 'membership.showGuestReclaim';
+  static readonly ShowSignupTrialCelebration: string = 'membership.showCelebration';
+  static readonly PendingOnboardingActivationModal: string = 'onboarding.pendingActivationModal';
+  static readonly OnboardingActivationModalVisible: string = 'onboarding.activationModalVisible';
 }

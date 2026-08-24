@@ -12,6 +12,11 @@ import {
 } from '../../services/OnboardingApiService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
+import {
+  clearPendingSignupTrialCelebration,
+  tryPresentSignupTrialCelebration,
+} from '../../utils/SignupTrialCelebrationUtil';
+import { SIGNUP_TRIAL_EXISTING_USER_TOAST } from '../../utils/SignupTrialUtil';
 import { confirmPrivacyAgreementForAuth } from '../../utils/PrivacyConsentUtil';
 
 const EMAIL_PATTERN: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -44,8 +49,22 @@ struct EmailLoginPage {
   }
 
   private async afterLoginSuccess(hostContext: common.UIAbilityContext): Promise<void> {
-    showToast('登录成功', this.getUIContext());
     const loginFrom = String(AppStorage.get<string>(StoreKeys.LoginFrom) ?? '');
+    if (loginFrom === 'guest_membership_reclaim') {
+      if (!UserStore.lastLoginIsNew) {
+        clearPendingSignupTrialCelebration(hostContext);
+        showToast(SIGNUP_TRIAL_EXISTING_USER_TOAST, this.getUIContext(), 3000);
+      } else {
+        showToast('登录成功', this.getUIContext());
+      }
+      AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+      returnToMainTab('focus');
+      if (UserStore.lastLoginIsNew) {
+        void tryPresentSignupTrialCelebration(hostContext);
+      }
+      return;
+    }
+    showToast('登录成功', this.getUIContext());
     if (loginFrom === 'welcome_old_user') {
       const goHome = await routeAfterWelcomeOldUserLogin(
         hostContext,

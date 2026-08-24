@@ -80,7 +80,13 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.InboxOpenId, '');
   AppStorage.setOrCreate(StoreKeys.InboxDetailId, '');
   AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
+  AppStorage.setOrCreate(StoreKeys.OnboardingAfterRegister, false);
   AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
+  AppStorage.setOrCreate(StoreKeys.MembershipUrgencyTick, 0);
+  AppStorage.setOrCreate(StoreKeys.ShowGuestMembershipReclaim, false);
+  AppStorage.setOrCreate(StoreKeys.ShowSignupTrialCelebration, false);
+  AppStorage.setOrCreate(StoreKeys.PendingOnboardingActivationModal, false);
+  AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, false);
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());
   bootstrapped = true;
 }

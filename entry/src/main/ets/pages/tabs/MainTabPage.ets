@@ -8,18 +8,19 @@ import {
 import { MainTabKey, returnToMainTab } from "../../router/PageRoutes";
 import { endQuickFocus } from "../../services/ActiveLockLifecycleService";
 import {
-  queueHonorCertificate,
   tryPresentCertificateGuide,
   getPendingCertificate,
 } from "../../services/CertificatePendingService";
 import { DuoInviteClipboardService } from "../../services/DuoInviteClipboardService";
 import { FocusSyncService } from "../../services/FocusSyncService";
+import { handleSoloQuickFocusSuccess } from "../../services/FocusMembershipTerminalService";
 import {
   afterGuestSoloFocusEnded,
   onCertificateGuideDismissed,
 } from "../../services/GuestSoloFocusService";
 import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
+import { hasPendingOnboardingActivationModal } from "../../utils/OnboardingMembershipUtil";
 import { warmUpPreferencesStore } from "../../services/PreferencesService";
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
 import { hydratePendingQuickStart } from "../../services/PendingQuickStartService";
@@ -102,8 +103,12 @@ struct MainTabPage {
   }
 
   onPageShow(): void {
-    // 引导页压在 MainTab 之上时不弹；回首页后才申请通知
+    // 引导页压在 MainTab 之上时不弹；回首页后再申请通知（激活弹窗优先）
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (hasPendingOnboardingActivationModal(hostContext)
+      || AppStorage.get<boolean>(StoreKeys.OnboardingActivationModalVisible) === true) {
+      return;
+    }
     void ensureNotifyOnLaunch(hostContext);
   }
 
@@ -183,10 +188,13 @@ struct MainTabPage {
       "契约已履行",
       "专注已结束，但解除限制失败",
     );
-    if (endResult.ok && !endResult.tooShort && UserStore.isLoggedIn()) {
-      // 已登录：弹荣誉证；游客单人只走登录引导
-      queueHonorCertificate(lockSnapshot, endedAt);
-      tryPresentCertificateGuide(this.getUIContext());
+    if (endResult.ok && !endResult.tooShort) {
+      await handleSoloQuickFocusSuccess(
+        this.getUIContext(),
+        hostContext,
+        lockSnapshot,
+        endedAt,
+      );
     } else {
       afterGuestSoloFocusEnded(this.getUIContext(), lockSnapshot, hostContext, false);
     }

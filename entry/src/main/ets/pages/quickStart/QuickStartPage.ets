@@ -28,6 +28,18 @@ import { UserStore } from "../../stores/UserStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { TimerMode } from "../../utils/TimerMode";
+import { getFocusCount } from "../../utils/UserActivationUtil";
+import {
+  clearMembershipUrgencyCountdown,
+  expireMembershipUrgencyIfNeeded,
+  hasSkippedMembershipSignup,
+  isOnboardingMembershipBenefitActive,
+  shouldShowOnboardingActivationBanner,
+  startMembershipUrgencyCountdown,
+} from "../../utils/OnboardingMembershipUtil";
+import {
+  FIRST_FOCUS_TITLE,
+} from "../../services/FirstFocusPromptService";
 
 bootstrapStores();
 
@@ -49,7 +61,10 @@ struct QuickStartPage {
   @State mode: "shield" | "allow" = "allow";
   @State title: string = "";
   @State saveToQuickTask: boolean = false;
+  @State private membershipUiTick: number = 0;
   private fromOnboarding: boolean = false;
+  private focusStarted: boolean = false;
+  private membershipTimerId: number = -1;
 
   private readonly durationMin: number = 5;
   private readonly durationMax: number = 180;
@@ -67,6 +82,8 @@ struct QuickStartPage {
       const presetTitle = String(params.title ?? '').trim();
       if (presetTitle.length > 0) {
         this.title = presetTitle;
+      } else if (this.shouldShowMembershipTip()) {
+        this.title = FIRST_FOCUS_TITLE;
       }
       const presetMinutes = Number(params.minute ?? 0);
       if (presetMinutes >= this.durationMin) {
@@ -82,6 +99,9 @@ struct QuickStartPage {
         }
       }
     } else {
+      if (this.shouldShowMembershipTip()) {
+        this.title = FIRST_FOCUS_TITLE;
+      }
       const rawDuration = LockStore.getQuickFocusDurationMinutes();
       const normalized = this.normalizeDurationMinutes(rawDuration);
       this.durationMinutes = normalized;
@@ -89,12 +109,70 @@ struct QuickStartPage {
         LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
       }
     }
+    this.focusStarted = false;
     AnalyticsService.trackEvent('quick_start_viewed', {
-      'is_first_focus': this.fromOnboarding,
+      'is_first_focus': getFocusCount(hostContext) === 0,
       'from_onboarding': this.fromOnboarding,
       'entry_source': this.fromOnboarding ? 'onboarding' : 'quick_start',
       'screen_name': 'quick_start'
     });
+    this.startMembershipUiTimer();
+  }
+
+  onPageShow(): void {
+    this.startMembershipUiTimer();
+  }
+
+  onPageHide(): void {
+    this.clearMembershipUiTimer();
+    if (!this.fromOnboarding || this.focusStarted) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (!isOnboardingMembershipBenefitActive(hostContext)) {
+      return;
+    }
+    if (getFocusCount(hostContext) > 0) {
+      return;
+    }
+    if (hasPendingQuickStart(hostContext) || LockStore.isLocked()) {
+      return;
+    }
+    startMembershipUrgencyCountdown(hostContext);
+  }
+
+  private startMembershipUiTimer(): void {
+    this.clearMembershipUiTimer();
+    this.membershipUiTick += 1;
+    this.membershipTimerId = setInterval(() => {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      expireMembershipUrgencyIfNeeded(hostContext);
+      this.membershipUiTick += 1;
+    }, 1000);
+  }
+
+  private clearMembershipUiTimer(): void {
+    if (this.membershipTimerId !== -1) {
+      clearInterval(this.membershipTimerId);
+      this.membershipTimerId = -1;
+    }
+  }
+
+  private isMembershipSimplified(): boolean {
+    const _tick = this.membershipUiTick;
+    return this.shouldShowMembershipTip();
+  }
+
+  private shouldShowMembershipTip(): boolean {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    expireMembershipUrgencyIfNeeded(hostContext);
+    return (this.fromOnboarding || shouldShowOnboardingActivationBanner(hostContext)) &&
+      isOnboardingMembershipBenefitActive(hostContext);
+  }
+
+  private isGuestMembershipPath(): boolean {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    return hasSkippedMembershipSignup(hostContext) && !UserStore.isLoggedIn();
   }
 
   private normalizeDurationMinutes(raw: number): number {
@@ -229,6 +307,7 @@ struct QuickStartPage {
     }
 
     if (this.startDelayMinutes > 0) {
+      clearMembershipUrgencyCountdown(hostContext);
       const scheduled = await schedulePendingQuickStart(hostContext, {
         title: this.title.trim(),
         durationMinutes: this.durationMinutes,
@@ -253,6 +332,8 @@ struct QuickStartPage {
     }
 
     const taskTitle = this.title.trim();
+    this.focusStarted = true;
+    clearMembershipUrgencyCountdown(hostContext);
     const focusOptions: QuickFocusOptions = {
       title: taskTitle,
       duoSessionId: "",
@@ -437,6 +518,14 @@ struct QuickStartPage {
       .width("100%")
       .alignItems(VerticalAlign.Center)
 
+      if (this.isMembershipSimplified()) {
+        Text("默认全部禁用，可以选择可用的应用")
+          .fontSize(13)
+          .fontColor(AppTheme.colors.warning)
+          .lineHeight(18)
+          .width("100%");
+      }
+
       if (this.selectedAppCount === 0) {
         Text("未选择应用").fontSize(15).fontColor(AppTheme.colors.textMuted).width("100%");
       } else {
@@ -510,18 +599,49 @@ struct QuickStartPage {
   }
 
   @Builder
+  buildMembershipTip(): void {
+    Column({ space: 6 }) {
+      Text(this.isGuestMembershipPath()
+        ? '完成本次专注后登录，领取 7 天会员'
+        : '完成本次专注，7 天会员立即到账！')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.accentGreen)
+        .width('100%')
+      Text(this.isGuestMembershipPath()
+        ? '坚持完成锁机专注，登录后本次计入会员'
+        : '开始专注后，大部分APP会被暂时禁用，请坚持完成。')
+        .fontSize(13)
+        .fontColor(AppTheme.colors.textSecondary)
+        .lineHeight(20)
+        .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor('#ECFDF5')
+    .border({ width: 1, color: 'rgba(16,185,129,0.22)' })
+    .borderRadius(AppTheme.radius.lg);
+  }
+
+  @Builder
   buildQuickBody(): void {
     Column({ space: 18 }) {
-      Row() {
-        Blank()
-        TimerModeSegmented({
-          value: this.timerMode,
-          onChange: (mode: TimerMode) => {
-            this.timerMode = mode;
-          },
-        })
-        Blank()
-      }.width("100%")
+      if (this.shouldShowMembershipTip()) {
+        this.buildMembershipTip();
+      }
+      if (!this.isMembershipSimplified()) {
+        Row() {
+          Blank()
+          TimerModeSegmented({
+            value: this.timerMode,
+            onChange: (mode: TimerMode) => {
+              this.timerMode = mode;
+            },
+          })
+          Blank()
+        }.width("100%")
+      }
       // 锁定/放行模式切换暂时隐藏
       // this.buildModeSegment()
       TextInput({ text: this.title, placeholder: "今天要完成什么？" })
@@ -537,27 +657,33 @@ struct QuickStartPage {
 
       this.buildAppCard()
       this.buildDurationCard()
-      this.buildStartDelayCard()
+      if (!this.isMembershipSimplified()) {
+        this.buildStartDelayCard()
+      }
 
       Column({ space: 6 }) {
-        Row({ space: 4 }) {
-          Checkbox()
-            .select(this.saveToQuickTask)
-            .selectedColor(AppTheme.colors.primary)
-            .onChange((checked: boolean) => {
-              this.saveToQuickTask = checked;
-            })
-          Text("保存到快捷任务，下次一键开启专注")
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textSecondary)
-            .layoutWeight(1)
+        if (!this.isMembershipSimplified()) {
+          Row({ space: 4 }) {
+            Checkbox()
+              .select(this.saveToQuickTask)
+              .selectedColor(AppTheme.colors.primary)
+              .onChange((checked: boolean) => {
+                this.saveToQuickTask = checked;
+              })
+            Text("保存到快捷任务，下次一键开启专注")
+              .fontSize(14)
+              .fontColor(AppTheme.colors.textSecondary)
+              .layoutWeight(1)
+          }
+          .width("100%")
+          .alignItems(VerticalAlign.Center)
         }
-        .width("100%")
-        .alignItems(VerticalAlign.Center)
 
-        Button(this.saveToQuickTask
-          ? "保存到快捷任务"
-          : (this.startDelayMinutes > 0 ? "预约开始" : "开始单人专注"))
+        Button(this.isMembershipSimplified()
+          ? "开始专注"
+          : (this.saveToQuickTask
+            ? "保存到快捷任务"
+            : (this.startDelayMinutes > 0 ? "预约开始" : "开始单人专注")))
           .width("100%")
           .height(52)
           .type(ButtonType.Normal)
