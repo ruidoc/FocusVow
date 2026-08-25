@@ -9,6 +9,7 @@ import {
 } from '../../models/DuoModel';
 import { summarizeRepeatDays } from '../../models/PlanModel';
 import { minutesToHours } from '../../models/ActiveLockModel';
+import { getScheduledDurationMinutes } from '../../services/ScheduledPlanValidation';
 import { AppTheme } from '../../constants/Theme';
 import { loadExitPlanIds } from '../../services/ExitPlanIdsService';
 
@@ -100,7 +101,10 @@ export struct ScheduledSessionCard {
     const end = this.session.schedule_end && this.session.schedule_end.length > 0
       ? this.session.schedule_end
       : '18:00';
-    const durationMin = Math.max(0, getScheduledSessionEndMin(this.session) - getScheduledSessionStartMin(this.session));
+    const durationMin = getScheduledDurationMinutes(
+      getScheduledSessionStartMin(this.session),
+      getScheduledSessionEndMin(this.session)
+    );
     return `${start} - ${end} · ${minutesToHours(durationMin)}`;
   }
 

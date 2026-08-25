@@ -17,7 +17,6 @@ import { summarizeRepeatDays } from '../../models/PlanModel';
 import { PageRoutes, backRoute, navigateToMainTab, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
-  getGuardSyncIssue,
   removeGuardForSession,
   reconcileStaleScheduledWindows,
 } from '../../services/ScheduledCovenantService';
@@ -42,7 +41,6 @@ struct PlanDetailPage {
   @State sessionId: string = '';
   @State session: DuoSessionView | null = null;
   @State isLoading: boolean = true;
-  @State statusMessage: string = '';
 
   @State planName: string = '';
   @State startTime: string = '09:00';
@@ -106,8 +104,6 @@ struct PlanDetailPage {
     this.session = nextSession;
     this.fillFormFromSession(nextSession);
     ScheduledListStore.patchSession(nextSession);
-    const guardIssue = getGuardSyncIssue(hostContext, nextSession.session_id);
-    this.statusMessage = guardIssue?.message ?? '';
     this.isLoading = false;
   }
 
@@ -422,13 +418,6 @@ struct PlanDetailPage {
           }
         }
         .width('100%')
-
-        if (this.statusMessage.length > 0) {
-          Text(this.statusMessage)
-            .fontSize(12)
-            .fontColor(AppTheme.colors.warning)
-            .width('100%')
-        }
       }
       .width('100%')
       .padding(20)

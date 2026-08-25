@@ -11,7 +11,6 @@ import {
   schedulePendingQuickStart,
 } from './PendingQuickStartService';
 import { applyScreenRestriction } from './ScreenTimeService';
-import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { QuickFocusOptions } from '../models/ActiveLockModel';
@@ -48,10 +47,6 @@ export async function startQuickTask(
   }
 
   const selectedTokens = resolveTaskApps(context, task);
-  if (selectedTokens.length === 0 && !isHarmonyPcOr2in1()) {
-    showErrorToast('请先为任务选择应用', uiContext);
-    return false;
-  }
 
   SettingsStore.updateSelectedTokens(
     context,

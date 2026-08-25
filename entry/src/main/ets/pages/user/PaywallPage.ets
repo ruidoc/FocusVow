@@ -27,7 +27,16 @@ const GOLD: string = '#D4A44A';
 const CHECKOUT_TEXT: string = '#461702';
 const TRIAL_GREEN: string = '#16A34A';
 const CHECK_BLUE: string = '#2563EB';
-const CHECKOUT_WEEKLY_SUFFIX: string = 'rgba(70, 23, 2, 0.55)';
+
+function getCheckoutButtonText(product: VipProduct | null): string {
+  if (!product) {
+    return '请选择套餐';
+  }
+  if (product.period === 2) {
+    return '解锁双月权益';
+  }
+  return '解锁月度权益';
+}
 
 function formatPrice(fen: number): string {
   const yuan = fen / 100;
@@ -164,17 +173,10 @@ struct PaywallPage {
         .fontWeight(FontWeight.Bold)
         .fontColor(CHECKOUT_TEXT)
     } else {
-      Row({ space: 0 }) {
-        Text(`支付 ${formatWeeklyPrice(this.getSelectedProduct()!)}`)
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CHECKOUT_TEXT)
-        Text('/周')
-          .fontSize(13)
-          .fontColor(CHECKOUT_WEEKLY_SUFFIX)
-          .margin({ bottom: 2 })
-      }
-      .alignItems(VerticalAlign.Bottom)
+      Text(getCheckoutButtonText(this.getSelectedProduct()))
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CHECKOUT_TEXT)
     }
   }
 
@@ -248,6 +250,17 @@ struct PaywallPage {
   }
 
   @Builder
+  private buildPromoBadge(): void {
+    Text('限时特惠')
+      .fontSize(11)
+      .fontWeight(FontWeight.Medium)
+      .fontColor('#FFFFFF')
+      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+      .backgroundColor(TRIAL_GREEN)
+      .borderRadius(4)
+  }
+
+  @Builder
   private buildTrialBadge(): void {
     Text('7天免费试用')
       .fontSize(11)
@@ -268,7 +281,9 @@ struct PaywallPage {
               .fontSize(17)
               .fontWeight(FontWeight.Medium)
               .fontColor(AppTheme.colors.textPrimary)
-            if (product.period >= 12 && product.period === this.getMaxPeriod()) {
+            if (product.period === 2) {
+              this.buildPromoBadge();
+            } else if (product.period >= 12 && product.period === this.getMaxPeriod()) {
               this.buildTrialBadge();
             }
           }
@@ -373,10 +388,6 @@ struct PaywallPage {
   @Builder
   private buildCheckoutFooter(): void {
     Column({ space: 10 }) {
-      Divider()
-        .color(AppTheme.colors.divider)
-        .strokeWidth(1)
-
       Button({ type: ButtonType.Normal }) {
         this.buildCheckoutButtonLabel()
       }
@@ -432,12 +443,21 @@ struct PaywallPage {
   private buildContent(): void {
     Column() {
       Scroll() {
-        this.buildScrollBody()
+        Column() {
+          Blank()
+            .layoutWeight(4)
+          this.buildScrollBody()
+          Blank()
+            .layoutWeight(6)
+        }
+        .width('100%')
+        .constraintSize({ minHeight: '100%' })
       }
       .layoutWeight(1)
       .width('100%')
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
+      .align(Alignment.Top)
 
       this.buildCheckoutFooter()
     }
@@ -449,7 +469,7 @@ struct PaywallPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '开通会员',
+        title: '',
         showBack: true,
         usePageScroll: false,
         horizontalPadding: 20,

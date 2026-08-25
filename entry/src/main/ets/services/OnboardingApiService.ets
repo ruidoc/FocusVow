@@ -220,4 +220,26 @@ export class OnboardingApiService {
       console.warn(`[Onboarding] upsert failed: ${String(error)}`);
     }
   }
+
+  /** 登录后绑定当前设备 onboarding 到 user_id（对齐 RN bindOnboardingToUser） */
+  static async bindToUser(context: common.Context, userId: string): Promise<void> {
+    const trimmed = String(userId || '').trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    try {
+      const deviceId = ensureOnboardingDeviceId(context);
+      if (deviceId.length === 0) {
+        return;
+      }
+      const body: Record<string, Object> = {
+        'device_id': deviceId,
+        'user_id': trimmed,
+        'device': getDeviceModel()
+      };
+      await HttpService.post('/onboarding/bind', body, true, true, context);
+    } catch (error) {
+      console.warn(`[Onboarding] bind failed: ${String(error)}`);
+    }
+  }
 }

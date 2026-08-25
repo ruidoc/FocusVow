@@ -4,10 +4,13 @@ import {
   DuoSessionView,
   applyTornTodayToRepeatDays,
   getScheduleRepeatDays,
+  getScheduledSessionEndMin,
+  getScheduledSessionStartMin,
   resolveDuoCounterpartName,
   getSessionApps,
   shouldCompleteStaleScheduledWindow
 } from '../models/DuoModel';
+import { normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { LockStore } from '../stores/LockStore';
 import { DuoApiService } from './DuoApiService';
@@ -137,7 +140,10 @@ export function buildGuardSnapshotFromSession(
     repeatDays = applyTornTodayToRepeatDays(
       session.session_id,
       repeatDays,
-      loadExitPlanIds(context)
+      loadExitPlanIds(context),
+      Date.now(),
+      getScheduledSessionStartMin(session),
+      getScheduledSessionEndMin(session)
     );
   }
   // 空 apps（换机未重选）仍挂策略；强制 allow = 全锁，不可跳过不执行
@@ -148,9 +154,9 @@ export function buildGuardSnapshotFromSession(
   return {
     sessionId: session.session_id,
     title: session.title,
-    startTime,
-    endTime,
-    repeatDays,
+    startTime: normalizeTimeText(startTime, '09:00'),
+    endTime: normalizeTimeText(endTime, '18:00'),
+    repeatDays: normalizePlanRepeatDays(repeatDays),
     selectedTokens: apps,
     mode: modeValue
   };
@@ -170,15 +176,7 @@ export async function syncGuardForSession(
   const result = await syncScheduledSessionGuardStrategy(snapshot);
   if (result.ok) {
     removeScheduledGuardSyncIssue(context, session.session_id);
-    return result;
   }
-
-  saveScheduledGuardSyncIssue(context, {
-    sessionId: session.session_id,
-    title: session.title,
-    message: normalizeGuardIssueMessage(result.message),
-    updatedAt: Date.now()
-  });
   return result;
 }
 

@@ -117,5 +117,17 @@ export default function planModelTest() {
       expect(summarizeRepeatDays([1, 2, 3, 4, 5])).assertEqual('工作日');
       expect(summarizeRepeatDays([6, 7])).assertEqual('周末');
     });
+
+    it('treats end before start as overnight duration', 0, () => {
+      const plan = createPlanFromDraft({
+        name: '跨日专注',
+        startTime: '22:00',
+        endTime: '01:00',
+        repeatDays: [1],
+        selectedTokens: ['app-a'],
+        mode: 'shield'
+      }, 1_700_000_001_000);
+      expect(getPlanDurationMinutes(plan)).assertEqual(180);
+    });
   });
 }

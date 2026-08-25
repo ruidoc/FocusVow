@@ -20,10 +20,11 @@ import {
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { setScheduledDuoWait } from '../../services/DuoWaitContextService';
-import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { syncGuardForSession } from '../../services/ScheduledCovenantService';
 import {
   DEFAULT_SCHEDULED_PLAN_MINUTES,
   MIN_SCHEDULED_PLAN_MINUTES,
+  getScheduledDurationMinutes,
   validateScheduledPlanTime
 } from '../../services/ScheduledPlanValidation';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
@@ -126,13 +127,8 @@ struct PlanAddPage {
 
   private initDefaultTimeRange(): void {
     const now = new Date();
-    let start = new Date(now.getTime());
-    let end = new Date(start.getTime() + DEFAULT_SCHEDULED_PLAN_MINUTES * 60 * 1000);
-    if (end.getDate() !== start.getDate() || end.getMonth() !== start.getMonth()) {
-      start = new Date(now.getTime());
-      start.setHours(23, 60 - DEFAULT_SCHEDULED_PLAN_MINUTES, 0, 0);
-      end = new Date(start.getTime() + DEFAULT_SCHEDULED_PLAN_MINUTES * 60 * 1000);
-    }
+    const start = new Date(now.getTime());
+    const end = new Date(start.getTime() + DEFAULT_SCHEDULED_PLAN_MINUTES * 60 * 1000);
     this.startTime = this.formatTime(start);
     this.endTime = this.formatTime(end);
     this.hasInitializedDefaultTime = true;
@@ -169,23 +165,21 @@ struct PlanAddPage {
     const uiContext = this.getUIContext();
     if (this.timePickerTarget === 'start') {
       const startMin = this.timeToMinutes(nextTime);
-      const endMin = startMin + DEFAULT_SCHEDULED_PLAN_MINUTES;
-      if (endMin > 24 * 60 - 1) {
-        showErrorToast('暂不支持跨日，请改早一点的开始时间', uiContext);
-        this.timePickerVisible = false;
-        return;
+      let endMin = startMin + DEFAULT_SCHEDULED_PLAN_MINUTES;
+      if (endMin >= 24 * 60) {
+        endMin -= 24 * 60;
       }
       this.startTime = nextTime;
       this.endTime = this.minutesToTime(endMin);
     } else {
       const startMin = this.timeToMinutes(this.startTime);
       const endMin = this.timeToMinutes(nextTime);
-      if (endMin <= startMin) {
-        showErrorToast('暂不支持跨日，请将结束时间设在当天内', uiContext);
+      if (endMin === startMin) {
+        showErrorToast('开始时间和结束时间不能相同', uiContext);
         this.timePickerVisible = false;
         return;
       }
-      if (endMin - startMin < MIN_SCHEDULED_PLAN_MINUTES) {
+      if (getScheduledDurationMinutes(startMin, endMin) < MIN_SCHEDULED_PLAN_MINUTES) {
         showErrorToast(`时长至少${MIN_SCHEDULED_PLAN_MINUTES}分钟`, uiContext);
         this.timePickerVisible = false;
         return;
@@ -356,15 +350,7 @@ struct PlanAddPage {
       return;
     }
 
-    const guardResult = await syncGuardForSession(hostContext, session);
-    if (!guardResult.ok) {
-      const warningMessage = '契约已创建，但本机屏时策略注册失败，请到计划页重试';
-      markGuardSyncIssue(hostContext, session, warningMessage);
-      SettingsStore.updateStatusMessage(hostContext, warningMessage);
-      showErrorToast(warningMessage, uiContext);
-    } else {
-      SettingsStore.updateStatusMessage(hostContext, guardResult.message);
-    }
+    await syncGuardForSession(hostContext, session);
 
     if (session.token.length > 0) {
       DuoInviteClipboardService.dismissToken(session.token);
@@ -376,17 +362,13 @@ struct PlanAddPage {
     if (this.participationMode === 'duo') {
       const scheduleLabel = `${this.startTime} - ${this.endTime}`;
       setScheduledDuoWait(session, scheduleLabel);
-      if (guardResult.ok) {
-        showToast('创建成功，请邀请搭子加入', uiContext);
-      }
+      showToast('创建成功，请邀请搭子加入', uiContext);
       this.isSaving = false;
       replaceRoute(PageRoutes.DuoWait);
       return;
     }
 
-    if (guardResult.ok) {
-      showToast('契约已签订，请务必遵守', uiContext);
-    }
+    showToast('契约已签订，请务必遵守', uiContext);
     this.isSaving = false;
     backRoute();
   }
@@ -464,8 +446,7 @@ struct PlanAddPage {
       return;
     }
 
-    const guardResult = await syncGuardForSession(hostContext, nextSession);
-    this.statusMessage = guardResult.ok ? '' : '已保存，但本机屏时策略未同步，请稍后重试';
+    await syncGuardForSession(hostContext, nextSession);
     this.editingSession = nextSession;
     this.fillFormFromSession(nextSession);
     ScheduledListStore.patchSession(nextSession);
@@ -479,11 +460,7 @@ struct PlanAddPage {
     }
     this.isSaving = false;
     ScheduledListStore.clearEditingSession();
-    if (guardResult.ok) {
-      showToast('已保存', uiContext);
-    } else {
-      showErrorToast(this.statusMessage, uiContext);
-    }
+    showToast('已保存', uiContext);
     backRoute();
   }
 

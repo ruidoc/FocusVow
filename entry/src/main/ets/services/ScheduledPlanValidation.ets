@@ -26,19 +26,54 @@ export function getScheduledDurationMinutes(startMin: number, endMin: number): n
   return 0;
 }
 
-function hasSharedRepeatDay(left: number[], right: number[]): boolean {
-  const normalizedLeft = normalizePlanRepeatDays(left);
-  const normalizedRight = normalizePlanRepeatDays(right);
-  for (let i = 0; i < normalizedLeft.length; i++) {
-    if (normalizedRight.includes(normalizedLeft[i])) {
-      return true;
+function nextScheduledRepeatDay(day: number): number {
+  return day === 7 ? 1 : day + 1;
+}
+
+interface OccupiedSlot {
+  day: number;
+  startMin: number;
+  endMin: number;
+}
+
+function occupiedSlots(startMin: number, endMin: number, repeatDays: number[]): OccupiedSlot[] {
+  const days = normalizePlanRepeatDays(repeatDays);
+  const slots: OccupiedSlot[] = [];
+  for (let i = 0; i < days.length; i++) {
+    const day = days[i];
+    if (endMin > startMin) {
+      slots.push({ day, startMin, endMin });
+    } else if (endMin < startMin) {
+      slots.push({ day, startMin, endMin: 24 * 60 });
+      slots.push({ day: nextScheduledRepeatDay(day), startMin: 0, endMin });
     }
   }
-  return false;
+  return slots;
 }
 
 function isTimeRangeOverlap(startA: number, endA: number, startB: number, endB: number): boolean {
   return startA < endB && endA > startB;
+}
+
+function isScheduledRangeOverlap(
+  startA: number,
+  endA: number,
+  daysA: number[],
+  startB: number,
+  endB: number,
+  daysB: number[]
+): boolean {
+  const left = occupiedSlots(startA, endA, daysA);
+  const right = occupiedSlots(startB, endB, daysB);
+  for (let i = 0; i < left.length; i++) {
+    for (let j = 0; j < right.length; j++) {
+      if (left[i].day === right[j].day &&
+        isTimeRangeOverlap(left[i].startMin, left[i].endMin, right[j].startMin, right[j].endMin)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function isActiveScheduledSession(session: DuoSessionView): boolean {
@@ -78,10 +113,7 @@ export function findOverlappingScheduledSession(
       continue;
     }
     const range = getSessionTimeRange(session);
-    if (!hasSharedRepeatDay(normalizedRepeat, range.repeatDays)) {
-      continue;
-    }
-    if (isTimeRangeOverlap(startMin, endMin, range.startMin, range.endMin)) {
+    if (isScheduledRangeOverlap(startMin, endMin, normalizedRepeat, range.startMin, range.endMin, range.repeatDays)) {
       return session;
     }
   }

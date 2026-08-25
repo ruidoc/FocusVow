@@ -1,4 +1,5 @@
 import { AppTheme } from '../../constants/Theme';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { DuoStatsTaskItem } from '../../models/DuoModel';
 import { formatTaskDurationMinutes } from '../../services/StatsRecordUtil';
 
@@ -19,6 +20,7 @@ const LOW_MAX_THRESHOLD_MIN: number = 25;
 
 @Component
 export struct TaskDurationChart {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @Prop @Watch('onDataChange') data: DuoStatsTaskItem[] = [];
   @Prop title: string = '专注时长分布';
   @Prop emptyHint: string = '完成几次专注后，这里会展示你常做的任务';
@@ -130,7 +132,7 @@ export struct TaskDurationChart {
       .width('100%')
       .height(10)
       .borderRadius(999)
-      .backgroundColor('#F1F2F6')
+      .backgroundColor(AppTheme.colors.ring)
       .clip(true)
     }
     .width('100%')

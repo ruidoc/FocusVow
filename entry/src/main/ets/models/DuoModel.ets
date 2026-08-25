@@ -457,18 +457,26 @@ export function getTodayScheduledRepeatWeekday(nowAt: number = Date.now()): numb
   return jsWeekday === 0 ? 7 : jsWeekday;
 }
 
-/** 今日已撕毁时从 repeat 去掉当天，对齐 RN syncGuardForSession */
+/** 今日已撕毁时从 repeat 去掉当天；跨日窗口后半夜还要去掉昨天（开始日） */
 export function applyTornTodayToRepeatDays(
   sessionId: string,
   repeatDays: number[],
   exitPlanIds: string[],
-  nowAt: number = Date.now()
+  nowAt: number = Date.now(),
+  startMin: number = -1,
+  endMin: number = -1
 ): number[] {
   if (!isScheduledTornToday(sessionId, exitPlanIds, nowAt)) {
     return repeatDays;
   }
   const today = getTodayScheduledRepeatWeekday(nowAt);
-  return repeatDays.filter((day: number) => day !== today);
+  let nextDays = repeatDays.filter((day: number) => day !== today);
+  const nowMin = new Date(nowAt).getHours() * 60 + new Date(nowAt).getMinutes();
+  if (endMin >= 0 && startMin >= 0 && endMin < startMin && nowMin < endMin) {
+    const yesterday = today === 1 ? 7 : today - 1;
+    nextDays = nextDays.filter((day: number) => day !== yesterday);
+  }
+  return nextDays;
 }
 
 export function isScheduledSessionMatchesToday(
@@ -516,6 +524,9 @@ export function getScheduledListStatusLabel(
   const repeatRaw = session.schedule_repeat ?? '';
   if (repeatRaw !== 'once' &&
     (session.status === 'scheduled' || session.status === 'active')) {
+    if (isScheduledSessionInWindow(session)) {
+      return getScheduledSessionStatusLabel(session);
+    }
     if (!isScheduledSessionMatchesToday(session)) {
       return '今日不生效';
     }

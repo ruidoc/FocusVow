@@ -5,7 +5,8 @@ import {
   createCovenantLockState,
   createIdleLockState,
   QuickFocusParticipationMode,
-  RestrictionMode
+  RestrictionMode,
+  resolveDuoSessionIdFromLock
 } from '../models/ActiveLockModel';
 import { createDefaultSettingsState, SettingsState } from '../models/PermissionModel';
 import {
@@ -26,7 +27,7 @@ import {
 } from './ScheduledSessionPersistenceService';
 import { activateDelayedOnceIfNeeded } from './PendingQuickStartService';
 import { completeOnceQuickFocusFromGuardStop } from './ActiveLockLifecycleService';
-import { isOnceStrategyName } from './ScreenTimeService';
+import { isOnceStrategyName, sessionIdFromGuardName } from './ScreenTimeService';
 import { loadExitPlanIds } from './ExitPlanIdsService';
 
 const DOMAIN: number = 0x0000;
@@ -94,7 +95,23 @@ function isSessionStrategyName(strategyName: string): boolean {
 }
 
 function sessionIdFromStrategy(strategyName: string): string {
-  return strategyName.replace('session_', '');
+  return sessionIdFromGuardName(strategyName);
+}
+
+function lockMatchesStrategy(lock: ActiveLockState, strategyName: string): boolean {
+  if (lock.kind !== 'covenant') {
+    return false;
+  }
+  if (lock.planId === strategyName || lock.strategyName === strategyName) {
+    return true;
+  }
+  if (isSessionStrategyName(strategyName)) {
+    const sessionId = sessionIdFromStrategy(strategyName);
+    return lock.duoSessionId === sessionId ||
+      lock.planId === `session_${sessionId}` ||
+      resolveDuoSessionIdFromLock(lock) === sessionId;
+  }
+  return false;
 }
 
 function updateSettingsStatusMessage(context: common.Context, statusMessage: string): void {
@@ -190,9 +207,7 @@ function buildFallbackCovenantLock(strategyName: string): ActiveLockState {
 }
 
 function isCovenantLockStillActive(lock: ActiveLockState, strategyName: string, nowMs: number): boolean {
-  return lock.kind === 'covenant' &&
-    lock.planId === strategyName &&
-    lock.endAt > nowMs;
+  return lockMatchesStrategy(lock, strategyName) && lock.endAt > nowMs;
 }
 
 function saveCovenantLockState(
@@ -254,9 +269,21 @@ export async function handlePlanStrategyStart(context: common.Context, strategyN
 
   if (isSessionStrategyName(strategyName)) {
     const sessionId = sessionIdFromStrategy(strategyName);
+    const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
+    if (isCovenantLockStillActive(currentLock, strategyName, Date.now())) {
+      hilog.info(DOMAIN, TAG, 'onStart skipped already locking %{public}s', strategyName);
+      return;
+    }
     if (isScheduledTornToday(sessionId, loadExitPlanIds(context))) {
       hilog.info(DOMAIN, TAG, 'onStart skipped torn today %{public}s', strategyName);
       return;
+    }
+    if (strategyName.endsWith('_P2')) {
+      const yesterday = Date.now() - 24 * 60 * 60 * 1000;
+      if (isScheduledTornToday(sessionId, loadExitPlanIds(context), yesterday)) {
+        hilog.info(DOMAIN, TAG, 'onStart skipped torn yesterday %{public}s', strategyName);
+        return;
+      }
     }
     const snapshot = loadScheduledGuardSnapshot(context, sessionId);
     if (!snapshot) {
@@ -331,16 +358,6 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
     return;
   }
 
-  if (isSessionStrategyName(strategyName)) {
-    const sessionId = sessionIdFromStrategy(strategyName);
-    await DuoApiService.completeScheduledWindow(sessionId, context);
-  } else {
-    const plan = findPlanByStrategyName(context, strategyName);
-    if (plan?.duoSessionId && plan.duoSessionId.length > 0) {
-      await DuoApiService.completeScheduledWindow(plan.duoSessionId, context);
-    }
-  }
-
   if (isCovenantLockStillActive(currentLock, strategyName, nowMs)) {
     hilog.warn(
       DOMAIN,
@@ -352,7 +369,17 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
     return;
   }
 
-  if (currentLock.kind === 'covenant' && currentLock.planId === strategyName) {
+  if (isSessionStrategyName(strategyName)) {
+    const sessionId = sessionIdFromStrategy(strategyName);
+    await DuoApiService.completeScheduledWindow(sessionId, context);
+  } else {
+    const plan = findPlanByStrategyName(context, strategyName);
+    if (plan?.duoSessionId && plan.duoSessionId.length > 0) {
+      await DuoApiService.completeScheduledWindow(plan.duoSessionId, context);
+    }
+  }
+
+  if (lockMatchesStrategy(currentLock, strategyName)) {
     savePersistedActiveLockState(context, createIdleLockState());
     ScheduledListStore.markNeedsRefreshPersisted(context);
     hilog.info(DOMAIN, TAG, 'onStop cleared covenant lock %{public}s', strategyName);

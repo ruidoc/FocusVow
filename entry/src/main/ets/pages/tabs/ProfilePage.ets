@@ -304,7 +304,7 @@ export struct ProfilePage {
               .width('100%')
               .height(4)
               .color(this.todayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.primary)
-              .backgroundColor(AppTheme.colors.surfaceSecondary)
+              .backgroundColor(AppTheme.colors.ring)
           }
           .width('100%')
         }

@@ -14,7 +14,7 @@ import {
   DuoInstantLockOptions,
   startOrAlignInstantDuoFocus
 } from '../../services/DuoInstantLockService';
-import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { syncGuardForSession } from '../../services/ScheduledCovenantService';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
@@ -161,25 +161,12 @@ struct DuoJoinPage {
     }
 
     if (session.type === 'scheduled') {
-      const guardResult = await syncGuardForSession(hostContext, session);
-      if (!guardResult.ok) {
-        const warningMessage = '已加入定时契约，但本机屏时策略注册失败，请到计划页重试';
-        markGuardSyncIssue(hostContext, session, warningMessage);
-        SettingsStore.updateStatusMessage(hostContext, warningMessage);
-        DuoInviteClipboardService.dismissToken(token);
-        void DuoInviteClipboardService.clearInviteClipboard();
-        ScheduledListStore.markDirty();
-        ScheduledListStore.setFilter('joined');
-        this.toastError(warningMessage);
-        this.isSubmitting = false;
-        navigateToMainTab('plans');
-        return;
-      }
+      await syncGuardForSession(hostContext, session);
       DuoInviteClipboardService.dismissToken(token);
       void DuoInviteClipboardService.clearInviteClipboard();
-      showToast('已加入定时契约，屏时策略已注册', this.getUIContext());
       ScheduledListStore.markDirty();
       ScheduledListStore.setFilter('joined');
+      showToast('已加入定时契约', this.getUIContext());
       this.isSubmitting = false;
       navigateToMainTab('plans');
       return;

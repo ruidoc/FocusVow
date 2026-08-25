@@ -24,7 +24,7 @@ import { InboxStore } from './InboxStore';
 import { refreshStats } from './StatsStore';
 import { AnalyticsService, LoginMethod } from '../services/AnalyticsService';
 import { UmengSdkService } from '../services/UmengSdkService';
-import { ensureOnboardingDeviceId } from '../services/OnboardingApiService';
+import { ensureOnboardingDeviceId, OnboardingApiService } from '../services/OnboardingApiService';
 import {
   clearUserSession,
   loadAccessToken,
@@ -538,6 +538,10 @@ export class UserStore {
     if (refreshError) {
       await UserStore.logout(context);
       return refreshError;
+    }
+    const userId = UserStore.getUserInfo().id.trim();
+    if (userId.length > 0) {
+      void OnboardingApiService.bindToUser(context, userId);
     }
     void FocusSyncService.flushPending(context);
     void QuickTaskStore.loadAll();

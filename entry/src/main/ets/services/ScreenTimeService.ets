@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { FocusPlan } from '../models/PlanModel';
+import { FocusPlan, normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
 import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
 import { resolveInstantLockMinutes } from '../utils/TimerMode';
 import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
@@ -15,6 +15,13 @@ export interface GuardResult<T> {
 interface GuardErrorLike {
   code?: number;
   message?: string;
+}
+
+interface ScheduledTimeSpec {
+  name: string;
+  startTime: string;
+  endTime: string;
+  repeat: number[];
 }
 
 const DOMAIN: number = 0x0000;
@@ -84,14 +91,17 @@ function createPlanGuardStrategy(plan: FocusPlan): guardService.GuardStrategy {
   };
 }
 
-function createScheduledGuardStrategy(snapshot: ScheduledGuardSnapshot): guardService.GuardStrategy {
+function createScheduledGuardStrategy(
+  snapshot: ScheduledGuardSnapshot,
+  spec: ScheduledTimeSpec
+): guardService.GuardStrategy {
   return {
-    name: `session_${snapshot.sessionId}`,
+    name: spec.name,
     timeStrategy: {
       type: guardService.TimeStrategyType.START_END_TIME_TYPE,
-      startTime: snapshot.startTime,
-      endTime: snapshot.endTime,
-      repeat: [...snapshot.repeatDays]
+      startTime: spec.startTime,
+      endTime: spec.endTime,
+      repeat: [...spec.repeat]
     },
     appInfo: {
       appTokens: [...snapshot.selectedTokens]
@@ -100,36 +110,20 @@ function createScheduledGuardStrategy(snapshot: ScheduledGuardSnapshot): guardSe
   };
 }
 
-async function addOrUpdateScheduledGuardStrategy(
-  snapshot: ScheduledGuardSnapshot,
-  existingNames?: Set<string>
-): Promise<void> {
-  const strategyName = `session_${snapshot.sessionId}`;
-  const strategy = createScheduledGuardStrategy(snapshot);
-  const hasExistingStrategy = existingNames?.has(strategyName) ?? false;
-
-  if (hasExistingStrategy) {
-    try {
-      await guardService.updateGuardStrategy(strategyName, strategy);
-    } catch (error) {
-      throw guardOperationError(`updateGuardStrategy(${strategyName})`, error as Object);
-    }
-    return;
-  }
-
+async function upsertGuardStrategy(strategy: guardService.GuardStrategy): Promise<void> {
   try {
     await guardService.addGuardStrategy(strategy);
   } catch (error) {
     const guardError = error as GuardErrorLike;
     if (isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.STRATEGY_NAME_ALREADY_EXIST)) {
       try {
-        await guardService.updateGuardStrategy(strategyName, strategy);
+        await guardService.updateGuardStrategy(strategy.name, strategy);
       } catch (updateError) {
-        throw guardOperationError(`updateGuardStrategy(${strategyName})`, updateError as Object);
+        throw guardOperationError(`updateGuardStrategy(${strategy.name})`, updateError as Object);
       }
       return;
     }
-    throw guardOperationError(`addGuardStrategy(${strategyName})`, error as Object);
+    throw guardOperationError(`addGuardStrategy(${strategy.name})`, error as Object);
   }
 }
 
@@ -173,6 +167,25 @@ async function startPlanGuardStrategy(planId: string): Promise<void> {
     if (!shouldIgnoreStartError(guardError)) {
       throw guardOperationError(`startGuardStrategy(${planId})`, error as Object);
     }
+  }
+}
+
+/** 定时契约未到窗口时 start 可能失败，add/update 成功即可由系统到点拉起 */
+async function startScheduledGuardStrategy(strategyName: string): Promise<void> {
+  try {
+    await guardService.startGuardStrategy(strategyName);
+  } catch (error) {
+    const guardError = error as GuardErrorLike;
+    if (shouldIgnoreStartError(guardError)) {
+      return;
+    }
+    hilog.warn(
+      DOMAIN,
+      TAG,
+      'startScheduledGuardStrategy lenient %{public}s: %{public}s',
+      strategyName,
+      formatGuardError(`startGuardStrategy(${strategyName})`, error as Object)
+    );
   }
 }
 
@@ -380,6 +393,88 @@ function weekdayOf(date: Date): number {
   return day === 0 ? 7 : day;
 }
 
+export function sessionIdFromGuardName(strategyName: string): string {
+  if (!strategyName.startsWith('session_')) {
+    return '';
+  }
+  let id = strategyName.substring('session_'.length);
+  if (id.endsWith('_P1') || id.endsWith('_P2')) {
+    id = id.substring(0, id.length - 3);
+  }
+  return id;
+}
+
+export function scheduledSessionStrategyNames(sessionId: string): string[] {
+  return [
+    `session_${sessionId}`,
+    `session_${sessionId}_P1`,
+    `session_${sessionId}_P2`
+  ];
+}
+
+function clockMinutesFromText(timeText: string): number {
+  const normalized = normalizeTimeText(timeText, '00:00');
+  const parts = normalized.split(':');
+  return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+function normalizeScheduledSnapshot(snapshot: ScheduledGuardSnapshot): ScheduledGuardSnapshot {
+  return {
+    sessionId: snapshot.sessionId,
+    title: snapshot.title,
+    startTime: normalizeTimeText(snapshot.startTime, '09:00'),
+    endTime: normalizeTimeText(snapshot.endTime, '18:00'),
+    repeatDays: normalizePlanRepeatDays(snapshot.repeatDays),
+    selectedTokens: [...snapshot.selectedTokens],
+    mode: snapshot.mode
+  };
+}
+
+function nextHarmonyRepeatDay(day: number): number {
+  return day === 7 ? 1 : day + 1;
+}
+
+function nextHarmonyRepeatDays(days: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < days.length; i++) {
+    const next = nextHarmonyRepeatDay(days[i]);
+    if (!out.includes(next)) {
+      out.push(next);
+    }
+  }
+  return out;
+}
+
+function buildScheduledTimeSpecs(snapshot: ScheduledGuardSnapshot): ScheduledTimeSpec[] {
+  const startMin = clockMinutesFromText(snapshot.startTime);
+  const endMin = clockMinutesFromText(snapshot.endTime);
+  const baseName = `session_${snapshot.sessionId}`;
+  if (endMin >= startMin) {
+    const same: ScheduledTimeSpec = {
+      name: baseName,
+      startTime: snapshot.startTime,
+      endTime: snapshot.endTime,
+      repeat: [...snapshot.repeatDays]
+    };
+    return [same];
+  }
+  const specs: ScheduledTimeSpec[] = [{
+    name: `${baseName}_P1`,
+    startTime: snapshot.startTime,
+    endTime: '23:59',
+    repeat: [...snapshot.repeatDays]
+  }];
+  if (endMin > 0) {
+    specs.push({
+      name: `${baseName}_P2`,
+      startTime: '00:00',
+      endTime: snapshot.endTime,
+      repeat: nextHarmonyRepeatDays(snapshot.repeatDays)
+    });
+  }
+  return specs;
+}
+
 /** TimeGuard 只有 HH:mm：结束时刻向上取整到下一整分，避免 UI 已到点系统还在锁 */
 export function ceilToNextMinuteMs(ms: number): number {
   const date = new Date(ms);
@@ -451,23 +546,39 @@ export async function syncDelayedOnceGuardStrategy(
 export async function syncScheduledSessionGuardStrategy(
   snapshot: ScheduledGuardSnapshot
 ): Promise<GuardResult<boolean>> {
-  const strategyName = `session_${snapshot.sessionId}`;
-  // 空 selectedTokens + allow = 全锁（TRUSTLIST 为空）；仍须注册并 start，不可移除
-  const effectiveSnapshot: ScheduledGuardSnapshot = snapshot.selectedTokens.length === 0
+  const normalizedSnapshot = normalizeScheduledSnapshot(snapshot);
+  const effectiveSnapshot: ScheduledGuardSnapshot = normalizedSnapshot.selectedTokens.length === 0
     ? {
-      sessionId: snapshot.sessionId,
-      title: snapshot.title,
-      startTime: snapshot.startTime,
-      endTime: snapshot.endTime,
-      repeatDays: snapshot.repeatDays,
+      sessionId: normalizedSnapshot.sessionId,
+      title: normalizedSnapshot.title,
+      startTime: normalizedSnapshot.startTime,
+      endTime: normalizedSnapshot.endTime,
+      repeatDays: normalizedSnapshot.repeatDays,
       selectedTokens: [],
       mode: 'allow'
     }
-    : snapshot;
+    : normalizedSnapshot;
+
+  if (effectiveSnapshot.repeatDays.length === 0) {
+    return removeScheduledSessionGuardStrategy(effectiveSnapshot.sessionId);
+  }
 
   try {
-    await addOrUpdateScheduledGuardStrategy(effectiveSnapshot);
-    await startPlanGuardStrategy(strategyName);
+    const specs = buildScheduledTimeSpecs(effectiveSnapshot);
+    const wanted = new Set<string>(specs.map((item: ScheduledTimeSpec) => item.name));
+    const leftovers = scheduledSessionStrategyNames(effectiveSnapshot.sessionId);
+    for (let i = 0; i < leftovers.length; i++) {
+      if (wanted.has(leftovers[i])) {
+        continue;
+      }
+      await stopPlanGuardStrategy(leftovers[i]);
+      await removePlanGuardStrategyInternal(leftovers[i]);
+    }
+    for (let i = 0; i < specs.length; i++) {
+      await stopPlanGuardStrategy(specs[i].name);
+      await upsertGuardStrategy(createScheduledGuardStrategy(effectiveSnapshot, specs[i]));
+      await startScheduledGuardStrategy(specs[i].name);
+    }
     return {
       ok: true,
       data: true,
@@ -476,7 +587,7 @@ export async function syncScheduledSessionGuardStrategy(
         : '屏时策略已注册'
     };
   } catch (error) {
-    logGuardError(`syncScheduledSessionGuardStrategy(${strategyName})`, error as Object);
+    logGuardError(`syncScheduledSessionGuardStrategy(session_${snapshot.sessionId})`, error as Object);
     return {
       ok: false,
       data: false,
@@ -486,13 +597,15 @@ export async function syncScheduledSessionGuardStrategy(
 }
 
 export async function removeScheduledSessionGuardStrategy(sessionId: string): Promise<GuardResult<boolean>> {
-  const strategyName = `session_${sessionId}`;
   try {
-    await stopPlanGuardStrategy(strategyName);
-    await removePlanGuardStrategyInternal(strategyName);
+    const names = scheduledSessionStrategyNames(sessionId);
+    for (let i = 0; i < names.length; i++) {
+      await stopPlanGuardStrategy(names[i]);
+      await removePlanGuardStrategyInternal(names[i]);
+    }
     return { ok: true, data: true, message: '屏时策略已移除' };
   } catch (error) {
-    logGuardError(`removeScheduledSessionGuardStrategy(${strategyName})`, error as Object);
+    logGuardError(`removeScheduledSessionGuardStrategy(session_${sessionId})`, error as Object);
     return {
       ok: false,
       data: false,
@@ -529,7 +642,11 @@ export async function syncPlanGuardStrategy(plan: FocusPlan): Promise<GuardResul
 
 export async function stopPlanGuardStrategyForWindow(planId: string): Promise<GuardResult<boolean>> {
   try {
-    await stopPlanGuardStrategy(planId);
+    const sessionId = sessionIdFromGuardName(planId);
+    const names = sessionId.length > 0 ? scheduledSessionStrategyNames(sessionId) : [planId];
+    for (let i = 0; i < names.length; i++) {
+      await stopPlanGuardStrategy(names[i]);
+    }
     return { ok: true, data: true, message: '已停止当前契约窗口' };
   } catch (error) {
     logGuardError(`stopPlanGuardStrategyForWindow(${planId})`, error as Object);
@@ -607,8 +724,8 @@ export async function pruneSessionGuardStrategies(activeSessionIds: Set<string>)
       if (!isSessionStrategyName(strategy.name)) {
         continue;
       }
-      const sessionId = strategy.name.replace('session_', '');
-      if (activeSessionIds.has(sessionId)) {
+      const sessionId = sessionIdFromGuardName(strategy.name);
+      if (sessionId.length > 0 && activeSessionIds.has(sessionId)) {
         continue;
       }
       await stopPlanGuardStrategy(strategy.name);

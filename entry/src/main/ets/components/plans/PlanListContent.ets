@@ -1,12 +1,11 @@
 import { common } from '@kit.AbilityKit';
 import { ScheduledSessionCard } from './ScheduledSessionCard';
 import { AppTheme } from '../../constants/Theme';
-import { showErrorToast, showToast } from '../../common/Toast';
+import { showToast } from '../../common/Toast';
 import { DuoSessionView, sortScheduledSessions } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
-  getGuardSyncIssueCount,
   hydrateScheduledGuardSyncFlags,
   reconcileStaleScheduledWindows,
   applyScheduledGuardSyncCheckAfterListLoad,
@@ -135,10 +134,6 @@ export struct PlanListContent {
     } else {
       ScheduledListStore.clearDirty();
       applyScheduledGuardSyncCheckAfterListLoad(hostContext, reconciled.length);
-      const guardIssueCount = getGuardSyncIssueCount(hostContext);
-      if (guardIssueCount > 0) {
-        this.statusMessage = `有 ${guardIssueCount} 条契约待完成本机屏时配置`;
-      }
     }
     this.isLoading = false;
     this.isRefreshing = false;
@@ -173,11 +168,6 @@ export struct PlanListContent {
       const result = await syncScheduledGuardsManually(hostContext);
       if (result.ok) {
         showToast('已同步到本机', this.getUIContext());
-        if (this.statusMessage.indexOf('待完成本机屏时配置') >= 0) {
-          this.statusMessage = '';
-        }
-      } else if (result.message.length > 0) {
-        showErrorToast(result.message, this.getUIContext());
       }
     } finally {
       this.syncingGuards = false;
@@ -209,13 +199,6 @@ export struct PlanListContent {
           void this.syncLocalGuards();
         }
       })
-
-      Text('登录后需要点击同步，否则定时任务不生效')
-        .width('100%')
-        .fontSize(12)
-        .lineHeight(18)
-        .fontColor(AppTheme.colors.textMuted)
-        .textAlign(TextAlign.Center)
     }
     .width('100%')
     .padding({ top: 4, bottom: 4 })
