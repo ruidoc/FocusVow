@@ -3,15 +3,20 @@ import { AppTheme } from '../../constants/Theme';
 import {
   formatStatsDateTimeLabel,
   getParticipationModeTag,
+  getShameSectionBorderColor,
+  getShameSectionDividerColor,
+  getStatsRecordSectionBgColor,
   HONOR_SECTION_BORDER_COLOR,
   HONOR_SECTION_DIVIDER_COLOR,
   HonorRecordItem,
-  STATS_RECORD_SECTION_BG_COLOR
+  ShameRecordItem,
 } from '../../services/StatsRecordUtil';
+import { StoreKeys } from '../../stores/StoreKeys';
 
 @Component
 export struct HonorRecordListSection {
   @Prop items: HonorRecordItem[] = [];
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   onItemPress?: (item: HonorRecordItem) => void;
 
   build() {
@@ -26,7 +31,7 @@ export struct HonorRecordListSection {
       }
       .width('100%')
       .padding(18)
-      .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+      .backgroundColor(getStatsRecordSectionBgColor())
       .borderRadius(AppTheme.radius.lg)
       .border({ width: 1, color: HONOR_SECTION_BORDER_COLOR })
       .alignItems(HorizontalAlign.Start)
@@ -56,7 +61,7 @@ export struct HonorRecordListSection {
       }
       .width('100%')
       .padding({ left: 18, right: 18 })
-      .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+      .backgroundColor(getStatsRecordSectionBgColor())
       .borderRadius(AppTheme.radius.lg)
       .border({ width: 1, color: HONOR_SECTION_BORDER_COLOR })
     }

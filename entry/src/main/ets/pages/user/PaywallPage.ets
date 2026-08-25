@@ -7,29 +7,34 @@ import { VipProduct, SubscriptionApiService } from '../../services/SubscriptionA
 import { WeChatOpenService, WeChatPayParams } from '../../services/WeChatOpenService';
 import { BenefitStore } from '../../stores/BenefitStore';
 import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
+import { AppTheme } from '../../constants/Theme';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { backRoute, PageRoutes, pushRoute, pushWebView } from '../../router/PageRoutes';
+import { confirmPaidServiceAgreement } from '../../utils/PrivacyConsentUtil';
 
 bootstrapStores();
 
 const BENEFITS: string[] = [
-  '无限选择APP数量/分类',
-  '不限制每日专注时长',
-  '支持放行模式（应用白名单）',
-  '内部专属群优先支持',
+  '不限每日专注时长',
+  '多端使用，数据共享',
+  '完整历史统计与趋势',
+  '会员专属客服支持',
 ];
 
-const PAGE_BG: string = '#F5F7FB';
 const GOLD: string = '#D4A44A';
-const TEXT: string = '#0F172A';
-const TEXT_MUTED: string = '#64748B';
-const BORDER: string = '#E5E7EB';
-const CARD: string = '#FFFFFF';
-const CARD_SELECTED: string = '#FFFBF0';
+const CHECKOUT_TEXT: string = '#461702';
+const TRIAL_GREEN: string = '#16A34A';
+const CHECK_BLUE: string = '#2563EB';
+const CHECKOUT_WEEKLY_SUFFIX: string = 'rgba(70, 23, 2, 0.55)';
 
 function formatPrice(fen: number): string {
-  return `¥${(fen / 100).toFixed(2)}`;
+  const yuan = fen / 100;
+  if (Number.isInteger(yuan)) {
+    return `¥${yuan}`;
+  }
+  return `¥${yuan.toFixed(2)}`;
 }
 
 function formatWeeklyPrice(product: VipProduct): string {
@@ -38,9 +43,36 @@ function formatWeeklyPrice(product: VipProduct): string {
   return formatPrice(Math.round(product.price / weeks));
 }
 
+function getPlanTitle(period: number): string {
+  if (period >= 12) {
+    return '年会员';
+  }
+  if (period === 2) {
+    return '双月会员';
+  }
+  if (period === 7) {
+    return '周会员';
+  }
+  return '月会员';
+}
+
+function getPlanDuration(period: number): string {
+  if (period >= 12) {
+    return '12 个月';
+  }
+  if (period === 2) {
+    return '2 个月';
+  }
+  if (period === 7) {
+    return '7 天';
+  }
+  return '1 个月';
+}
+
 @Entry
 @Component
 struct PaywallPage {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @State products: VipProduct[] = [];
   @State selectedProductId: string = '';
   @State loadingProducts: boolean = true;
@@ -80,35 +112,79 @@ struct PaywallPage {
     return this.products.length > 0 ? this.products[0] : null;
   }
 
+  private getMaxPeriod(): number {
+    let max = 0;
+    for (let i = 0; i < this.products.length; i++) {
+      if (this.products[i].period > max) {
+        max = this.products[i].period;
+      }
+    }
+    return max;
+  }
+
   private isCheckoutDisabled(): boolean {
     return this.paymentStatus === 'processing' ||
       this.products.length === 0 ||
       this.selectedProductId.length === 0;
   }
 
-  private getCheckoutLabel(): string {
+  private async ensureAgreement(): Promise<boolean> {
+    if (this.agreed) {
+      return true;
+    }
+    const accepted = await confirmPaidServiceAgreement(this.getUIContext());
+    if (!accepted) {
+      return false;
+    }
+    this.agreed = true;
+    return true;
+  }
+
+  private onCheckout(): void {
+    if (!this.getSelectedProduct()) {
+      return;
+    }
+    void this.ensureAgreement().then((ok: boolean) => {
+      if (ok) {
+        void this.doCheckout();
+      }
+    });
+  }
+
+  @Builder
+  private buildCheckoutButtonLabel(): void {
     if (this.paymentStatus === 'processing') {
-      return '处理中...';
+      Text('处理中...')
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CHECKOUT_TEXT)
+    } else if (!this.getSelectedProduct()) {
+      Text('请选择套餐')
+        .fontSize(17)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CHECKOUT_TEXT)
+    } else {
+      Row({ space: 0 }) {
+        Text(`支付 ${formatWeeklyPrice(this.getSelectedProduct()!)}`)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CHECKOUT_TEXT)
+        Text('/周')
+          .fontSize(13)
+          .fontColor(CHECKOUT_WEEKLY_SUFFIX)
+          .margin({ bottom: 2 })
+      }
+      .alignItems(VerticalAlign.Bottom)
     }
-    const product = this.getSelectedProduct();
-    if (product) {
-      return `立即开通 ${formatPrice(product.price)}`;
-    }
-    return '立即开通';
   }
 
   private async loadProducts(): Promise<void> {
     this.loadingProducts = true;
     const list = await SubscriptionApiService.listVipProducts();
-    this.products = list;
-    if (list.length > 0) {
-      let best = list[0];
-      for (let i = 1; i < list.length; i++) {
-        if (list[i].period > best.period) {
-          best = list[i];
-        }
-      }
-      this.selectedProductId = best.product_id;
+    const sorted = list.slice().sort((a, b) => b.period - a.period);
+    this.products = sorted;
+    if (sorted.length > 0) {
+      this.selectedProductId = sorted[0].product_id;
     }
     this.loadingProducts = false;
   }
@@ -157,30 +233,29 @@ struct PaywallPage {
     }
   }
 
-  private onCheckout(): void {
-    if (!this.getSelectedProduct()) {
-      return;
-    }
-    if (!this.agreed) {
-      showToast('请先阅读并同意《付费服务协议》', this.getUIContext());
-      return;
-    }
-    void this.doCheckout();
-  }
-
   @Builder
   private buildBenefitRow(text: string): void {
     Row({ space: 8 }) {
       SymbolGlyph($r('sys.symbol.checkmark_circle'))
-        .fontSize(18)
-        .fontColor(['#16A34A'])
+        .fontSize(22)
+        .fontColor([CHECK_BLUE])
       Text(text)
         .fontSize(15)
-        .fontColor(TEXT_MUTED)
-        .layoutWeight(1)
+        .lineHeight(22)
+        .fontColor(AppTheme.colors.textMuted)
     }
-    .width('100%')
     .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private buildTrialBadge(): void {
+    Text('7天免费试用')
+      .fontSize(11)
+      .fontWeight(FontWeight.Medium)
+      .fontColor('#FFFFFF')
+      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+      .backgroundColor(TRIAL_GREEN)
+      .borderRadius(4)
   }
 
   @Builder
@@ -188,39 +263,49 @@ struct PaywallPage {
     Column({ space: 0 }) {
       Row() {
         Column({ space: 4 }) {
-          Text(product.name)
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(TEXT)
-          Text(`约 ${formatWeeklyPrice(product)}/周`)
+          Row({ space: 8 }) {
+            Text(getPlanTitle(product.period))
+              .fontSize(17)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+            if (product.period >= 12 && product.period === this.getMaxPeriod()) {
+              this.buildTrialBadge();
+            }
+          }
+          .alignItems(VerticalAlign.Center)
+
+          Text(`${getPlanDuration(product.period)} · ${formatPrice(product.price)}`)
             .fontSize(13)
-            .fontColor(TEXT_MUTED)
+            .fontColor(AppTheme.colors.textMuted)
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Text(formatPrice(product.price))
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT)
+        Row({ space: 0 }) {
+          Text(formatWeeklyPrice(product))
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.colors.textPrimary)
+          Text('/周')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textMuted)
+            .margin({ bottom: 4 })
+        }
+        .alignItems(VerticalAlign.Bottom)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 16, bottom: 16 })
-    .backgroundColor(product.product_id === this.selectedProductId ? CARD_SELECTED : CARD)
+    .backgroundColor(product.product_id === this.selectedProductId
+      ? AppTheme.colors.paywallCardSelected
+      : AppTheme.colors.surface)
     .border({
       width: 2,
-      color: product.product_id === this.selectedProductId ? GOLD : BORDER,
+      color: product.product_id === this.selectedProductId ? GOLD : AppTheme.colors.border,
     })
     .borderRadius(18)
-    .shadow({
-      radius: product.product_id === this.selectedProductId ? 12 : 4,
-      color: product.product_id === this.selectedProductId ? 'rgba(212,164,74,0.18)' : 'rgba(15,23,42,0.04)',
-      offsetX: 0,
-      offsetY: 2,
-    })
     .onClick(() => {
       this.selectedProductId = product.product_id;
     })
@@ -228,24 +313,30 @@ struct PaywallPage {
 
   @Builder
   private buildScrollBody(): void {
-    Column({ space: 20 }) {
+    Column({ space: 0 }) {
       Text('开通 Pro 会员')
-        .fontSize(26)
+        .fontSize(28)
         .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT)
+        .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
         .textAlign(TextAlign.Center)
+        .margin({ bottom: 8 })
+
+      Text('解锁全部专注能力，随时可取消')
+        .fontSize(14)
+        .fontColor(AppTheme.colors.textMuted)
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .margin({ bottom: 32 })
 
       Column({ space: 10 }) {
         ForEach(BENEFITS, (text: string) => {
           this.buildBenefitRow(text);
         }, (text: string) => text)
       }
-      .width('100%')
-      .padding(16)
-      .backgroundColor(CARD)
-      .borderRadius(18)
-      .border({ width: 1, color: '#EEF1F6' })
+      .alignItems(HorizontalAlign.Start)
+      .alignSelf(ItemAlign.Center)
+      .margin({ bottom: 48 })
 
       if (this.loadingProducts) {
         Column() {
@@ -261,7 +352,7 @@ struct PaywallPage {
       } else if (this.products.length === 0) {
         Text('暂未开放')
           .fontSize(15)
-          .fontColor(TEXT_MUTED)
+          .fontColor(AppTheme.colors.textMuted)
           .width('100%')
           .textAlign(TextAlign.Center)
           .padding({ top: 24, bottom: 24 })
@@ -283,17 +374,18 @@ struct PaywallPage {
   private buildCheckoutFooter(): void {
     Column({ space: 10 }) {
       Divider()
-        .color('#E8EBF0')
+        .color(AppTheme.colors.divider)
         .strokeWidth(1)
 
-      Button(this.getCheckoutLabel())
+      Button({ type: ButtonType.Normal }) {
+        this.buildCheckoutButtonLabel()
+      }
         .width('100%')
         .height(54)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#461702')
+        .buttonStyle(ButtonStyleMode.NORMAL)
         .backgroundColor(GOLD)
         .borderRadius(27)
+        .clip(true)
         .enabled(!this.isCheckoutDisabled())
         .opacity(this.isCheckoutDisabled() ? 0.55 : 1)
         .onClick(() => {
@@ -311,13 +403,13 @@ struct PaywallPage {
           })
         Text('我已阅读并同意')
           .fontSize(11)
-          .fontColor(TEXT_MUTED)
+          .fontColor(AppTheme.colors.textMuted)
           .onClick(() => {
             this.agreed = !this.agreed;
           })
         Text('《付费服务协议》')
           .fontSize(11)
-          .fontColor(TEXT)
+          .fontColor(AppTheme.colors.textPrimary)
           .onClick(() => {
             pushWebView(LegalUrls.PAID_SERVICE, '付费服务协议');
           })
@@ -333,7 +425,7 @@ struct PaywallPage {
       top: 12,
       bottom: this.bottomInset,
     })
-    .backgroundColor(PAGE_BG)
+    .backgroundColor(AppTheme.colors.background)
   }
 
   @Builder
@@ -365,8 +457,6 @@ struct PaywallPage {
         onBack: () => {
           backRoute();
         },
-        pageBackgroundColor: PAGE_BG,
-        titleBarBackgroundColor: PAGE_BG,
         useFloatingTabInset: false,
         content: (): void => {
           this.buildContent();

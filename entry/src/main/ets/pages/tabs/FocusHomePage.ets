@@ -1170,20 +1170,15 @@ export struct FocusHomePage {
       if (!ensureSoloFocusAccess(hostContext)) {
         return;
       }
-      void this.openSoloQuickStart();
+      this.openSoloQuickStart();
     });
   }
 
-  private async openSoloQuickStart(): Promise<void> {
+  private openSoloQuickStart(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (hasPendingQuickStart(hostContext)) {
       showToast("已有预约中的专注，请等待开始或先取消", this.getUIContext());
       return;
-    }
-    if (UserStore.isLoggedIn()) {
-      if (!(await ensureDailyFocusQuota(this.getUIContext()))) {
-        return;
-      }
     }
     pushRoute(PageRoutes.QuickStart);
   }

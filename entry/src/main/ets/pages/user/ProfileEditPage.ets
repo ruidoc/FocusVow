@@ -21,6 +21,7 @@ const SEX_PICKER_VALUES: number[] = [1, 2, 0];
 @Entry
 @Component
 struct ProfileEditPage {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
   @State usernameDraft: string = '';
@@ -256,7 +257,7 @@ struct ProfileEditPage {
       })
 
       Divider()
-        .color('#EEF1F6')
+        .color(AppTheme.colors.divider)
         .strokeWidth(1)
     }
     .width('100%')
@@ -291,7 +292,7 @@ struct ProfileEditPage {
       })
 
       Divider()
-        .color('#EEF1F6')
+        .color(AppTheme.colors.divider)
         .strokeWidth(1)
     }
     .width('100%')
@@ -326,7 +327,7 @@ struct ProfileEditPage {
       })
 
       Divider()
-        .color('#EEF1F6')
+        .color(AppTheme.colors.divider)
         .strokeWidth(1)
     }
     .width('100%')
@@ -414,7 +415,7 @@ struct ProfileEditPage {
       })
 
       Divider()
-        .color('#EEF1F6')
+        .color(AppTheme.colors.divider)
         .strokeWidth(1)
     }
     .width('100%')

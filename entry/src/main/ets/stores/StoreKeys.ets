@@ -84,4 +84,5 @@ export class StoreKeys {
   static readonly ShowSignupTrialCelebration: string = 'membership.showCelebration';
   static readonly PendingOnboardingActivationModal: string = 'onboarding.pendingActivationModal';
   static readonly OnboardingActivationModalVisible: string = 'onboarding.activationModalVisible';
+  static readonly ThemeMode: string = 'app.themeMode';
 }

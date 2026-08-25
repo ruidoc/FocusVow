@@ -1,5 +1,6 @@
 import { hdsMaterial } from '@hms.hds.hdsMaterial';
 import { HdsTabsBackgroundStyle, HdsTabsFloatingStyle, SystemMaterialParams } from '@kit.UIDesignKit';
+import { isDarkThemeMode } from '../../constants/Theme';
 
 interface ImmersiveMaterialSelection {
   materialType: hdsMaterial.MaterialType;
@@ -26,18 +27,19 @@ function resolveImmersiveMaterialSelection(): ImmersiveMaterialSelection {
 
 export function createImmersiveTabFloatingStyle(barBottomMargin: number): HdsTabsFloatingStyle {
   const material = resolveImmersiveMaterialSelection();
+  const isDark = isDarkThemeMode();
   const systemMaterialEffect: SystemMaterialParams = {
     materialType: material.materialType,
     materialLevel: material.materialLevel
   };
   const gradientMask: HdsTabsBackgroundStyle = {
-    maskColor: '#66F1F3F5',
+    maskColor: isDark ? '#66121212' : '#66F1F3F5',
     maskHeight: 92
   };
   const floatingStyle: HdsTabsFloatingStyle = {
     barBottomMargin: barBottomMargin,
     adaptToHandedness: true,
-    lightColor: '#33FFFFFF',
+    lightColor: isDark ? '#331E1E1E' : '#33FFFFFF',
     gradientMask: gradientMask,
     systemMaterialEffect: systemMaterialEffect
   };

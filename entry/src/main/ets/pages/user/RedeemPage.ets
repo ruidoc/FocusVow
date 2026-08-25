@@ -20,8 +20,6 @@ bootstrapStores();
 const DEVELOPER_WECHAT: string = "ruimsion";
 const ACCENT: string = "#D4A44A";
 const SUCCESS: string = "#16A34A";
-const CARD_BG: string = "#FFFBF0";
-const BORDER: string = "rgba(212,164,74,0.35)";
 const INVITE_ACCENT: string = '#3B82F6';
 
 interface InviteStep {
@@ -38,6 +36,7 @@ const INVITE_STEPS: InviteStep[] = [
 @Entry
 @Component
 struct RedeemPage {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = "none";
@@ -238,8 +237,8 @@ struct RedeemPage {
       .width("100%")
       .padding(20)
       .alignItems(HorizontalAlign.Start)
-      .backgroundColor(CARD_BG)
-      .border({ width: 1, color: BORDER })
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(AppTheme.radius.lg)
       Column() {
         this.buildWechatHint("加管理员好友进搭子匹配群，快速找搭子")
@@ -275,10 +274,10 @@ struct RedeemPage {
           .width("100%")
           .fontSize(17)
           .fontColor(AppTheme.colors.textPrimary)
-          .placeholderColor("#A89B88")
+          .placeholderColor(AppTheme.colors.textMuted)
           .padding({ left: 16, right: 16 })
-          .backgroundColor(Color.White)
-          .border({ width: 1.5, color: "rgba(212,164,74,0.45)" })
+          .backgroundColor(AppTheme.colors.surfaceRaised)
+          .border({ width: 1.5, color: AppTheme.colors.border })
           .borderRadius(12)
           .type(InputType.Normal)
           .onChange((value: string) => {
@@ -304,8 +303,8 @@ struct RedeemPage {
       .width("100%")
       .padding(20)
       .alignItems(HorizontalAlign.Start)
-      .backgroundColor(CARD_BG)
-      .border({ width: 1, color: BORDER })
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(AppTheme.radius.lg)
       Column() {
         this.buildWechatHint("没有兑换码？联系管理员免费获取")
@@ -338,7 +337,7 @@ struct RedeemPage {
     .backgroundColor(
       this.inviteSuccessCount >= step.need
         ? INVITE_ACCENT
-        : (this.inviteSuccessCount === step.need - 1 ? Color.White : '#E2E8F0')
+        : (this.inviteSuccessCount === step.need - 1 ? AppTheme.colors.surface : AppTheme.colors.surfaceSecondary)
     )
     .border(
       this.inviteSuccessCount === step.need - 1 && this.inviteSuccessCount < step.need
@@ -369,7 +368,7 @@ struct RedeemPage {
               .height(4)
               .margin({ left: 7, right: 7 })
               .borderRadius(2)
-              .backgroundColor('#E2EBF7')
+              .backgroundColor(AppTheme.colors.surfaceSecondary)
             Row()
               .width(`${Math.max(0, this.inviteFillRatio() * 100)}%`)
               .height(4)
@@ -448,12 +447,13 @@ struct RedeemPage {
         .width('100%')
         .height(42)
         .padding({ left: 12, right: 12 })
-        .backgroundColor('#F1F5F9')
+        .backgroundColor(AppTheme.colors.surfaceSecondary)
         .borderRadius(12)
       }
       .width('100%')
       .padding(20)
-      .backgroundColor(Color.White)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(AppTheme.radius.lg)
 
       Row({ space: 2 }) {

@@ -1,5 +1,6 @@
 import { AppTheme } from '../../constants/Theme';
 import { MainTabKey } from '../../router/PageRoutes';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { ContractTabPage } from './ContractTabPage';
 import { FocusHomePage } from './FocusHomePage';
 import { getMainTabIcons } from './MainTabUtil';
@@ -11,6 +12,7 @@ export struct MainTabLegacyLayout {
   @Prop currentTab: MainTabKey = 'focus';
   @Prop bottomGestureInsetVp: number = 0;
   @Prop hideTabBar: boolean = false;
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   onTabChange?: (tab: MainTabKey) => void;
 
   @Builder

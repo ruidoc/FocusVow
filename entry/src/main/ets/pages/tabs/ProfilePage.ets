@@ -44,6 +44,7 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = 'none';
   @StorageLink(StoreKeys.OrgList) orgList: OrgListItem[] = [];
   @StorageLink(StoreKeys.FeatureFlagsOff) featuresOff: string[] = [];
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -303,7 +304,7 @@ export struct ProfilePage {
               .width('100%')
               .height(4)
               .color(this.todayUsed >= this.dayDuration ? '#EF4444' : AppTheme.colors.primary)
-              .backgroundColor('#EEF1F6')
+              .backgroundColor(AppTheme.colors.surfaceSecondary)
           }
           .width('100%')
         }
@@ -311,10 +312,10 @@ export struct ProfilePage {
       .width('100%')
       .padding(18)
       .alignItems(HorizontalAlign.Start)
-      .backgroundColor(this.isMembershipActive() ? '#FFFBF0' : '#FFFFFF')
+      .backgroundColor(AppTheme.colors.surface)
       .border({
         width: 1,
-        color: this.isMembershipActive() ? 'rgba(212,164,74,0.35)' : '#E8EBF0'
+        color: AppTheme.colors.border
       })
       .borderRadius(AppTheme.radius.lg)
       .clip(true)
@@ -356,7 +357,7 @@ export struct ProfilePage {
 
         if (showDivider) {
           Divider()
-            .color('#EEF1F6')
+            .color(AppTheme.colors.divider)
             .strokeWidth(1)
         }
       }
@@ -405,7 +406,7 @@ export struct ProfilePage {
       }
       .width('100%')
       .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: '#F1F3F8' })
+      .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(24)
       .clip(true)
     }

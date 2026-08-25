@@ -1,4 +1,5 @@
 import { AppTheme } from '../../constants/Theme';
+import { StoreKeys } from '../../stores/StoreKeys';
 
 export interface ContractFulfillment {
   solo_completed_count: number;
@@ -28,18 +29,23 @@ export struct ContractFulfillmentChart {
     duo_cohort_count: 0
   };
   @Prop title: string = '契约履约分布';
+  @StorageLink(StoreKeys.ThemeMode) @Watch('onThemeModeChanged') themeMode: string = 'light';
 
   @State private segments: FulfillmentSegment[] = [];
   @State private total: number = 0;
   @State private successRate: number = 0;
   @State private panelValues: number[] = [1];
-  @State private panelColors: ResourceColor[] = ['#F1F2F6'];
+  @State private panelColors: ResourceColor[] = [AppTheme.colors.surfaceSecondary];
 
   aboutToAppear(): void {
     this.refreshDerived();
   }
 
   onDataChange(): void {
+    this.refreshDerived();
+  }
+
+  private onThemeModeChanged(): void {
     this.refreshDerived();
   }
 
@@ -96,7 +102,7 @@ export struct ContractFulfillmentChart {
 
     if (sum <= 0) {
       this.panelValues = [1];
-      this.panelColors = ['#F1F2F6'];
+      this.panelColors = [AppTheme.colors.surfaceSecondary];
       return;
     }
     const values: number[] = [];
@@ -108,7 +114,7 @@ export struct ContractFulfillmentChart {
       }
     }
     this.panelValues = values.length > 0 ? values : [1];
-    this.panelColors = colors.length > 0 ? colors : ['#F1F2F6'];
+    this.panelColors = colors.length > 0 ? colors : [AppTheme.colors.surfaceSecondary];
   }
 
   private shouldShowDivider(index: number): boolean {
@@ -123,7 +129,7 @@ export struct ContractFulfillmentChart {
     Column({ space: 0 }) {
       if (this.shouldShowDivider(index)) {
         Divider()
-          .color('#F1F2F6')
+          .color(AppTheme.colors.divider)
           .strokeWidth(1)
           .margin({ bottom: 8 })
       }
@@ -174,7 +180,7 @@ export struct ContractFulfillmentChart {
               .width('100%')
               .aspectRatio(1)
               .strokeWidth(RING_STROKE)
-              .trackBackgroundColor('#F1F2F6')
+              .trackBackgroundColor(AppTheme.colors.surfaceSecondary)
               .valueColors(this.panelColors)
               .closeEffect(true)
               .trackShadow(null)
@@ -200,7 +206,7 @@ export struct ContractFulfillmentChart {
               .width('100%')
               .aspectRatio(1)
               .strokeWidth(RING_STROKE)
-              .trackBackgroundColor('#F1F2F6')
+              .trackBackgroundColor(AppTheme.colors.surfaceSecondary)
               .valueColors(this.panelColors)
               .closeEffect(true)
               .trackShadow(null)

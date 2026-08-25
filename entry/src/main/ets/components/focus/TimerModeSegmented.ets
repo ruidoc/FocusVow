@@ -4,6 +4,8 @@ import {
   SegmentButtonOptions,
   SegmentButtonTextItem
 } from '@kit.ArkUI';
+import { AppTheme } from '../../constants/Theme';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { TimerMode } from '../../utils/TimerMode';
 
 /** 倒计时 / 正计时：系统原生 SegmentButton（页签样式） */
@@ -11,18 +13,36 @@ import { TimerMode } from '../../utils/TimerMode';
 export struct TimerModeSegmented {
   @Prop @Watch('syncIndexesFromValue') value: TimerMode = 'countdown';
   onChange?: (mode: TimerMode) => void;
+  @StorageLink(StoreKeys.ThemeMode) @Watch('onThemeModeChanged') themeMode: string = 'light';
   @State selectedIndexes: number[] = [0];
-  // SegmentButton.options 是 @ObjectLink，必须用 @State 持有
   @State options: SegmentButtonOptions = SegmentButtonOptions.tab({
     buttons: [{ text: '倒计时' }, { text: '正计时' }] as ItemRestriction<SegmentButtonTextItem>,
     fontSize: 14,
     selectedFontSize: 14,
-    // 默认上下 padding 仅 4，略增高以贴近 RN 40 高度
     buttonPadding: { top: 10, right: 8, bottom: 10, left: 8 }
   });
 
   aboutToAppear(): void {
     this.syncIndexesFromValue();
+    this.rebuildOptions();
+  }
+
+  private onThemeModeChanged(): void {
+    this.rebuildOptions();
+  }
+
+  private rebuildOptions(): void {
+    const isDark = this.themeMode === 'dark';
+    this.options = SegmentButtonOptions.tab({
+      buttons: [{ text: '倒计时' }, { text: '正计时' }] as ItemRestriction<SegmentButtonTextItem>,
+      fontSize: 14,
+      selectedFontSize: 14,
+      fontColor: AppTheme.colors.textSecondary,
+      selectedFontColor: isDark ? AppTheme.colors.textPrimary : '#0F172A',
+      backgroundColor: AppTheme.colors.surfaceSecondary,
+      selectedBackgroundColor: isDark ? AppTheme.colors.surfaceRaised : '#FFFFFF',
+      buttonPadding: { top: 10, right: 8, bottom: 10, left: 8 }
+    });
   }
 
   private syncIndexesFromValue(): void {
@@ -34,7 +54,6 @@ export struct TimerModeSegmented {
   }
 
   build() {
-    // SegmentButton 占满可用宽度；外层限宽，避免拉满整行
     Column() {
       SegmentButton({
         options: this.options,

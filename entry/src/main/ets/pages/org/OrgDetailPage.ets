@@ -3,7 +3,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { UsersIcon } from '../../components/common/UsersIcon';
-import { AppTheme } from '../../constants/Theme';
+import { AppTheme, isDarkThemeMode } from '../../constants/Theme';
 import {
   formatOrgClassroomElapsed,
   isOrgClassroomFocusing,
@@ -46,6 +46,7 @@ interface RankMedalStyle {
   row: string;
   border: string;
   fg: string;
+  badgeBg: string;
 }
 
 const PERIODS: StatsPeriod[] = ['today', 'week', 'month'];
@@ -59,6 +60,7 @@ const TABS: OrgTabItem[] = [
 @Entry
 @Component
 struct OrgDetailPage {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
   @State orgId: string = '';
   @State detail: OrgDetail | null = null;
@@ -228,14 +230,21 @@ struct OrgDetailPage {
   }
 
   private getRankMedalStyle(rankNo: number): RankMedalStyle | null {
+    const isDark = isDarkThemeMode();
     if (rankNo === 1) {
-      return { row: '#FFF9E8', border: '#F0D978', fg: '#9A6E00' };
+      return isDark
+        ? { row: '#2A2416', border: '#5C4A28', fg: '#E8C872', badgeBg: '#3D3520' }
+        : { row: '#FFF9E8', border: '#F0D978', fg: '#9A6E00', badgeBg: '#F6E7A8' };
     }
     if (rankNo === 2) {
-      return { row: '#F5F7FA', border: '#C8CED6', fg: '#5C6570' };
+      return isDark
+        ? { row: '#222228', border: '#3A3A42', fg: '#B8BEC8', badgeBg: '#333338' }
+        : { row: '#F5F7FA', border: '#C8CED6', fg: '#5C6570', badgeBg: '#E6E9EE' };
     }
     if (rankNo === 3) {
-      return { row: '#FFF5EC', border: '#E8C09A', fg: '#8A5528' };
+      return isDark
+        ? { row: '#2A2018', border: '#5C4030', fg: '#D4A574', badgeBg: '#3A2E24' }
+        : { row: '#FFF5EC', border: '#E8C09A', fg: '#8A5528', badgeBg: '#F0D5BC' };
     }
     return null;
   }
@@ -695,12 +704,8 @@ struct OrgDetailPage {
           .textAlign(TextAlign.Center)
           .fontSize(13)
           .fontWeight(FontWeight.Bold)
-          .fontColor(
-            item.rank === 1 ? '#9A6E00' : item.rank === 2 ? '#5C6570' : '#8A5528'
-          )
-          .backgroundColor(
-            item.rank === 1 ? '#F6E7A8' : item.rank === 2 ? '#E6E9EE' : '#F0D5BC'
-          )
+          .fontColor(this.getRankMedalStyle(item.rank)?.fg ?? AppTheme.colors.textSecondary)
+          .backgroundColor(this.getRankMedalStyle(item.rank)?.badgeBg ?? AppTheme.colors.surfaceSecondary)
           .borderRadius(14)
       } else {
         Text(`${item.rank}`)

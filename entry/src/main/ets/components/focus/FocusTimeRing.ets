@@ -1,4 +1,5 @@
 import { AppTheme } from "../../constants/Theme";
+import { StoreKeys } from "../../stores/StoreKeys";
 
 const RING_SIZE = 300;
 const RING_CENTER = RING_SIZE / 2;
@@ -6,10 +7,10 @@ const RING_RADIUS = 136;
 const RING_STROKE = 28;
 const GRADIENT_START = "#2575FC";
 const GRADIENT_END = "#6A11CB";
-const TRACK_COLOR = "#E8E6F2";
 const MIN_ARC_RATIO = 10 / (2 * Math.PI * RING_RADIUS);
 @Component
 export struct FocusTimeRing {
+  @StorageLink(StoreKeys.ThemeMode) @Watch("onThemeModeChanged") themeMode: string = 'light';
   @Prop remainingLabel: string = "00:00";
   @Prop elapsedMinutes: number = 0;
   @Prop @Watch("onRingDataChange") progressValue: number = 0;
@@ -29,12 +30,14 @@ export struct FocusTimeRing {
     }
   }
 
-  private getSweepRatio(): number {
-    const ratio = this.progressValue / 100;
-    if (ratio <= 0) {
-      return MIN_ARC_RATIO;
+  onThemeModeChanged(): void {
+    if (this.canvasReady) {
+      this.drawRing();
     }
-    return Math.min(ratio, 1);
+  }
+
+  private getTrackColor(): string {
+    return AppTheme.colors.ring;
   }
 
   private drawRing(): void {
@@ -44,7 +47,7 @@ export struct FocusTimeRing {
     ctx.beginPath();
     ctx.arc(RING_CENTER, RING_CENTER, RING_RADIUS, 0, Math.PI * 2);
     ctx.lineWidth = RING_STROKE;
-    ctx.strokeStyle = TRACK_COLOR;
+    ctx.strokeStyle = this.getTrackColor();
     ctx.lineCap = "round";
     ctx.stroke();
 
@@ -67,6 +70,14 @@ export struct FocusTimeRing {
     }
 
     ctx.stroke();
+  }
+
+  private getSweepRatio(): number {
+    const ratio = this.progressValue / 100;
+    if (ratio <= 0) {
+      return MIN_ARC_RATIO;
+    }
+    return Math.min(ratio, 1);
   }
 
   build() {

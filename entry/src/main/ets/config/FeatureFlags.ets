@@ -12,8 +12,8 @@ export class FeatureFlagKeys {
 
 /** Android / 鸿蒙微信支付会员商品 */
 export const PROMO_VIP_PRODUCT_IDS: string[] = [
-  'com.focusone.vip_month_399',
-  'com.focusone.vip_2month_699',
+  'com.focusone.vip_month',
+  'com.focusone.vip_2month',
 ];
 
 export function isPromoVipProductId(productId: string): boolean {

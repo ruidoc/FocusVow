@@ -23,3 +23,26 @@ export function confirmPrivacyAgreementForAuth(uiContext: UIContext): Promise<bo
     });
   });
 }
+
+/** Paywall 未勾选《付费服务协议》时的二次确认（对齐 RN Alert） */
+export function confirmPaidServiceAgreement(uiContext: UIContext): Promise<boolean> {
+  return new Promise<boolean>((resolve: (accepted: boolean) => void) => {
+    uiContext.showAlertDialog({
+      title: '会员付费服务协议',
+      message: '已阅读并同意会员付费服务协议',
+      autoCancel: false,
+      primaryButton: {
+        value: '取消',
+        action: () => {
+          resolve(false);
+        }
+      },
+      secondaryButton: {
+        value: '同意',
+        action: () => {
+          resolve(true);
+        }
+      }
+    });
+  });
+}

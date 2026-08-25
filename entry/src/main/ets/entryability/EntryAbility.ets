@@ -1,4 +1,4 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
@@ -17,18 +17,15 @@ import { AnalyticsService } from '../services/AnalyticsService';
 import { UmengSdkService } from '../services/UmengSdkService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { StoreKeys } from '../stores/StoreKeys';
+import { ThemeStore } from '../stores/ThemeStore';
 
 const DOMAIN = 0x0000;
 const TAG = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
-    } catch {
-      hilog.error(DOMAIN, TAG, '%{public}s', 'Failed to set colorMode.');
-    }
     AppContextHolder.bind(this.context);
+    ThemeStore.hydrate(this.context);
     AnalyticsService.ensureInitialized(this.context);
     webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
@@ -100,13 +97,7 @@ export default class EntryAbility extends UIAbility {
         }
         try {
           win.setWindowLayoutFullScreen(true);
-          const barProps: window.SystemBarProperties = {
-            statusBarColor: '#00000000',
-            navigationBarColor: '#00000000',
-            statusBarContentColor: '#FF0F172A',
-            navigationBarContentColor: '#FF0F172A'
-          };
-          win.setWindowSystemBarProperties(barProps);
+          void ThemeStore.applySystemBarStyle(this.context, ThemeStore.getMode());
         } catch (e) {
           hilog.error(DOMAIN, 'testTag', 'Immersive window failed: %{public}s', String(e));
         }

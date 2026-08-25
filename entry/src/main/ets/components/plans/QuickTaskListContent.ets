@@ -240,16 +240,20 @@ export struct QuickTaskListContent {
           }
 
           if (this.isLoading && this.tasks.length === 0) {
-            Row() {
-              LoadingProgress().width(24).height(24).color(AppTheme.colors.primary)
-              Text('加载中...')
-                .fontSize(14)
-                .fontColor(AppTheme.colors.textMuted)
-                .margin({ left: 8 })
+            Column() {
+              Row({ space: 8 }) {
+                LoadingProgress().width(24).height(24).color(AppTheme.colors.primary)
+                Text('加载中...')
+                  .fontSize(14)
+                  .fontColor(AppTheme.colors.textMuted)
+              }
+              .justifyContent(FlexAlign.Center)
+              .alignItems(VerticalAlign.Center)
             }
             .width('100%')
-            .justifyContent(FlexAlign.Start)
-            .padding({ top: 48 })
+            .height(220)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
           } else if (this.tasks.length === 0) {
             this.buildEmptyState()
           } else {

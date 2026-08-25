@@ -1,13 +1,14 @@
-import { AppTheme } from '../../constants/Theme';
+import { AppTheme, isDarkThemeMode } from '../../constants/Theme';
+import { StoreKeys } from '../../stores/StoreKeys';
 
 const QUOTE_RED: string = '#DC2626';
-const FIELD_BG: string = '#F5F7FB';
 
 /**
  * 底部输入确认半模态，对齐 RN InputConfirmModal（撕毁契约）。
  */
 @Component
 export struct InputConfirmSheet {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @Link visible: boolean;
   @Prop title: string = '';
   @Prop message: string = '';
@@ -24,6 +25,14 @@ export struct InputConfirmSheet {
 
   private isMatch(): boolean {
     return this.inputText === this.requiredText;
+  }
+
+  private getFieldBg(): string {
+    return isDarkThemeMode() ? AppTheme.colors.primaryMuted : AppTheme.colors.background;
+  }
+
+  private getConfirmDisabledBg(): string {
+    return isDarkThemeMode() ? AppTheme.colors.primaryMuted : AppTheme.colors.divider;
   }
 
   private handleDismiss(): void {
@@ -123,7 +132,7 @@ export struct InputConfirmSheet {
         .fontSize(15)
         .fontColor(AppTheme.colors.textPrimary)
         .placeholderColor(AppTheme.colors.textMuted)
-        .backgroundColor(FIELD_BG)
+        .backgroundColor(this.getFieldBg())
         .borderRadius(14)
         .padding({ left: 14, right: 14 })
         .margin({ bottom: 28 })
@@ -139,7 +148,7 @@ export struct InputConfirmSheet {
           .buttonStyle(ButtonStyleMode.NORMAL)
           .borderRadius(AppTheme.radius.button)
           .clip(true)
-          .backgroundColor(FIELD_BG)
+          .backgroundColor(this.getFieldBg())
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
@@ -154,7 +163,7 @@ export struct InputConfirmSheet {
           .buttonStyle(ButtonStyleMode.NORMAL)
           .borderRadius(AppTheme.radius.button)
           .clip(true)
-          .backgroundColor(this.isMatch() ? AppTheme.colors.danger : FIELD_BG)
+          .backgroundColor(this.isMatch() ? AppTheme.colors.danger : this.getConfirmDisabledBg())
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.isMatch() ? '#FFFFFF' : AppTheme.colors.textMuted)
@@ -167,6 +176,7 @@ export struct InputConfirmSheet {
       .width('100%')
     }
     .width('100%')
+    .backgroundColor(AppTheme.colors.surface)
     .padding({
       left: 22,
       right: 22,

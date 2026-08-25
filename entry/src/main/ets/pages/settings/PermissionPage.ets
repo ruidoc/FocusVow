@@ -27,6 +27,7 @@ bootstrapStores();
 @Entry
 @Component
 struct PermissionPage {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.AppIsForeground) @Watch('onForegroundChanged') isForeground: boolean = false;
   @State notifyEnabled: boolean = false;
@@ -187,7 +188,7 @@ struct PermissionPage {
         .padding({ left: 18, right: 18 })
 
         Divider()
-          .color('#EEF1F6')
+          .color(AppTheme.colors.divider)
           .strokeWidth(1)
           .margin({ left: 18, right: 18 })
 
@@ -212,7 +213,7 @@ struct PermissionPage {
 
         if (this.notifyEnabled) {
           Divider()
-            .color('#EEF1F6')
+            .color(AppTheme.colors.divider)
             .strokeWidth(1)
             .margin({ left: 18, right: 18 })
 
@@ -242,7 +243,7 @@ struct PermissionPage {
       }
       .width('100%')
       .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: '#F1F3F8' })
+      .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(24)
       .clip(true)
 

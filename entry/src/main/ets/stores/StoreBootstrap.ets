@@ -88,5 +88,6 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.PendingOnboardingActivationModal, false);
   AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, false);
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());
+  AppStorage.setOrCreate(StoreKeys.ThemeMode, 'light');
   bootstrapped = true;
 }

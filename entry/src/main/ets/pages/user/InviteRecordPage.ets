@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
-import { AppTheme } from '../../constants/Theme';
+import { AppTheme, isDarkThemeMode } from '../../constants/Theme';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
 import {
   parseReferralProgress,
@@ -10,6 +10,7 @@ import {
   ReferralApiService
 } from '../../services/ReferralApiService';
 import { UserStore } from '../../stores/UserStore';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -23,6 +24,7 @@ interface SummaryCard {
 @Entry
 @Component
 struct InviteRecordPage {
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @State loading: boolean = true;
   @State progress: ReferralProgress | null = null;
 
@@ -121,7 +123,11 @@ struct InviteRecordPage {
           .fontWeight(FontWeight.Medium)
           .fontColor(item.status === 'granted' ? AppTheme.colors.accentBlue : AppTheme.colors.textSecondary)
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-          .backgroundColor(item.status === 'granted' ? '#E8F1FE' : '#F1F5F9')
+          .backgroundColor(
+            item.status === 'granted'
+              ? (isDarkThemeMode() ? '#1A2332' : '#E8F1FE')
+              : AppTheme.colors.surfaceSecondary
+          )
           .borderRadius(999)
       }
       .layoutWeight(1)
@@ -173,7 +179,7 @@ struct InviteRecordPage {
       }
       .width('100%')
       .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-      .backgroundColor('#F8FAFC')
+      .backgroundColor(AppTheme.colors.surfaceRaised)
       .border({ width: { bottom: 1 }, color: AppTheme.colors.border })
 
       if (!this.progress || this.progress.invitees.length === 0) {

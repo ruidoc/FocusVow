@@ -30,11 +30,11 @@ import {
   formatSuccessDurationLabel,
   getDuoBlastReputationHint,
   getStatsPeriodLabel,
+  getShameSectionBorderColor,
+  getStatsRecordSectionBgColor,
   HONOR_SECTION_BORDER_COLOR,
   HonorRecordItem,
-  SHAME_SECTION_BORDER_COLOR,
   ShameRecordItem,
-  STATS_RECORD_SECTION_BG_COLOR,
   StatsDetailSection,
   StatsPeriod
 } from '../../services/StatsRecordUtil';
@@ -63,6 +63,7 @@ const STATS_SHARE_BOTTOM_PADDING: number = 24;
 export struct StatsPage {
   @StorageLink(StoreKeys.UserIsLoggedIn) @Watch('onLoginChanged') isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @State currentPeriod: StatsPeriod = 'today';
   @State summary: DuoStatsSummary | null = null;
   @State timeline: DuoTimelineDay[] = [];
@@ -322,19 +323,19 @@ export struct StatsPage {
       Blank()
         .width('42%')
         .height(12)
-        .backgroundColor('#E9ECF5')
+        .backgroundColor(AppTheme.colors.surfaceSecondary)
         .borderRadius(999)
 
       Blank()
         .width('68%')
         .height(20)
-        .backgroundColor('#E9ECF5')
+        .backgroundColor(AppTheme.colors.surfaceSecondary)
         .borderRadius(999)
 
       Blank()
         .width('56%')
         .height(12)
-        .backgroundColor('#E9ECF5')
+        .backgroundColor(AppTheme.colors.surfaceSecondary)
         .borderRadius(999)
     }
     .width('100%')
@@ -370,8 +371,8 @@ export struct StatsPage {
 
       this.buildLoadingCard(160, AppTheme.colors.surface, AppTheme.colors.border)
       this.buildLoadingCard(180, AppTheme.colors.surface, AppTheme.colors.border)
-      this.buildLoadingCard(132, STATS_RECORD_SECTION_BG_COLOR, HONOR_SECTION_BORDER_COLOR)
-      this.buildLoadingCard(132, STATS_RECORD_SECTION_BG_COLOR, SHAME_SECTION_BORDER_COLOR)
+      this.buildLoadingCard(132, getStatsRecordSectionBgColor(), HONOR_SECTION_BORDER_COLOR)
+      this.buildLoadingCard(132, getStatsRecordSectionBgColor(), getShameSectionBorderColor())
     }
     .width('100%')
   }
@@ -511,7 +512,7 @@ export struct StatsPage {
         }
         .width('100%')
         .padding(18)
-        .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+        .backgroundColor(getStatsRecordSectionBgColor())
         .borderRadius(AppTheme.radius.lg)
         .border({ width: 1, color: HONOR_SECTION_BORDER_COLOR })
         .alignItems(HorizontalAlign.Start)
@@ -542,9 +543,9 @@ export struct StatsPage {
         }
         .width('100%')
         .padding(18)
-        .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+        .backgroundColor(getStatsRecordSectionBgColor())
         .borderRadius(AppTheme.radius.lg)
-        .border({ width: 1, color: SHAME_SECTION_BORDER_COLOR })
+        .border({ width: 1, color: getShameSectionBorderColor() })
         .alignItems(HorizontalAlign.Start)
       } else {
         this.buildShamePreviewList(this.getShamePreviewItems())

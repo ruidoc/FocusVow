@@ -1,4 +1,5 @@
 import { formatStatsDateTimeLabel as formatStatsDateTimeLabelFromUtil } from '../common/DateTimeFormatUtil';
+import { AppTheme, isDarkThemeMode } from '../constants/Theme';
 import {
   DuoShameDay,
   DuoShameRecord,
@@ -11,6 +12,18 @@ export const HONOR_SECTION_BORDER_COLOR: string = 'rgba(31,157,85,0.18)';
 export const HONOR_SECTION_DIVIDER_COLOR: string = 'rgba(31,157,85,0.10)';
 export const SHAME_SECTION_BORDER_COLOR: string = '#F3D6D6';
 export const SHAME_SECTION_DIVIDER_COLOR: string = 'rgba(243, 214, 214, 0.65)';
+
+export function getStatsRecordSectionBgColor(): string {
+  return isDarkThemeMode() ? AppTheme.colors.surface : STATS_RECORD_SECTION_BG_COLOR;
+}
+
+export function getShameSectionBorderColor(): string {
+  return isDarkThemeMode() ? 'rgba(220, 90, 90, 0.18)' : SHAME_SECTION_BORDER_COLOR;
+}
+
+export function getShameSectionDividerColor(): string {
+  return isDarkThemeMode() ? 'rgba(220, 90, 90, 0.10)' : SHAME_SECTION_DIVIDER_COLOR;
+}
 
 export type StatsPeriod = 'today' | 'week' | 'month';
 export type StatsDetailSection = 'timeline' | 'shame' | 'byTask';

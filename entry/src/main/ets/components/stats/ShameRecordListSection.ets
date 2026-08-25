@@ -3,15 +3,17 @@ import { AppTheme } from '../../constants/Theme';
 import {
   formatStatsDateTimeLabel,
   getParticipationModeTag,
-  SHAME_SECTION_BORDER_COLOR,
-  SHAME_SECTION_DIVIDER_COLOR,
+  getShameSectionBorderColor,
+  getShameSectionDividerColor,
+  getStatsRecordSectionBgColor,
   ShameRecordItem,
-  STATS_RECORD_SECTION_BG_COLOR
 } from '../../services/StatsRecordUtil';
+import { StoreKeys } from '../../stores/StoreKeys';
 
 @Component
 export struct ShameRecordListSection {
   @Prop items: ShameRecordItem[] = [];
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   onItemPress?: (item: ShameRecordItem) => void;
 
   build() {
@@ -26,9 +28,9 @@ export struct ShameRecordListSection {
       }
       .width('100%')
       .padding(18)
-      .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+      .backgroundColor(getStatsRecordSectionBgColor())
       .borderRadius(AppTheme.radius.lg)
-      .border({ width: 1, color: SHAME_SECTION_BORDER_COLOR })
+      .border({ width: 1, color: getShameSectionBorderColor() })
       .alignItems(HorizontalAlign.Start)
     } else {
       Column({ space: 0 }) {
@@ -47,7 +49,7 @@ export struct ShameRecordListSection {
 
             if (index < this.items.length - 1) {
               Divider()
-                .color(SHAME_SECTION_DIVIDER_COLOR)
+                .color(getShameSectionDividerColor())
                 .strokeWidth(1)
                 .width('100%')
             }
@@ -57,9 +59,9 @@ export struct ShameRecordListSection {
       }
       .width('100%')
       .padding({ left: 18, right: 18 })
-      .backgroundColor(STATS_RECORD_SECTION_BG_COLOR)
+      .backgroundColor(getStatsRecordSectionBgColor())
       .borderRadius(AppTheme.radius.lg)
-      .border({ width: 1, color: SHAME_SECTION_BORDER_COLOR })
+      .border({ width: 1, color: getShameSectionBorderColor() })
     }
   }
 }

@@ -5,6 +5,7 @@ import { AppTheme } from '../../constants/Theme';
 import { backRoute, pushPrivacyPolicy, pushUserAgreement } from '../../router/PageRoutes';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { ThemeStore } from '../../stores/ThemeStore';
 import { UserStore } from '../../stores/UserStore';
 
 bootstrapStores();
@@ -13,10 +14,12 @@ bootstrapStores();
 @Component
 struct SettingsPage {
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.hydrate(hostContext);
+    ThemeStore.hydrate(hostContext);
   }
 
   private async logout(): Promise<void> {
@@ -84,7 +87,7 @@ struct SettingsPage {
 
         if (showDivider) {
           Divider()
-            .color('#EEF1F6')
+            .color(AppTheme.colors.divider)
             .strokeWidth(1)
         }
       }
@@ -100,9 +103,39 @@ struct SettingsPage {
   }
 
   @Builder
+  private buildDarkModeRow(): void {
+    Row({ space: 14 }) {
+      SymbolGlyph($r('sys.symbol.moon'))
+        .fontSize(24)
+        .fontColor([AppTheme.colors.textPrimary])
+
+      Text('深色模式')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .layoutWeight(1)
+
+      Toggle({ type: ToggleType.Switch, isOn: this.themeMode === 'dark' })
+        .selectedColor(AppTheme.colors.primary)
+        .onChange((isOn: boolean) => {
+          const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          ThemeStore.setMode(hostContext, isOn ? 'dark' : 'light');
+        })
+    }
+    .width('100%')
+    .height(56)
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 18, right: 18 })
+  }
+
+  @Builder
   private buildSettingsContent(): void {
     Column({ space: 16 }) {
       Column({ space: 0 }) {
+        this.buildDarkModeRow()
+        Divider()
+          .color(AppTheme.colors.divider)
+          .strokeWidth(1)
         this.buildMenuRow('隐私政策', $r('sys.symbol.person'), true, () => {
           pushPrivacyPolicy();
         })
@@ -112,7 +145,7 @@ struct SettingsPage {
       }
       .width('100%')
       .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: '#F1F3F8' })
+      .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(24)
       .clip(true)
 

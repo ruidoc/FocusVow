@@ -14,6 +14,7 @@ export struct MainTabImmersiveLayout {
   @Prop @Watch("onLinkedTabChanged") currentTab: MainTabKey = "focus";
   @Prop bottomGestureInsetVp: number = 0;
   @Prop @Watch("onHideTabBarChanged") hideTabBar: boolean = false;
+  @StorageLink(StoreKeys.ThemeMode) @Watch('onThemeModeChanged') themeMode: string = 'light';
   onTabChange?: (tab: MainTabKey) => void;
   @State private selectedTabIndex: number = 0;
   @State private barFloatingStyle: HdsTabsFloatingStyle = createImmersiveTabFloatingStyle(28);
@@ -35,6 +36,10 @@ export struct MainTabImmersiveLayout {
 
   private onHideTabBarChanged(): void {
     this.syncFloatingTabBarFlag();
+  }
+
+  private onThemeModeChanged(): void {
+    this.refreshBarFloatingStyle();
   }
 
   private refreshBarFloatingStyle(): void {

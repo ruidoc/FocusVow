@@ -32,6 +32,7 @@ import { PlanStore } from "../../stores/PlanStore";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
+import { ThemeStore } from "../../stores/ThemeStore";
 import { UserStore } from "../../stores/UserStore";
 import { InAppMessageBanner } from "../../components/common/InAppMessageBanner";
 import { MainTabImmersiveLayout } from "./MainTabImmersiveLayout";
@@ -57,6 +58,7 @@ struct MainTabPage {
   pendingQuickStartStartAtMs: number = 0;
   @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
   @StorageLink(StoreKeys.MainTabTarget) @Watch("onMainTabTargetChanged") pendingTab: string = "";
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
@@ -69,6 +71,7 @@ struct MainTabPage {
     this.useImmersiveTab = supportsImmersiveTab();
     AppStorage.setOrCreate(StoreKeys.MainTabFloatingBar, false);
     warmUpPreferencesStore(hostContext);
+    ThemeStore.hydrate(hostContext);
     UserStore.hydrate(hostContext);
     FeatureFlagStore.hydrate(hostContext);
     void getAppVersion().then(() => FeatureFlagStore.sync(hostContext));
