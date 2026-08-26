@@ -146,10 +146,11 @@ function getTimeMinutes(timeText: string): number {
   return Number(parts[0]) * 60 + Number(parts[1]);
 }
 
-/** 若今天在重复日内，开始时间必须晚于当前时刻 */
+/** 若今天在重复日内，开始时间必须晚于当前时刻（跨日窗口凌晨/白天编辑除外） */
 export function validateScheduledStartTime(
   startTime: string,
   repeatDays: number[],
+  endTime?: string,
   nowAt: number = Date.now()
 ): string {
   const normalizedDays = normalizeRepeatDays(repeatDays);
@@ -165,6 +166,16 @@ export function validateScheduledStartTime(
   const nowDate = new Date(nowAt);
   const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
   const startMinutes = getTimeMinutes(normalizeTimeText(startTime, '09:00'));
+  const endMinutes = endTime && endTime.length > 0
+    ? getTimeMinutes(normalizeTimeText(endTime, '09:00'))
+    : startMinutes;
+
+  if (endMinutes < startMinutes) {
+    if (nowMinutes < endMinutes || nowMinutes < startMinutes) {
+      return '';
+    }
+  }
+
   if (startMinutes <= nowMinutes) {
     return '开始时间必须晚于当前时间';
   }

@@ -20,7 +20,7 @@ import {
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
 import { setScheduledDuoWait } from '../../services/DuoWaitContextService';
-import { syncGuardForSession } from '../../services/ScheduledCovenantService';
+import { markGuardSyncIssue, syncGuardForSession } from '../../services/ScheduledCovenantService';
 import {
   DEFAULT_SCHEDULED_PLAN_MINUTES,
   MIN_SCHEDULED_PLAN_MINUTES,
@@ -89,6 +89,19 @@ struct PlanAddPage {
       return this.isEditing() ? '保存中...' : '生效中...';
     }
     return this.isEditing() ? '保存修改' : '签定契约';
+  }
+
+  private hasScheduleFieldsChanged(session: DuoSessionView): boolean {
+    const repeat = session.schedule_repeat ?? '';
+    return (session.schedule_start || '') !== this.startTime ||
+      (session.schedule_end || '') !== this.endTime ||
+      repeat !== this.repeatDays.join(',');
+  }
+
+  private hasStartScheduleChanged(session: DuoSessionView): boolean {
+    const repeat = session.schedule_repeat ?? '';
+    return (session.schedule_start || '') !== this.startTime ||
+      repeat !== this.repeatDays.join(',');
   }
 
   private fillFormFromSession(session: DuoSessionView): void {
@@ -303,7 +316,7 @@ struct PlanAddPage {
       return;
     }
 
-    const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
+    const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays, this.endTime);
     if (startTimeError.length > 0) {
       showErrorToast(startTimeError, uiContext);
       return;
@@ -350,7 +363,17 @@ struct PlanAddPage {
       return;
     }
 
-    await syncGuardForSession(hostContext, session);
+    const guardResult = await syncGuardForSession(hostContext, session, this.selectedTokens);
+    if (!guardResult.ok) {
+      const warningMessage = guardResult.message.length > 0
+        ? `契约已创建，但屏时策略未挂上：${guardResult.message}`
+        : '契约已创建，但屏时策略未挂上，请到「任务」页点「同步定时任务」';
+      markGuardSyncIssue(hostContext, session, warningMessage);
+      SettingsStore.updateStatusMessage(hostContext, warningMessage);
+      showErrorToast(warningMessage, uiContext);
+    } else {
+      SettingsStore.updateStatusMessage(hostContext, guardResult.message);
+    }
 
     if (session.token.length > 0) {
       DuoInviteClipboardService.dismissToken(session.token);
@@ -362,13 +385,17 @@ struct PlanAddPage {
     if (this.participationMode === 'duo') {
       const scheduleLabel = `${this.startTime} - ${this.endTime}`;
       setScheduledDuoWait(session, scheduleLabel);
-      showToast('创建成功，请邀请搭子加入', uiContext);
+      if (guardResult.ok) {
+        showToast('创建成功，请邀请搭子加入', uiContext);
+      }
       this.isSaving = false;
       replaceRoute(PageRoutes.DuoWait);
       return;
     }
 
-    showToast('契约已签订，请务必遵守', uiContext);
+    if (guardResult.ok) {
+      showToast('契约已签订，请务必遵守', uiContext);
+    }
     this.isSaving = false;
     backRoute();
   }
@@ -391,22 +418,26 @@ struct PlanAddPage {
         showErrorToast('请输入契约名称', uiContext);
         return;
       }
-      const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays);
-      if (startTimeError.length > 0) {
-        showErrorToast(startTimeError, uiContext);
-        return;
+      if (this.hasStartScheduleChanged(session)) {
+        const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays, this.endTime);
+        if (startTimeError.length > 0) {
+          showErrorToast(startTimeError, uiContext);
+          return;
+        }
       }
-      ScheduledListStore.hydrate();
-      const scheduleTimeError = validateScheduledPlanTime(
-        this.startTime,
-        this.endTime,
-        this.repeatDays,
-        ScheduledListStore.getAllSessions(),
-        session.session_id
-      );
-      if (scheduleTimeError.length > 0) {
-        showErrorToast(scheduleTimeError, uiContext);
-        return;
+      if (this.hasScheduleFieldsChanged(session)) {
+        ScheduledListStore.hydrate();
+        const scheduleTimeError = validateScheduledPlanTime(
+          this.startTime,
+          this.endTime,
+          this.repeatDays,
+          ScheduledListStore.getAllSessions(),
+          session.session_id
+        );
+        if (scheduleTimeError.length > 0) {
+          showErrorToast(scheduleTimeError, uiContext);
+          return;
+        }
       }
     }
 
@@ -446,7 +477,7 @@ struct PlanAddPage {
       return;
     }
 
-    await syncGuardForSession(hostContext, nextSession);
+    const guardResult = await syncGuardForSession(hostContext, nextSession, this.selectedTokens);
     this.editingSession = nextSession;
     this.fillFormFromSession(nextSession);
     ScheduledListStore.patchSession(nextSession);
@@ -460,7 +491,17 @@ struct PlanAddPage {
     }
     this.isSaving = false;
     ScheduledListStore.clearEditingSession();
-    showToast('已保存', uiContext);
+    if (!guardResult.ok) {
+      const warningMessage = guardResult.message.length > 0
+        ? `已保存，但屏时策略未挂上：${guardResult.message}`
+        : '已保存，但屏时策略未挂上，请到「任务」页点「同步定时任务」';
+      markGuardSyncIssue(hostContext, nextSession, warningMessage);
+      this.statusMessage = warningMessage;
+      showErrorToast(warningMessage, uiContext);
+    } else {
+      this.statusMessage = '';
+      showToast('已保存', uiContext);
+    }
     backRoute();
   }
 

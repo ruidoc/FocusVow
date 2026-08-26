@@ -12,14 +12,19 @@ import {
   getTornTodayResumeHint,
   isInactiveScheduledListSession,
   isScheduledSessionActivationOpen,
+  isScheduledTornToday,
 } from '../../models/DuoModel';
 import { summarizeRepeatDays } from '../../models/PlanModel';
 import { PageRoutes, backRoute, navigateToMainTab, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
+  getGuardSyncIssue,
+  isScheduledGuardEligible,
   removeGuardForSession,
   reconcileStaleScheduledWindows,
+  syncGuardForSession,
 } from '../../services/ScheduledCovenantService';
+import { ensureScreenTimeAuthorization } from '../../services/ScreenTimeService';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { LockStore } from '../../stores/LockStore';
 import { SettingsStore } from '../../stores/SettingsStore';
@@ -49,6 +54,8 @@ struct PlanDetailPage {
   @State selectedTokens: string[] = [];
   @State mode: 'shield' | 'allow' = 'allow';
   @State private statusTick: number = 0;
+  @State guardSyncIssueMessage: string = '';
+  @State isRetryingGuard: boolean = false;
 
   private statusTimerId: number = -1;
 
@@ -103,8 +110,52 @@ struct PlanDetailPage {
     nextSession = reconciled[0] ?? nextSession;
     this.session = nextSession;
     this.fillFormFromSession(nextSession);
+    this.refreshGuardSyncIssue();
     ScheduledListStore.patchSession(nextSession);
     this.isLoading = false;
+  }
+
+  private refreshGuardSyncIssue(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const issue = getGuardSyncIssue(hostContext, this.sessionId);
+    this.guardSyncIssueMessage = issue?.message ?? '';
+  }
+
+  private shouldShowGuardSyncRetry(): boolean {
+    if (this.isLoading || this.session === null) {
+      return false;
+    }
+    if (!isScheduledGuardEligible(this.session)) {
+      return false;
+    }
+    return this.guardSyncIssueMessage.length > 0;
+  }
+
+  private async retryGuardSync(): Promise<void> {
+    if (!this.session || this.isRetryingGuard) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const uiContext = this.getUIContext();
+    const authResult = await ensureScreenTimeAuthorization(hostContext);
+    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
+    if (!authResult.ok) {
+      showErrorToast('未完成系统授权，无法注册屏时策略', uiContext);
+      return;
+    }
+    this.isRetryingGuard = true;
+    try {
+      const result = await syncGuardForSession(hostContext, this.session, this.selectedTokens);
+      if (result.ok) {
+        this.guardSyncIssueMessage = '';
+        showToast('屏时策略已重新注册', uiContext);
+        return;
+      }
+      this.guardSyncIssueMessage = result.message;
+      showErrorToast(result.message, uiContext);
+    } finally {
+      this.isRetryingGuard = false;
+    }
   }
 
   private fillFormFromSession(session: DuoSessionView): void {
@@ -240,15 +291,27 @@ struct PlanDetailPage {
     return !this.isLoading && this.canShowEditEntry();
   }
 
+  private isSessionTornToday(): boolean {
+    if (this.session === null) {
+      return false;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    return isScheduledTornToday(this.session.session_id, loadExitPlanIds(hostContext))
+      || this.session.status === 'breached';
+  }
+
   private shouldShowDestructiveFooter(): boolean {
-    if (this.isLoading) {
+    if (this.isLoading || this.session === null) {
       return false;
     }
-    // 真正履约中（窗口内 active）隐藏作废/退出；滞留 active 允许操作
-    if (this.session !== null && isScheduledSessionActivationOpen(this.session)) {
+    if (!(this.isPartner() || this.isInitiator())) {
       return false;
     }
-    return this.isPartner() || this.isInitiator();
+    // 对齐 RN detail：仅「进行中且今日未撕毁」隐藏作废/退出
+    if (this.session.status === 'active' && !this.isSessionTornToday()) {
+      return false;
+    }
+    return true;
   }
 
   private getBottomSpacerHeight(): number {
@@ -436,10 +499,51 @@ struct PlanDetailPage {
           .padding({ left: 8, right: 8 })
       }
 
+      if (this.shouldShowGuardSyncRetry()) {
+        Column({ space: 8 }) {
+          if (this.guardSyncIssueMessage.length > 0) {
+            Text(this.guardSyncIssueMessage)
+              .fontSize(12)
+              .fontColor(AppTheme.colors.textSecondary)
+              .lineHeight(20)
+              .width('100%')
+          }
+          this.buildGuardSyncRetryButton()
+        }
+        .width('100%')
+        .padding({ top: 4, bottom: 4 })
+      }
+
       this.buildInviteCard()
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private buildGuardSyncRetryButton(): void {
+    Row({ space: 6 }) {
+      if (!this.isRetryingGuard) {
+        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+          .fontSize(18)
+          .fontColor([AppTheme.colors.primary])
+      }
+      Text(this.isRetryingGuard ? '注册中...' : '重新注册屏时策略')
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.primary)
+    }
+    .width('100%')
+    .height(44)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(AppTheme.colors.surface)
+    .borderRadius(AppTheme.radius.button)
+    .opacity(this.isRetryingGuard ? 0.6 : 1)
+    .onClick(() => {
+      if (!this.isRetryingGuard) {
+        void this.retryGuardSync();
+      }
+    })
   }
 
   @Builder

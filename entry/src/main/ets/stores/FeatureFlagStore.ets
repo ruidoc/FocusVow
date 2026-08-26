@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { router } from '@kit.ArkUI';
 import { getAppVersion, getAppVersionSync } from '../common/AppInfo';
 import { FeatureFlagKeys } from '../config/FeatureFlags';
 import { PageRoutes } from '../router/PageRoutes';
@@ -89,6 +90,29 @@ export class FeatureFlagStore {
 
   static getVipPurchaseRoute(): string {
     return FeatureFlagStore.isPromoVipOn() ? PageRoutes.Paywall : PageRoutes.Redeem;
+  }
+
+  static openVipPurchase(entrySource: string): void {
+    router.pushUrl({
+      url: FeatureFlagStore.getVipPurchaseRoute(),
+      params: {
+        'entry_source': entrySource,
+      },
+    }).catch((error: Error) => {
+      console.warn(`[FeatureFlag] openVipPurchase failed: ${String(error)}`);
+    });
+  }
+
+  static openVipEntry(entrySource: string, isMemberActive: boolean): void {
+    const route = isMemberActive ? PageRoutes.Redeem : FeatureFlagStore.getVipPurchaseRoute();
+    router.pushUrl({
+      url: route,
+      params: {
+        'entry_source': entrySource,
+      },
+    }).catch((error: Error) => {
+      console.warn(`[FeatureFlag] openVipEntry failed: ${String(error)}`);
+    });
   }
 
   static async sync(context?: common.Context): Promise<void> {

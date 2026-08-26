@@ -8,6 +8,8 @@ import {
 import { pushQuickStart, pushRoute, PageRoutes } from '../../router/PageRoutes';
 import { AnalyticsService } from '../../services/AnalyticsService';
 import { buildOnboardingAnalyticsProps } from '../../utils/OnboardingMetaUtil';
+import { BenefitStore } from '../../stores/BenefitStore';
+import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import {
@@ -155,7 +157,9 @@ export struct OnboardingMembershipOverlay {
       'action': 'view_benefits',
     }));
     this.showCelebration = false;
-    pushRoute(PageRoutes.Redeem);
+    const benefit = BenefitStore.getState();
+    const isActive = benefit.isSubscribed || benefit.membershipStatus === 'active';
+    FeatureFlagStore.openVipEntry('onboarding_signup_benefit', isActive);
   }
 
   @Builder

@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { ScheduledSessionCard } from './ScheduledSessionCard';
 import { AppTheme } from '../../constants/Theme';
-import { showToast } from '../../common/Toast';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { DuoSessionView, sortScheduledSessions } from '../../models/DuoModel';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
@@ -168,6 +168,8 @@ export struct PlanListContent {
       const result = await syncScheduledGuardsManually(hostContext);
       if (result.ok) {
         showToast('已同步到本机', this.getUIContext());
+      } else if (result.message.length > 0) {
+        showErrorToast(result.message, this.getUIContext());
       }
     } finally {
       this.syncingGuards = false;

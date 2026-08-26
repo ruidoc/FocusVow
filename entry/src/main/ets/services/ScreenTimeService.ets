@@ -63,16 +63,47 @@ function isGuardErrorCode(error: GuardErrorLike, code: guardService.GuardService
   return error.code === code;
 }
 
+const NONEXISTENT_STRATEGY_ERROR_CODE: number = 1019000006;
+
+function getGuardErrorLike(error: Object): GuardErrorLike {
+  const guardError = error as GuardErrorLike;
+  if (guardError.code !== undefined) {
+    return guardError;
+  }
+  if (error instanceof Error) {
+    const codeMatch = error.message.match(/code=(\d+)/);
+    if (codeMatch) {
+      return { code: Number(codeMatch[1]), message: error.message };
+    }
+    return { message: error.message };
+  }
+  return guardError;
+}
+
+function isNonexistentStrategyError(error: Object): boolean {
+  const guardError = getGuardErrorLike(error);
+  if (isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.NONEXISTENT_STRATEGY)) {
+    return true;
+  }
+  if (guardError.code === NONEXISTENT_STRATEGY_ERROR_CODE) {
+    return true;
+  }
+  const message = (guardError.message ?? String(error)).toLowerCase();
+  return message.includes('nonexistent') && message.includes('strateg');
+}
+
 function shouldIgnoreStartError(error: GuardErrorLike): boolean {
-  return isGuardErrorCode(error, guardService.GuardServiceErrorCode.STRATEGY_ALREADY_EXECUTED);
+  return isGuardErrorCode(error, guardService.GuardServiceErrorCode.STRATEGY_ALREADY_EXECUTED) ||
+    isNonexistentStrategyError(error);
 }
 
 function shouldIgnoreStopError(error: GuardErrorLike): boolean {
-  return isGuardErrorCode(error, guardService.GuardServiceErrorCode.STRATEGY_NOT_STARTED);
+  return isGuardErrorCode(error, guardService.GuardServiceErrorCode.STRATEGY_NOT_STARTED) ||
+    isNonexistentStrategyError(error);
 }
 
 function shouldIgnoreRemoveError(error: GuardErrorLike): boolean {
-  return isGuardErrorCode(error, guardService.GuardServiceErrorCode.NONEXISTENT_STRATEGY);
+  return isNonexistentStrategyError(error);
 }
 
 function createPlanGuardStrategy(plan: FocusPlan): guardService.GuardStrategy {
@@ -110,20 +141,71 @@ function createScheduledGuardStrategy(
   };
 }
 
+async function removeGuardStrategyQuietly(strategyName: string): Promise<void> {
+  try {
+    await guardService.stopGuardStrategy(strategyName);
+  } catch (error) {
+    const guardError = getGuardErrorLike(error as Object);
+    if (!shouldIgnoreStopError(guardError)) {
+      hilog.warn(DOMAIN, TAG, 'removeGuardStrategyQuietly stop %{public}s: %{public}s',
+        strategyName, formatGuardError(`stopGuardStrategy(${strategyName})`, error as Object));
+    }
+  }
+  try {
+    await guardService.removeGuardStrategy(strategyName);
+  } catch (error) {
+    const guardError = getGuardErrorLike(error as Object);
+    if (!shouldIgnoreRemoveError(guardError)) {
+      hilog.warn(DOMAIN, TAG, 'removeGuardStrategyQuietly remove %{public}s: %{public}s',
+        strategyName, formatGuardError(`removeGuardStrategy(${strategyName})`, error as Object));
+    }
+  }
+}
+
 async function upsertGuardStrategy(strategy: guardService.GuardStrategy): Promise<void> {
   try {
     await guardService.addGuardStrategy(strategy);
+    return;
   } catch (error) {
-    const guardError = error as GuardErrorLike;
-    if (isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.STRATEGY_NAME_ALREADY_EXIST)) {
-      try {
-        await guardService.updateGuardStrategy(strategy.name, strategy);
-      } catch (updateError) {
-        throw guardOperationError(`updateGuardStrategy(${strategy.name})`, updateError as Object);
-      }
-      return;
+    const guardError = getGuardErrorLike(error as Object);
+    if (!isGuardErrorCode(guardError, guardService.GuardServiceErrorCode.STRATEGY_NAME_ALREADY_EXIST)) {
+      throw guardOperationError(`addGuardStrategy(${strategy.name})`, error as Object);
     }
-    throw guardOperationError(`addGuardStrategy(${strategy.name})`, error as Object);
+  }
+
+  try {
+    await guardService.updateGuardStrategy(strategy.name, strategy);
+    return;
+  } catch (updateError) {
+    if (!isNonexistentStrategyError(updateError as Object)) {
+      throw guardOperationError(`updateGuardStrategy(${strategy.name})`, updateError as Object);
+    }
+  }
+
+  await removeGuardStrategyQuietly(strategy.name);
+  try {
+    await guardService.addGuardStrategy(strategy);
+  } catch (readdError) {
+    throw guardOperationError(`addGuardStrategy(${strategy.name})`, readdError as Object);
+  }
+}
+
+async function cleanupStaleScheduledGuardNames(
+  sessionId: string,
+  wanted: Set<string>
+): Promise<void> {
+  const leftovers = scheduledSessionStrategyNames(sessionId);
+  const existingStrategies = await guardService.queryGuardStrategies();
+  const existingNames = new Set<string>(
+    existingStrategies.map((item: guardService.GuardStrategy) => item.name)
+  );
+  for (let i = 0; i < leftovers.length; i++) {
+    const name = leftovers[i];
+    if (wanted.has(name) || !existingNames.has(name)) {
+      continue;
+    }
+    await stopPlanGuardStrategy(name);
+    await removePlanGuardStrategyInternal(name);
   }
 }
 
@@ -163,7 +245,7 @@ async function startPlanGuardStrategy(planId: string): Promise<void> {
   try {
     await guardService.startGuardStrategy(planId);
   } catch (error) {
-    const guardError = error as GuardErrorLike;
+    const guardError = getGuardErrorLike(error as Object);
     if (!shouldIgnoreStartError(guardError)) {
       throw guardOperationError(`startGuardStrategy(${planId})`, error as Object);
     }
@@ -175,7 +257,7 @@ async function startScheduledGuardStrategy(strategyName: string): Promise<void> 
   try {
     await guardService.startGuardStrategy(strategyName);
   } catch (error) {
-    const guardError = error as GuardErrorLike;
+    const guardError = getGuardErrorLike(error as Object);
     if (shouldIgnoreStartError(guardError)) {
       return;
     }
@@ -193,7 +275,7 @@ async function stopPlanGuardStrategy(planId: string): Promise<void> {
   try {
     await guardService.stopGuardStrategy(planId);
   } catch (error) {
-    const guardError = error as GuardErrorLike;
+    const guardError = getGuardErrorLike(error as Object);
     if (!shouldIgnoreStopError(guardError)) {
       throw guardOperationError(`stopGuardStrategy(${planId})`, error as Object);
     }
@@ -204,7 +286,7 @@ async function removePlanGuardStrategyInternal(planId: string): Promise<void> {
   try {
     await guardService.removeGuardStrategy(planId);
   } catch (error) {
-    const guardError = error as GuardErrorLike;
+    const guardError = getGuardErrorLike(error as Object);
     if (!shouldIgnoreRemoveError(guardError)) {
       throw guardOperationError(`removeGuardStrategy(${planId})`, error as Object);
     }
@@ -546,6 +628,17 @@ export async function syncDelayedOnceGuardStrategy(
 export async function syncScheduledSessionGuardStrategy(
   snapshot: ScheduledGuardSnapshot
 ): Promise<GuardResult<boolean>> {
+  if (isHarmonyPcOr2in1()) {
+    return { ok: true, data: true, message: 'PC/二合一设备跳过屏时策略注册' };
+  }
+  if (!(await getUserAuthGranted())) {
+    return {
+      ok: false,
+      data: false,
+      message: '未完成健康使用设备授权，无法注册屏时策略'
+    };
+  }
+
   const normalizedSnapshot = normalizeScheduledSnapshot(snapshot);
   const effectiveSnapshot: ScheduledGuardSnapshot = normalizedSnapshot.selectedTokens.length === 0
     ? {
@@ -560,23 +653,16 @@ export async function syncScheduledSessionGuardStrategy(
     : normalizedSnapshot;
 
   if (effectiveSnapshot.repeatDays.length === 0) {
-    return removeScheduledSessionGuardStrategy(effectiveSnapshot.sessionId);
+    return { ok: true, data: true, message: '今日已撕毁，跳过屏时策略注册' };
   }
 
   try {
     const specs = buildScheduledTimeSpecs(effectiveSnapshot);
     const wanted = new Set<string>(specs.map((item: ScheduledTimeSpec) => item.name));
-    const leftovers = scheduledSessionStrategyNames(effectiveSnapshot.sessionId);
-    for (let i = 0; i < leftovers.length; i++) {
-      if (wanted.has(leftovers[i])) {
-        continue;
-      }
-      await stopPlanGuardStrategy(leftovers[i]);
-      await removePlanGuardStrategyInternal(leftovers[i]);
-    }
+    await cleanupStaleScheduledGuardNames(effectiveSnapshot.sessionId, wanted);
     for (let i = 0; i < specs.length; i++) {
-      await stopPlanGuardStrategy(specs[i].name);
       await upsertGuardStrategy(createScheduledGuardStrategy(effectiveSnapshot, specs[i]));
+      // 未到窗口时 start 可能失败；add/update 成功即可由系统到点拉起，勿抛错中断后续 P2 注册
       await startScheduledGuardStrategy(specs[i].name);
     }
     return {
@@ -591,7 +677,7 @@ export async function syncScheduledSessionGuardStrategy(
     return {
       ok: false,
       data: false,
-      message: toBusinessMessage('注册屏时策略失败')
+      message: formatGuardError('注册屏时策略失败', error as Object)
     };
   }
 }

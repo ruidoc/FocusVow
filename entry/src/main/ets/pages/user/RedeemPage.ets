@@ -1,10 +1,12 @@
 import { common } from "@kit.AbilityKit";
 import { pasteboard } from "@kit.BasicServicesKit";
+import { router } from "@kit.ArkUI";
 import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { AppTheme } from "../../constants/Theme";
 import { ApiEnvelope, createEmptyUserInfo, UserInfo } from "../../models/UserModel";
 import { PageRoutes, backRoute, pushRoute } from "../../router/PageRoutes";
+import { AnalyticsService } from "../../services/AnalyticsService";
 import { HttpService } from "../../services/HttpService";
 import {
   parseReferralProgress,
@@ -48,11 +50,17 @@ struct RedeemPage {
   @State myInviteCode: string = "";
   @State inviteSuccessCount: number = 0;
   @State inviteDaysEarned: number = 0;
+  private entrySource: string = 'unknown';
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.hydrate(hostContext);
     BenefitStore.hydrate(hostContext);
+    const params = router.getParams() as Record<string, Object>;
+    const raw = params['entry_source'];
+    this.entrySource = raw !== undefined && String(raw).trim().length > 0
+      ? String(raw).trim()
+      : 'unknown';
     if (!UserStore.isLoggedIn()) {
       pushRoute(PageRoutes.Login);
       return;
@@ -60,8 +68,22 @@ struct RedeemPage {
     if (this.userInfo.invite_code.length > 0) {
       this.myInviteCode = this.userInfo.invite_code;
     }
-    void this.refreshMembership();
+    void this.refreshMembership().then(() => {
+      this.trackRightsPageViewed();
+    });
     void this.loadInviteProgress();
+  }
+
+  private trackRightsPageViewed(): void {
+    const benefit = BenefitStore.getState();
+    const entitled = this.isSubscribed || benefit.isSubscribed || benefit.membershipStatus === 'active';
+    AnalyticsService.trackEvent('rights_page_viewed', {
+      'screen_name': 'rights_page',
+      'entry_source': this.entrySource,
+      'subscription_status': benefit.membershipStatus || 'none',
+      'is_entitled': entitled,
+      'expires_at': this.expiresLabel,
+    });
   }
 
   private formatExpiry(raw: Object | undefined | null): string {

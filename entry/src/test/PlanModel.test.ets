@@ -5,7 +5,8 @@ import {
   getPlanDurationMinutes,
   removePlanById,
   summarizeRepeatDays,
-  upsertPlan
+  upsertPlan,
+  validateScheduledStartTime
 } from '../main/ets/models/PlanModel';
 
 export default function planModelTest() {
@@ -116,6 +117,11 @@ export default function planModelTest() {
       expect(allPlans.length).assertEqual(2);
       expect(summarizeRepeatDays([1, 2, 3, 4, 5])).assertEqual('工作日');
       expect(summarizeRepeatDays([6, 7])).assertEqual('周末');
+    });
+
+    it('allows cross-day start validation before tonight window', 0, () => {
+      const tuesday2am = new Date('2026-01-06T02:00:00').getTime();
+      expect(validateScheduledStartTime('22:00', [2], '07:00', tuesday2am)).assertEqual('');
     });
 
     it('treats end before start as overnight duration', 0, () => {

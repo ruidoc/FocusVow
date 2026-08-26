@@ -369,6 +369,12 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
     return;
   }
 
+  // 跨日 P1 在 23:59 结束只是分段，整段窗口由 P2/lock.endAt 收尾
+  if (isSessionStrategyName(strategyName) && strategyName.endsWith('_P1')) {
+    hilog.info(DOMAIN, TAG, 'onStop ignored cross-day P1 segment %{public}s', strategyName);
+    return;
+  }
+
   if (isSessionStrategyName(strategyName)) {
     const sessionId = sessionIdFromStrategy(strategyName);
     await DuoApiService.completeScheduledWindow(sessionId, context);

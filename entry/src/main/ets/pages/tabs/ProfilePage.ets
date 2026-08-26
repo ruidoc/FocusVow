@@ -115,11 +115,7 @@ export struct ProfilePage {
       pushLogin();
       return;
     }
-    if (this.isMembershipActive()) {
-      pushRoute(PageRoutes.Redeem);
-      return;
-    }
-    pushRoute(this.isPromoVipEnabled() ? PageRoutes.Paywall : PageRoutes.Redeem);
+    FeatureFlagStore.openVipEntry('profile', this.isMembershipActive());
   }
 
   private isPromoVipEnabled(): boolean {

@@ -8,6 +8,7 @@ import {
   getScheduledSessionStartMin,
   resolveDuoCounterpartName,
   getSessionApps,
+  mergeSessionAppsForHarmony,
   shouldCompleteStaleScheduledWindow
 } from '../models/DuoModel';
 import { normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
@@ -120,12 +121,15 @@ function normalizeGuardIssueMessage(message: string): string {
 
 export function buildGuardSnapshotFromSession(
   session: DuoSessionView,
-  context?: common.Context
+  context?: common.Context,
+  localApps?: string[]
 ): ScheduledGuardSnapshot | null {
   if (session.session_id.length === 0) {
     return null;
   }
-  const apps = getSessionApps(session);
+  const apps = localApps && localApps.length > 0
+    ? mergeSessionAppsForHarmony(getSessionApps(session), localApps)
+    : getSessionApps(session);
   const startTime = session.schedule_start && session.schedule_start.length > 0
     ? session.schedule_start
     : String(session.schedule_json?.['start'] ?? '09:00');
@@ -164,9 +168,10 @@ export function buildGuardSnapshotFromSession(
 
 export async function syncGuardForSession(
   context: common.Context,
-  session: DuoSessionView
+  session: DuoSessionView,
+  localApps?: string[]
 ): Promise<GuardResult<boolean>> {
-  const snapshot = buildGuardSnapshotFromSession(session, context);
+  const snapshot = buildGuardSnapshotFromSession(session, context, localApps);
   if (!snapshot) {
     await removeGuardForSession(context, session.session_id);
     return { ok: false, data: false, message: '契约无效，无法同步屏时策略' };
@@ -176,7 +181,15 @@ export async function syncGuardForSession(
   const result = await syncScheduledSessionGuardStrategy(snapshot);
   if (result.ok) {
     removeScheduledGuardSyncIssue(context, session.session_id);
+    return result;
   }
+
+  saveScheduledGuardSyncIssue(context, {
+    sessionId: session.session_id,
+    title: session.title,
+    message: normalizeGuardIssueMessage(result.message),
+    updatedAt: Date.now()
+  });
   return result;
 }
 

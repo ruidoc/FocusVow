@@ -1,10 +1,11 @@
 import { common } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
+import { router, window } from '@kit.ArkUI';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { LegalUrls } from '../../constants/LegalUrls';
 import { VipProduct, SubscriptionApiService } from '../../services/SubscriptionApiService';
 import { WeChatOpenService, WeChatPayParams } from '../../services/WeChatOpenService';
+import { AnalyticsService } from '../../services/AnalyticsService';
 import { BenefitStore } from '../../stores/BenefitStore';
 import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
 import { AppTheme } from '../../constants/Theme';
@@ -78,6 +79,36 @@ function getPlanDuration(period: number): string {
   return '1 个月';
 }
 
+function resolveEntrySource(params: Record<string, Object> | undefined): string {
+  if (!params) {
+    return 'unknown';
+  }
+  const raw = params['entry_source'];
+  if (raw === undefined) {
+    return 'unknown';
+  }
+  const text = String(raw).trim();
+  return text.length > 0 ? text : 'unknown';
+}
+
+function buildProductTrackProps(
+  product: VipProduct,
+  entrySource: string,
+): Record<string, Object> {
+  return {
+    'screen_name': 'paywall_index',
+    'entry_source': entrySource,
+    'placement': 'paywall_index',
+    'product_id': product.product_id,
+    'product_name': product.name,
+    'period': product.period,
+    'price': product.price,
+    'currency': 'CNY',
+    'purchase_source': 'wechat',
+    'offer_type': 'none',
+  };
+}
+
 @Entry
 @Component
 struct PaywallPage {
@@ -88,6 +119,9 @@ struct PaywallPage {
   @State paymentStatus: string = 'idle';
   @State agreed: boolean = false;
   @State bottomInset: number = 12;
+  private entrySource: string = 'unknown';
+  private openedAtMs: number = 0;
+  private paywallClosedTracked: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -109,7 +143,41 @@ struct PaywallPage {
       pushRoute(PageRoutes.Redeem);
       return;
     }
+    this.entrySource = resolveEntrySource(router.getParams() as Record<string, Object>);
+    this.openedAtMs = Date.now();
+    this.paywallClosedTracked = false;
+    AnalyticsService.trackEvent('paywall_opened', this.buildPaywallContextProps());
     void this.loadProducts();
+  }
+
+  aboutToDisappear(): void {
+    this.trackPaywallClosed('navigate_away');
+  }
+
+  private buildPaywallContextProps(product?: VipProduct | null): Record<string, Object> {
+    const props: Record<string, Object> = {
+      'screen_name': 'paywall_index',
+      'entry_source': this.entrySource,
+      'placement': 'paywall_index',
+      'purchase_source': 'wechat',
+    };
+    if (product) {
+      props['product_id'] = product.product_id;
+      props['period'] = product.period;
+    }
+    return props;
+  }
+
+  private trackPaywallClosed(closeAction: string): void {
+    if (this.paywallClosedTracked) {
+      return;
+    }
+    this.paywallClosedTracked = true;
+    const product = this.getSelectedProduct();
+    const props = this.buildPaywallContextProps(product);
+    props['close_action'] = closeAction;
+    props['dwell_ms'] = Date.now() - this.openedAtMs;
+    AnalyticsService.trackEvent('paywall_closed', props);
   }
 
   private getSelectedProduct(): VipProduct | null {
@@ -197,6 +265,9 @@ struct PaywallPage {
       return;
     }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const productProps = buildProductTrackProps(product, this.entrySource);
+    AnalyticsService.trackEvent('paywall_purchase_clicked', productProps);
+    AnalyticsService.trackEvent('purchase_started', productProps);
     this.paymentStatus = 'processing';
     try {
       const order = await SubscriptionApiService.createWechatSubscriptionOrder(product.product_id);
@@ -213,6 +284,7 @@ struct PaywallPage {
       const payResult = await WeChatOpenService.requestPayment(hostContext, payParams);
       if (payResult.cancelled) {
         this.paymentStatus = 'idle';
+        AnalyticsService.trackEvent('purchase_cancelled', productProps);
         return;
       }
       if (!payResult.ok) {
@@ -222,15 +294,22 @@ struct PaywallPage {
       await BenefitStore.refresh();
       if (!synced && !BenefitStore.getState().isSubscribed) {
         this.paymentStatus = 'success';
+        productProps['is_entitled'] = false;
+        AnalyticsService.trackEvent('purchase_completed', productProps);
         showToast('支付已到账，会员权益同步稍慢，请稍后刷新查看', this.getUIContext(), 2500);
         backRoute();
         return;
       }
       this.paymentStatus = 'success';
+      productProps['is_entitled'] = true;
+      AnalyticsService.trackEvent('purchase_completed', productProps);
       showToast('开通成功，权益已生效', this.getUIContext());
       backRoute();
     } catch (error) {
       this.paymentStatus = 'failed';
+      productProps['error_code'] = 'PURCHASE_FAILED';
+      productProps['error_message'] = String(error);
+      AnalyticsService.trackEvent('purchase_failed', productProps);
       showErrorToast(String(error), this.getUIContext());
     }
   }
@@ -323,6 +402,8 @@ struct PaywallPage {
     .borderRadius(18)
     .onClick(() => {
       this.selectedProductId = product.product_id;
+      AnalyticsService.trackEvent('paywall_product_selected',
+        buildProductTrackProps(product, this.entrySource));
     })
   }
 
@@ -475,6 +556,7 @@ struct PaywallPage {
         horizontalPadding: 20,
         bottomSpacerHeight: 0,
         onBack: () => {
+          this.trackPaywallClosed('close_button');
           backRoute();
         },
         useFloatingTabInset: false,

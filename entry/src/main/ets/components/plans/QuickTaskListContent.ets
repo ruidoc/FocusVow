@@ -170,26 +170,28 @@ export struct QuickTaskListContent {
   @Builder
   private buildTaskCard(task: QuickTask, index: number): void {
     Row() {
-      Column({ space: 2 }) {
+      Column({ space: 10 }) {
         Text(task.title.length > 0 ? task.title : '快捷任务')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
-          .maxLines(1)
+          .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
-        Text(`${minutesToHours(task.duration_min)} · ${task.timer_mode === 'countup' ? '正计时' : '倒计时'}`)
-          .fontSize(14)
-          .lineHeight(20)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width('100%')
+        Column({ space: 4 }) {
+          Text(`${minutesToHours(task.duration_min)} · ${task.timer_mode === 'countup' ? '正计时' : '倒计时'}`)
+            .fontSize(14)
+            .fontColor(AppTheme.colors.textSecondary)
+            .width('100%')
 
-        Text(startWhenLabel(task.delay_min))
-          .fontSize(13)
-          .lineHeight(18)
-          .fontColor(AppTheme.colors.textMuted)
-          .width('100%')
+          Text(startWhenLabel(task.delay_min))
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textMuted)
+            .width('100%')
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
       }
       .layoutWeight(1)
       .padding({ right: 12 })
@@ -213,7 +215,7 @@ export struct QuickTaskListContent {
     }
     .width('100%')
     .padding(16)
-    .margin({ bottom: index < this.tasks.length - 1 ? 14 : 0 })
+    .margin({ bottom: index < this.tasks.length - 1 ? 12 : 0 })
     .backgroundColor(AppTheme.colors.surface)
     .borderRadius(16)
     .onClick(() => {
