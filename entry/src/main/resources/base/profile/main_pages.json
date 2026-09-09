@@ -18,6 +18,7 @@
     "pages/settings/SettingsPage",
     "pages/settings/PermissionPage",
     "pages/settings/CycleGuardPage",
+    "pages/tabs/CycleGuardDetailPage",
     "pages/settings/PrivacyPolicyPage",
     "pages/settings/UserAgreementPage",
     "pages/settings/WebViewPage",

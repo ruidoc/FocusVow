@@ -197,6 +197,31 @@ interface PlanNextOccurrence {
   sortValue: number;
 }
 
+export function getPlanSecondsUntilStart(plan: FocusPlan, nowAt: number = Date.now()): number {
+  const startMinutes = getTimeMinutes(plan.startTime);
+  const nowDate = new Date(nowAt);
+  const nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes();
+  const nowSec = nowDate.getSeconds();
+  return Math.max(0, (startMinutes - nowMinutes) * 60 - nowSec);
+}
+
+export function findNextUpcomingPlanToday(plans: FocusPlan[], nowAt: number = Date.now()): FocusPlan | null {
+  let bestPlan: FocusPlan | null = null;
+  let bestSort = Number.MAX_SAFE_INTEGER;
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    const occurrence = getNextPlanOccurrence(plan, nowAt);
+    if (!occurrence || occurrence.dayOffset !== 0) {
+      continue;
+    }
+    if (occurrence.sortValue < bestSort) {
+      bestSort = occurrence.sortValue;
+      bestPlan = plan;
+    }
+  }
+  return bestPlan;
+}
+
 function getNextPlanOccurrence(plan: FocusPlan, nowAt: number): PlanNextOccurrence | undefined {
   if (!plan.enabled || plan.repeatDays.length === 0) {
     return undefined;

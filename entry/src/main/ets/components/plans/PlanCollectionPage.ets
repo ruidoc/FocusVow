@@ -5,6 +5,7 @@ import { PlanListContent } from './PlanListContent';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { UserStore } from '../../stores/UserStore';
+import { ensureScheduledTaskQuota } from '../../services/ProQuotaService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -35,6 +36,11 @@ export struct PlanCollectionPage {
     }
     if (LockStore.isLocked()) {
       showToast('专注进行中，不可以创建契约', this.getUIContext());
+      return;
+    }
+    ScheduledListStore.hydrate();
+    QuickTaskStore.hydrate();
+    if (!ensureScheduledTaskQuota()) {
       return;
     }
     AppStorage.setOrCreate(StoreKeys.ScheduledSessionCurrentId, '');

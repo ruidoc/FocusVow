@@ -68,5 +68,8 @@ export function startWhenLabel(minutes: number): string {
   if (minutes <= 0) {
     return '立即开始';
   }
-  return `${getStartDelayLabel(minutes)}开始`;
+  if (minutes === 60) {
+    return '1 小时后开始';
+  }
+  return `${minutes} 分钟后开始`;
 }

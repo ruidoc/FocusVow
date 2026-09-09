@@ -3,6 +3,10 @@ import { window, display } from "@kit.ArkUI";
 import { showToast } from "../../common/Toast";
 import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { OnboardingMembershipOverlay } from "../../components/home/OnboardingMembershipOverlay";
+import { HomeTodayCard } from "../../components/home/HomeTodayCard";
+import { HomeActionCard } from "../../components/home/HomeActionCard";
+import { HomeMembershipUrgencyCapsule } from "../../components/home/HomeMembershipUrgencyCapsule";
+import { HomeDuoWaitBanner } from "../../components/home/HomeDuoWaitBanner";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
@@ -25,7 +29,8 @@ import { isPastCountupMinimum } from "../../utils/TimerMode";
 import { inboxBadgeLabel } from "../../models/InboxModel";
 import { FocusPlan } from "../../models/PlanModel";
 import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from "../../models/DuoModel";
-import { PageRoutes, pushLogin, pushQuickStart, pushRoute } from "../../router/PageRoutes";
+import { PageRoutes, pushLogin, pushQuickStart, pushRoute, openScheduledTaskTabOnce } from "../../router/PageRoutes";
+import { FREE_DELAYED_START_MINUTES } from "../../services/ProQuotaService";
 import {
   endCycleGuardLock,
   endQuickFocus,
@@ -56,7 +61,6 @@ import {
   loadOrgClassroomMeta,
   reconcileOrgClassroomOnForeground,
 } from "../../services/OrgClassroomService";
-import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
 import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService";
 import { AnalyticsService } from "../../services/AnalyticsService";
@@ -99,6 +103,10 @@ import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
 
 bootstrapStores();
+
+/** 对齐 RN：顶栏 pb-2(8vp)，标题行在 Scroll 外、背景透明 */
+const HOME_HEADER_BOTTOM_PADDING_VP: number = 8;
+
 @Component
 export struct FocusHomePage {
   @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
@@ -118,10 +126,10 @@ export struct FocusHomePage {
   @State topSafeInsetVp: number = 0;
   @State homeContentLiftVp: number = 0;
   /** 单人入口按压缩放透明度，对齐 iOS activeOpacity=0.7 */
-  @State soloLinkPressed: boolean = false;
   @State isRefreshing: boolean = false;
   @State showActivationModal: boolean = false;
   @State activationGuestPath: boolean = false;
+  @State homeStatsRefreshTick: number = 0;
 
   private timerId: number = -1;
   private postOnboardingFlowStarted: boolean = false;
@@ -364,7 +372,13 @@ export struct FocusHomePage {
   }
 
   private shouldShowOrgEntry(): boolean {
-    return !this.isActiveLocked() && !this.hasPendingDuoWait();
+    return !this.isActiveLocked();
+  }
+
+  private trackHomeEntry(entryKey: string): void {
+    const props: Record<string, Object> = {};
+    props["entry_key"] = entryKey;
+    AnalyticsService.trackEvent("home_entry_clicked", props);
   }
 
   private onOrgEntryPress(): void {
@@ -383,17 +397,6 @@ export struct FocusHomePage {
       return;
     }
     pushRoute(PageRoutes.InboxList);
-  }
-
-  private getDuoWaitEntryDetail(): string {
-    if (this.duoWaitIsScheduled) {
-      if (this.duoWaitScheduleLabel.length > 0) {
-        return `定时契约 · ${this.duoWaitScheduleLabel}`;
-      }
-      return "定时契约 · 等待搭子加入后可发给搭子";
-    }
-    const title = this.duoWaitTitle.length > 0 ? this.duoWaitTitle : "搭子互督";
-    return `${title} · 点击进入发给搭子`;
   }
 
   private async reconcileDuoWait(): Promise<void> {
@@ -516,6 +519,7 @@ export struct FocusHomePage {
       if (UserStore.isLoggedIn()) {
         await BenefitStore.refresh();
         await InboxStore.fetchUnread();
+        this.homeStatsRefreshTick += 1;
       }
     } finally {
       this.isRefreshing = false;
@@ -1087,91 +1091,7 @@ export struct FocusHomePage {
       pushLogin();
       return;
     }
-    // 仅发起互督进页前校验；加入互督放宽不校验
-    if (route === PageRoutes.DuoCreate) {
-      void this.ensureQuotaThenNavigate(route);
-      return;
-    }
     pushRoute(route);
-  }
-
-  private async ensureQuotaThenNavigate(route: string): Promise<void> {
-    if (!(await ensureDailyFocusQuota(this.getUIContext()))) {
-      return;
-    }
-    pushRoute(route);
-  }
-
-  @Builder
-  private buildDuoActionButton(
-    label: string,
-    symbol: Resource,
-    iconColor: string,
-    onPress: () => void,
-  ): void {
-    Button() {
-      Column({ space: 8 }) {
-        Row() {
-          SymbolGlyph(symbol)
-            .fontSize(20)
-            .fontColor([iconColor])
-        }
-        .width(36)
-        .height(36)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(AppTheme.colors.surfaceRaised)
-        .borderRadius(18)
-        Text(label)
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-      }
-      .width("100%")
-      .alignItems(HorizontalAlign.Center)
-    }
-    .layoutWeight(1)
-    .height(88)
-    .type(ButtonType.Normal)
-    .buttonStyle(ButtonStyleMode.NORMAL)
-    .padding({ left: 8, right: 8, top: 12, bottom: 12 })
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(18)
-    .clip(true)
-    .onClick(() => {
-      onPress();
-    });
-  }
-
-  @Builder
-  private buildSoloFocusLink(): void {
-    Row({ space: 4 }) {
-      SymbolGlyph($r("sys.symbol.bolt"))
-        .fontSize(15)
-        .fontColor([AppTheme.colors.primary])
-      Text("先自己练练？单人专注")
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.primary)
-    }
-    .justifyContent(FlexAlign.Center)
-    .height(40)
-    .padding({ left: 12, right: 12 })
-    .opacity(this.soloLinkPressed ? 0.7 : 1)
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.soloLinkPressed = true;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.soloLinkPressed = false;
-      }
-    })
-    .onClick(() => {
-      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      if (!ensureSoloFocusAccess(hostContext)) {
-        return;
-      }
-      this.openSoloQuickStart();
-    });
   }
 
   private openSoloQuickStart(): void {
@@ -1181,6 +1101,108 @@ export struct FocusHomePage {
       return;
     }
     pushRoute(PageRoutes.QuickStart);
+  }
+
+  private openSoloImmediateEntry(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (!ensureSoloFocusAccess(hostContext)) {
+      return;
+    }
+    this.openSoloQuickStart();
+  }
+
+  private openSoloDelayedEntry(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (!ensureSoloFocusAccess(hostContext)) {
+      return;
+    }
+    if (hasPendingQuickStart(hostContext)) {
+      showToast("已有预约中的专注，请等待开始或先取消", this.getUIContext());
+      return;
+    }
+    pushQuickStart('', 0, false, FREE_DELAYED_START_MINUTES);
+  }
+
+  private openScheduledLockEntry(): void {
+    openScheduledTaskTabOnce();
+  }
+
+  private openCycleGuardEntry(): void {
+    pushRoute(PageRoutes.CycleGuard);
+  }
+
+  @Builder
+  private buildHomeSectionHeading(title: string, hint: string): void {
+    Row({ space: 8 }) {
+      Text(title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+      Text(hint)
+        .fontSize(12)
+        .fontColor(AppTheme.colors.textMuted)
+        .margin({ bottom: 1 })
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Bottom)
+  }
+
+  @Builder
+  private buildSoloQuickEntries(): void {
+    Column({ space: 12 }) {
+      this.buildHomeSectionHeading('单人专注', '高效单刷，快速进入心流')
+      Row({ space: 12 }) {
+        HomeActionCard({
+          label: '立即开始',
+          symbol: $r('sys.symbol.bolt'),
+          iconColor: AppTheme.colors.success,
+          onPress: () => {
+            this.trackHomeEntry('solo_immediate');
+            this.openSoloImmediateEntry();
+          },
+        })
+        HomeActionCard({
+          label: '延时开始',
+          symbol: $r('sys.symbol.hourglass'),
+          iconColor: AppTheme.colors.warning,
+          onPress: () => {
+            this.trackHomeEntry('solo_delayed');
+            this.openSoloDelayedEntry();
+          },
+        })
+      }.width('100%')
+    }
+    .width('100%')
+    .margin({ top: 20 })
+  }
+
+  @Builder
+  private buildPhoneDisciplineEntries(): void {
+    Column({ space: 12 }) {
+      this.buildHomeSectionHeading('帮我戒手机', '到点自动锁，自控力差用它')
+      Row({ space: 12 }) {
+        HomeActionCard({
+          label: '定时锁机',
+          symbol: $r('sys.symbol.alarm'),
+          iconColor: AppTheme.colors.primary,
+          onPress: () => {
+            this.trackHomeEntry('scheduled_lock');
+            this.openScheduledLockEntry();
+          },
+        })
+        HomeActionCard({
+          label: '娱乐限额',
+          symbol: $r('sys.symbol.play'),
+          iconColor: AppTheme.colors.fuchsia,
+          onPress: () => {
+            this.trackHomeEntry('cycle_guard');
+            this.openCycleGuardEntry();
+          },
+        })
+      }.width('100%')
+    }
+    .width('100%')
+    .margin({ top: 20 })
   }
 
   @Builder
@@ -1235,170 +1257,121 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildEmptyState(): void {
-    Column({ space: 24 }) {
+  private buildIdleHomeContent(): void {
+    Column({ space: 0 }) {
+      HomeTodayCard({ refreshTick: this.homeStatsRefreshTick })
+      HomeMembershipUrgencyCapsule({
+        hasActiveLock: this.isActiveLocked(),
+        hasPendingQuickStart: this.hasPendingQuickStart(),
+      })
+      HomeDuoWaitBanner()
+
       Column({ space: 12 }) {
-        this.buildStatusIcon(false)
-        Column({ space: 10 }) {
-          Text('和搭子一起专注')
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(AppTheme.colors.textPrimary)
-            .textAlign(TextAlign.Center)
-          Text('双人互督，连坐机制，一人毁约两人失败')
-            .fontSize(16)
-            .fontColor(AppTheme.colors.textSecondary)
-            .textAlign(TextAlign.Center)
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
+        this.buildHomeSectionHeading('搭子互督', '双人战，一人退出，双方失败')
+        Row({ space: 12 }) {
+          HomeActionCard({
+            label: '发起互督',
+            symbol: $r('sys.symbol.person_badge_plus'),
+            iconColor: AppTheme.colors.accentBlue,
+            onPress: () => {
+              this.trackHomeEntry('duo_create');
+              this.ensureLoginThen(PageRoutes.DuoCreate);
+            },
+          })
+          HomeActionCard({
+            label: '加入互督',
+            symbol: $r('sys.symbol.link'),
+            iconColor: AppTheme.colors.accentOrange,
+            onPress: () => {
+              this.trackHomeEntry('duo_join');
+              this.ensureLoginThen(PageRoutes.DuoJoin);
+            },
+          })
+        }.width('100%')
       }
       .width('100%')
-      .alignItems(HorizontalAlign.Center)
+      .margin({ top: 24 })
 
-      Row({ space: 12 }) {
-        this.buildDuoActionButton(
-          '发起互督',
-          $r('sys.symbol.person_badge_plus'),
-          AppTheme.colors.accentBlue,
-          () => {
-            this.ensureLoginThen(PageRoutes.DuoCreate);
-          },
-        )
-
-        this.buildDuoActionButton(
-          '加入互督',
-          $r('sys.symbol.link'),
-          AppTheme.colors.accentOrange,
-          () => {
-            this.ensureLoginThen(PageRoutes.DuoJoin);
-          },
-        )
-      }.width('100%')
-
-      Column({ space: 4 }) {
-        this.buildSoloFocusLink()
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Center)
+      this.buildSoloQuickEntries()
+      this.buildPhoneDisciplineEntries()
     }
     .width('100%')
-    .padding({ left: 12, right: 12 })
-    .alignItems(HorizontalAlign.Center);
+    .padding({
+      left: 20,
+      right: 20,
+      bottom: 32,
+    })
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private buildOrgEntryButton(): void {
-    Row({ space: 8 }) {
-      Button({ type: ButtonType.Normal }) {
-        UsersIcon({ iconSize: 22, color: AppTheme.colors.textPrimary })
-      }
-      .width(42)
-      .height(42)
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: AppTheme.colors.border })
-      .borderRadius(21)
-      .onClick(() => {
-        this.onOrgEntryPress();
-      })
+    Row() {
+      Text('专注契约')
+        .fontSize(22)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.textPrimary)
+        .letterSpacing(1)
+        .layoutWeight(1)
 
-      Stack() {
+      Row({ space: 4 }) {
         Button({ type: ButtonType.Normal }) {
-          SymbolGlyph($r('sys.symbol.bell'))
-            .fontSize(22)
-            .fontColor([AppTheme.colors.textPrimary])
-        }
-        .width(42)
-        .height(42)
-        .backgroundColor(AppTheme.colors.surface)
-        .border({ width: 1, color: AppTheme.colors.border })
-        .borderRadius(21)
-        .onClick(() => {
-          this.onInboxPress();
-        })
-
-        if (this.inboxImportant > 0) {
-          Row() {
-            Text(inboxBadgeLabel(this.inboxImportant))
-              .fontSize(10)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#FFFFFF')
-          }
-          .height(16)
-          .padding({ left: 4, right: 4 })
-          .borderRadius(8)
-          .backgroundColor(AppTheme.colors.danger)
-          .justifyContent(FlexAlign.Center)
-          .position({ x: 24, y: 2 })
-        } else if (this.inboxUnread > 0) {
-          Circle()
-            .width(8)
-            .height(8)
-            .fill(AppTheme.colors.danger)
-            .position({ x: 28, y: 6 })
-        }
-      }
-      .width(42)
-      .height(42)
-    }
-    .width("100%")
-    .padding({ left: 20, right: 20, top: this.topSafeInsetVp + 8 })
-    .justifyContent(FlexAlign.End)
-  }
-
-  @Builder
-  private buildDuoWaitBanner(): void {
-    Column() {
-      Row({ space: 12 }) {
-        Row() {
-          UsersIcon({ iconSize: 18, color: AppTheme.colors.primary })
+          UsersIcon({ iconSize: 22, color: AppTheme.colors.textPrimary })
         }
         .width(36)
         .height(36)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(AppTheme.colors.primarySoft)
-        .borderRadius(18)
-        Column({ space: 2 }) {
-          Text("等待搭子加入")
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-            .width("100%")
-          Text(this.getDuoWaitEntryDetail())
-            .fontSize(12)
-            .fontColor(AppTheme.colors.textSecondary)
-            .width("100%")
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.onOrgEntryPress();
+        })
+
+        Stack() {
+          Button({ type: ButtonType.Normal }) {
+            SymbolGlyph($r('sys.symbol.bell'))
+              .fontSize(22)
+              .fontColor([AppTheme.colors.textPrimary])
+          }
+          .width(36)
+          .height(36)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.onInboxPress();
+          })
+
+          if (this.inboxImportant > 0) {
+            Row() {
+              Text(inboxBadgeLabel(this.inboxImportant))
+                .fontSize(10)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('#FFFFFF')
+            }
+            .height(16)
+            .padding({ left: 4, right: 4 })
+            .borderRadius(8)
+            .backgroundColor(AppTheme.colors.danger)
+            .justifyContent(FlexAlign.Center)
+            .position({ x: 20, y: 2 })
+          } else if (this.inboxUnread > 0) {
+            Circle()
+              .width(8)
+              .height(8)
+              .fill(AppTheme.colors.danger)
+              .position({ x: 24, y: 6 })
+          }
         }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        SymbolGlyph($r("sys.symbol.chevron_right"))
-          .fontSize(14)
-          .fontColor([AppTheme.colors.textMuted])
+        .width(36)
+        .height(36)
       }
-      .width("100%")
-      .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: AppTheme.colors.primarySoft })
-      .borderRadius(28)
-      // 对齐 iOS：轻阴影（低透明度 + 大模糊），避免 Button 默认材质阴影发硬
-      .shadow({
-        radius: 16,
-        color: "#14000000",
-        offsetX: 0,
-        offsetY: 4,
-      })
-      .onClick(() => {
-        openDuoWaitPage();
-      })
     }
-    .width("100%")
+    .width('100%')
     .padding({
       left: 20,
       right: 20,
-      top: this.topSafeInsetVp + 6,
-    });
+      top: 0,
+      bottom: HOME_HEADER_BOTTOM_PADDING_VP,
+    })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder
@@ -1412,44 +1385,48 @@ export struct FocusHomePage {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
     } else {
-      Refresh({ refreshing: $$this.isRefreshing }) {
-        Scroll() {
-          Column() {
-            if (this.hasPendingQuickStart()) {
-              Column() {
-                this.buildPendingQuickStartState()
-              }
-              .width("100%")
-              .constraintSize({ minHeight: '100%' })
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .padding({ left: 24, right: 24, bottom: this.homeContentLiftVp });
-            } else {
-              Column() {
-                this.buildEmptyState()
-              }
-              .width("100%")
-              .constraintSize({ minHeight: '100%' })
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .padding({ bottom: this.homeContentLiftVp });
-            }
-          }
-          .width("100%")
-          .constraintSize({ minHeight: '100%' })
+      Column() {
+        if (this.shouldShowOrgEntry()) {
+          this.buildOrgEntryButton()
         }
-        .width("100%")
-        .height("100%")
-        .align(Alignment.Top)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
+        Refresh({ refreshing: $$this.isRefreshing }) {
+          Scroll() {
+            Column() {
+              if (this.hasPendingQuickStart()) {
+                Column() {
+                  this.buildPendingQuickStartState()
+                }
+                .width('100%')
+                .constraintSize({ minHeight: '100%' })
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
+                .padding({ left: 20, right: 20, bottom: this.homeContentLiftVp });
+              } else {
+                Column() {
+                  this.buildIdleHomeContent()
+                }
+                .width('100%')
+                .alignItems(HorizontalAlign.Start)
+              }
+            }
+            .width('100%')
+            .constraintSize({ minHeight: '100%' })
+          }
+          .width('100%')
+          .height('100%')
+          .align(Alignment.Top)
+          .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
+        }
+        .pullToRefresh(true)
+        .onRefreshing(() => {
+          void this.onHomeRefresh();
+        })
+        .layoutWeight(1)
+        .width('100%')
       }
-      .pullToRefresh(true)
-      .onRefreshing(() => {
-        void this.onHomeRefresh();
-      })
-      .width("100%")
-      .height("100%")
+      .width('100%')
+      .height('100%')
     }
   }
 
@@ -1460,19 +1437,12 @@ export struct FocusHomePage {
         showTitleBar: false,
         usePageScroll: false,
         horizontalPadding: 0,
-        hiddenTitleTopPadding: this.isActiveLocked() ? 0 : 12,
+        showPageDecoration: true,
+        hiddenTitleTopPadding: 0,
         content: (): void => {
           this.buildHomeContent();
         },
       })
-
-      if (!this.isActiveLocked() && this.hasPendingDuoWait()) {
-        this.buildDuoWaitBanner();
-      }
-
-      if (this.shouldShowOrgEntry()) {
-        this.buildOrgEntryButton();
-      }
 
       if (this.isActiveLocked() && this.isDuoFocus()) {
         DuoFocusHeader({

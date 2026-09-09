@@ -7,6 +7,7 @@ import {
   ScrollEffectType
 } from '@kit.UIDesignKit';
 import { AppTheme, resolveContentMaxWidthVp } from '../../constants/Theme';
+import { PageBackgroundDecoration } from './PageBackgroundDecoration';
 import { FLOATING_TAB_EXTRA_BOTTOM_VP } from '../../pages/tabs/MainTabUtil';
 import { StoreKeys } from '../../stores/StoreKeys';
 
@@ -32,6 +33,7 @@ export struct SystemNavPage {
   @Prop contentSpace: number = 16;
   @Prop bottomSpacerHeight: number = 24;
   @Prop useFloatingTabInset: boolean = true;
+  @Prop showPageDecoration: boolean = false;
   @Prop pageBackgroundColor: string = '';
   @Prop titleBarBackgroundColor: string = '';
   @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
@@ -48,12 +50,19 @@ export struct SystemNavPage {
   private mainWindow: window.Window | undefined = undefined;
 
   private getResolvedPageBackgroundColor(): string {
+    if (this.showPageDecoration) {
+      return '#00000000';
+    }
     return this.pageBackgroundColor.length > 0
       ? this.pageBackgroundColor
       : AppTheme.colors.background;
   }
 
   private getResolvedTitleBarBackgroundColor(): string {
+    // 无系统标题栏时保持透明，避免盖住页面装饰（对齐 RN headerTransparent / headerShown:false）
+    if (!this.showTitleBar) {
+      return '#00000000';
+    }
     return this.titleBarBackgroundColor.length > 0
       ? this.titleBarBackgroundColor
       : AppTheme.colors.surface;
@@ -196,10 +205,14 @@ export struct SystemNavPage {
   }
 
   build() {
-    if (this.showAction) {
-      HdsNavigation() {
-        this.buildPageContent()
+    Stack({ alignContent: Alignment.TopStart }) {
+      if (this.showPageDecoration) {
+        PageBackgroundDecoration()
       }
+      if (this.showAction) {
+        HdsNavigation() {
+          this.buildPageContent()
+        }
       // 默认 Auto 会在宽屏自动 Split，右侧出现空内容区；强制 Stack 保持单栏全宽
       .mode(NavigationMode.Stack)
       .titleMode(HdsNavigationTitleMode.MINI)
@@ -210,7 +223,7 @@ export struct SystemNavPage {
         avoidLayoutSafeArea: true,
         style: {
           scrollEffectOpts: {
-            enableScrollEffect: true,
+            enableScrollEffect: this.showTitleBar,
             scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
             blurEffectiveStartOffset: LengthMetrics.vp(0),
             blurEffectiveEndOffset: LengthMetrics.vp(18)
@@ -264,10 +277,10 @@ export struct SystemNavPage {
       .backgroundColor(this.getResolvedPageBackgroundColor())
       .width('100%')
       .height('100%')
-    } else {
-      HdsNavigation() {
-        this.buildPageContent()
-      }
+      } else {
+        HdsNavigation() {
+          this.buildPageContent()
+        }
       // 默认 Auto 会在宽屏自动 Split，右侧出现空内容区；强制 Stack 保持单栏全宽
       .mode(NavigationMode.Stack)
       .titleMode(HdsNavigationTitleMode.MINI)
@@ -278,7 +291,7 @@ export struct SystemNavPage {
         avoidLayoutSafeArea: true,
         style: {
           scrollEffectOpts: {
-            enableScrollEffect: true,
+            enableScrollEffect: this.showTitleBar,
             scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
             blurEffectiveStartOffset: LengthMetrics.vp(0),
             blurEffectiveEndOffset: LengthMetrics.vp(23)
@@ -317,6 +330,9 @@ export struct SystemNavPage {
       .backgroundColor(this.getResolvedPageBackgroundColor())
       .width('100%')
       .height('100%')
+      }
     }
+    .width('100%')
+    .height('100%')
   }
 }

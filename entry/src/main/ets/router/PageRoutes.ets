@@ -26,7 +26,7 @@ export class PageRoutes {
   static readonly CertificatePreview: string = 'pages/certificate/CertificatePreviewPage';
   static readonly Settings: string = 'pages/settings/SettingsPage';
   static readonly Permission: string = 'pages/settings/PermissionPage';
-  static readonly CycleGuard: string = 'pages/settings/CycleGuardPage';
+  static readonly CycleGuard: string = 'pages/tabs/CycleGuardDetailPage';
   static readonly CycleGuardEdit: string = 'pages/settings/CycleGuardPage';
   static readonly PrivacyPolicy: string = 'pages/settings/PrivacyPolicyPage';
   static readonly UserAgreement: string = 'pages/settings/UserAgreementPage';
@@ -64,18 +64,41 @@ export function pushRoute(url: string): void {
   });
 }
 
+export function pushPlanAddFromPreset(
+  presetName: string,
+  presetStart: string,
+  presetEnd: string,
+  presetRepeat: string,
+): void {
+  const params: Record<string, string> = {};
+  params['presetName'] = presetName;
+  params['presetStart'] = presetStart;
+  params['presetEnd'] = presetEnd;
+  params['presetRepeat'] = presetRepeat;
+  router.pushUrl({
+    url: PageRoutes.PlanAdd,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushPlanAddFromPreset', error);
+  });
+}
+
 export function pushQuickStart(
   title: string = '',
   minutes: number = 0,
-  fromOnboarding: boolean = false
+  fromOnboarding: boolean = false,
+  delayMinutes: number = 0,
 ): void {
+  const params: Record<string, string> = {};
+  params['title'] = title;
+  params['minute'] = String(minutes);
+  params['from_onboarding'] = fromOnboarding ? '1' : '0';
+  if (delayMinutes > 0) {
+    params['delay'] = String(delayMinutes);
+  }
   router.pushUrl({
     url: PageRoutes.QuickStart,
-    params: {
-      title: title,
-      minute: String(minutes),
-      from_onboarding: fromOnboarding ? '1' : '0'
-    }
+    params: params,
   }).catch((error: BusinessError) => {
     logRouteError('pushQuickStart', error);
   });
@@ -169,6 +192,7 @@ export function returnToMainTab(tab: MainTabKey = 'focus'): void {
       router.back({ url: PageRoutes.FocusHome });
       return;
     }
+    return;
   }
   router.replaceUrl({ url: PageRoutes.FocusHome }).then(() => {
     try {
@@ -203,6 +227,12 @@ function isMainTabInStack(): boolean {
 /** 从二级页返回主 Tab，并打开指定 Tab */
 export function navigateToMainTab(tab: MainTabKey = 'plans'): void {
   returnToMainTab(tab);
+}
+
+export function openScheduledTaskTabOnce(): void {
+  AppStorage.setOrCreate(StoreKeys.OpenScheduledTaskTabOnce, true);
+  AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 1);
+  returnToMainTab('plans');
 }
 
 /** 保存快捷任务后跳任务 Tab 并定位快捷子 Tab */

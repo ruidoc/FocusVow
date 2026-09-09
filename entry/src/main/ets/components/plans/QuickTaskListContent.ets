@@ -85,25 +85,6 @@ export struct QuickTaskListContent {
     pushRoute(PageRoutes.QuickTaskDetail);
   }
 
-  private confirmRemove(task: QuickTask): void {
-    this.getUIContext().showAlertDialog({
-      title: '删除快捷任务',
-      message: '删除后不会影响正在进行的专注。',
-      primaryButton: {
-        value: '删除',
-        fontColor: AppTheme.colors.danger,
-        action: () => {
-          void QuickTaskStore.removeTask(task.id);
-        }
-      },
-      secondaryButton: {
-        value: '取消',
-        action: () => {
-        }
-      }
-    });
-  }
-
   private async handleStart(task: QuickTask): Promise<void> {
     if (this.startingTaskId.length > 0) {
       return;
@@ -122,6 +103,65 @@ export struct QuickTaskListContent {
 
   private handleCreate(): void {
     this.onCreateTask?.();
+  }
+
+  private isInstantTask(task: QuickTask): boolean {
+    return task.delay_min <= 0;
+  }
+
+  private getInstantTasks(): QuickTask[] {
+    const result: QuickTask[] = [];
+    for (let i = 0; i < this.tasks.length; i++) {
+      if (this.isInstantTask(this.tasks[i])) {
+        result.push(this.tasks[i]);
+      }
+    }
+    return result;
+  }
+
+  private getDelayedTasks(): QuickTask[] {
+    const result: QuickTask[] = [];
+    for (let i = 0; i < this.tasks.length; i++) {
+      if (!this.isInstantTask(this.tasks[i])) {
+        result.push(this.tasks[i]);
+      }
+    }
+    return result;
+  }
+
+  @Builder
+  private buildSectionTitle(title: string): void {
+    Text(title)
+      .fontSize(14)
+      .fontColor(AppTheme.colors.textSecondary)
+      .width('100%')
+      .margin({ left: 4, bottom: 10 })
+  }
+
+  @Builder
+  private buildTaskSection(title: string, sectionTasks: QuickTask[], withTopGap: boolean): void {
+    if (sectionTasks.length === 0) {
+      Column()
+    } else {
+      Column({ space: 0 }) {
+        this.buildSectionTitle(title)
+        ForEach(sectionTasks, (task: QuickTask, index: number) => {
+          this.buildTaskCard(task, index, sectionTasks.length)
+        }, (task: QuickTask) => task.id)
+      }
+      .width('100%')
+      .margin({ top: withTopGap ? 20 : 0 })
+    }
+  }
+
+  @Builder
+  private buildGroupedTaskList(): void {
+    Column({ space: 0 }) {
+      this.buildTaskSection('即时任务', this.getInstantTasks(), false)
+      this.buildTaskSection('延时任务', this.getDelayedTasks(), this.getInstantTasks().length > 0)
+    }
+    .width('100%')
+    .padding({ top: 16, bottom: 16 })
   }
 
   @Builder
@@ -168,7 +208,7 @@ export struct QuickTaskListContent {
   }
 
   @Builder
-  private buildTaskCard(task: QuickTask, index: number): void {
+  private buildTaskCard(task: QuickTask, index: number, total: number): void {
     Row() {
       Column({ space: 10 }) {
         Text(task.title.length > 0 ? task.title : '快捷任务')
@@ -215,18 +255,12 @@ export struct QuickTaskListContent {
     }
     .width('100%')
     .padding(16)
-    .margin({ bottom: index < this.tasks.length - 1 ? 12 : 0 })
+    .margin({ bottom: index < total - 1 ? 14 : 0 })
     .backgroundColor(AppTheme.colors.surface)
     .borderRadius(16)
     .onClick(() => {
       this.openDetail(task);
     })
-    .gesture(
-      LongPressGesture({ repeat: false })
-        .onAction(() => {
-          this.confirmRemove(task);
-        })
-    )
   }
 
   build() {
@@ -259,13 +293,7 @@ export struct QuickTaskListContent {
           } else if (this.tasks.length === 0) {
             this.buildEmptyState()
           } else {
-            Column() {
-              ForEach(this.tasks, (task: QuickTask, index: number) => {
-                this.buildTaskCard(task, index)
-              }, (task: QuickTask) => task.id)
-            }
-            .width('100%')
-            .padding({ top: 16, bottom: 16 })
+            this.buildGroupedTaskList()
           }
         }
         .width('100%')

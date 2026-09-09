@@ -4,7 +4,7 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { minutesToHours } from '../../models/ActiveLockModel';
 import { filterSessionAppsForHarmony } from '../../models/DuoModel';
-import { QuickTask, getStartDelayLabel } from '../../models/QuickTaskModel';
+import { QuickTask, startWhenLabel } from '../../models/QuickTaskModel';
 import { PageRoutes, backRoute, navigateToMainTab, pushRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { QuickTaskStore } from '../../stores/QuickTaskStore';
@@ -132,7 +132,7 @@ struct QuickTaskDetailPage {
   }
 
   private getStartDelayText(): string {
-    return getStartDelayLabel(this.task !== null ? this.task.delay_min : 0);
+    return startWhenLabel(this.task !== null ? this.task.delay_min : 0);
   }
 
   private getAppCountLabel(): string {

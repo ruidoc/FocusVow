@@ -217,10 +217,9 @@ struct LoginPage {
         Column() {
           Button() {
             Row({ space: 8 }) {
-              Image($r('app.media.mail'))
-                .width(20)
-                .height(20)
-                .objectFit(ImageFit.Contain)
+              SymbolGlyph($r('sys.symbol.envelope'))
+                .fontSize(20)
+                .fontColor([AppTheme.colors.textPrimary])
               Text(this.loading ? '请稍候...' : '邮箱登录')
                 .fontSize(16)
                 .fontWeight(FontWeight.Bold)

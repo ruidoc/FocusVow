@@ -10,6 +10,7 @@ export class StoreKeys {
   static readonly SettingsStatusMessage: string = 'settings.statusMessage';
   static readonly CycleGuardEnabled: string = 'cycleGuard.enabled';
   static readonly CycleGuardQuotaMinutes: string = 'cycleGuard.quotaMinutes';
+  static readonly CycleGuardLockMinutes: string = 'cycleGuard.lockMinutes';
   static readonly CycleGuardSelectedTokens: string = 'cycleGuard.selectedTokens';
   static readonly CycleGuardSelectedAppCount: string = 'cycleGuard.selectedAppCount';
   static readonly CycleGuardPhase: string = 'cycleGuard.phase';
@@ -55,6 +56,8 @@ export class StoreKeys {
   static readonly QuickTaskCurrentId: string = 'quickTask.currentId';
   static readonly TasksSubTabIndex: string = 'tasks.subTab.index';
   static readonly OpenQuickTaskTabOnce: string = 'tasks.openQuickTabOnce';
+  static readonly OpenScheduledTaskTabOnce: string = 'tasks.openScheduledTabOnce';
+  static readonly CycleGuardConfigured: string = 'cycleGuard.configured';
   static readonly NeedsScheduledGuardSync: string = 'tasks.needsScheduledGuardSync';
   static readonly AwaitingScheduledGuardSyncCheck: string = 'tasks.awaitingScheduledGuardSyncCheck';
   static readonly StatsDetailPeriod: string = 'stats.detail.period';

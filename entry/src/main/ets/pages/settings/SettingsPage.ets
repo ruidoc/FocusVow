@@ -117,9 +117,14 @@ struct SettingsPage {
 
       Toggle({ type: ToggleType.Switch, isOn: this.themeMode === 'dark' })
         .selectedColor(AppTheme.colors.primary)
+        .key(`dark-mode-${this.themeMode}`)
         .onChange((isOn: boolean) => {
+          const mode = isOn ? 'dark' : 'light';
+          if (ThemeStore.getMode() === mode) {
+            return;
+          }
           const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-          ThemeStore.setMode(hostContext, isOn ? 'dark' : 'light');
+          ThemeStore.setMode(hostContext, mode);
         })
     }
     .width('100%')

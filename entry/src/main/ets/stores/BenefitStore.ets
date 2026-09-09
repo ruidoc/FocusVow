@@ -33,6 +33,11 @@ export class BenefitStore {
     bootstrapStores();
   }
 
+  static isMemberActive(): boolean {
+    const state = BenefitStore.getState();
+    return state.isSubscribed || state.membershipStatus === 'active';
+  }
+
   static getState(): BenefitState {
     bootstrapStores();
     return {

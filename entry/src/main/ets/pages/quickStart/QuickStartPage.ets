@@ -4,21 +4,22 @@ import { QuickFocusOptions } from "../../models/ActiveLockModel";
 import { QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
 import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
+import { FocusDurationCard } from "../../components/focus/FocusDurationCard";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
-import { ApiConfig } from "../../config/ApiConfig";
 import { backRoute, openQuickTaskTabOnce, returnToMainTab } from "../../router/PageRoutes";
 import {
   applyScreenRestriction,
   chooseRestrictedApps,
-  requestScreenTimeAuthorization,
 } from "../../services/ScreenTimeService";
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
-import { ensureDailyFocusQuota } from "../../services/DailyFocusQuotaService";
+import { ensureTaskPermission } from "../../utils/TaskPermissionUtil";
 import { AnalyticsService } from "../../services/AnalyticsService";
 import {
-  hasPendingQuickStart,
   getQuickStartDelayOptions,
+  getStartDelayHint,
+  getStartDelayPickerLabel,
+  hasPendingQuickStart,
   schedulePendingQuickStart,
 } from "../../services/PendingQuickStartService";
 import { LockStore } from "../../stores/LockStore";
@@ -37,9 +38,8 @@ import {
   shouldShowOnboardingActivationBanner,
   startMembershipUrgencyCountdown,
 } from "../../utils/OnboardingMembershipUtil";
-import {
-  FIRST_FOCUS_TITLE,
-} from "../../services/FirstFocusPromptService";
+import { ensureQuickTaskQuota, ensureDelayStartAllowed, normalizeDelayMinutes } from "../../services/ProQuotaService";
+import { FIRST_FOCUS_TITLE } from "../../services/FirstFocusPromptService";
 
 bootstrapStores();
 
@@ -47,6 +47,7 @@ interface QuickStartRouteParams {
   title?: string;
   minute?: string;
   from_onboarding?: string;
+  delay?: string;
 }
 
 @Entry
@@ -62,6 +63,7 @@ struct QuickStartPage {
   @State title: string = "";
   @State saveToQuickTask: boolean = false;
   @State private membershipUiTick: number = 0;
+  private isDelayedEntry: boolean = false;
   private fromOnboarding: boolean = false;
   private focusStarted: boolean = false;
   private membershipTimerId: number = -1;
@@ -77,9 +79,8 @@ struct QuickStartPage {
     LockStore.hydrate(hostContext);
     const params = router.getParams() as QuickStartRouteParams;
     if (params) {
-      this.fromOnboarding =
-        params.from_onboarding === '1' || params.from_onboarding === 'true';
-      const presetTitle = String(params.title ?? '').trim();
+      this.fromOnboarding = params.from_onboarding === "1" || params.from_onboarding === "true";
+      const presetTitle = String(params.title ?? "").trim();
       if (presetTitle.length > 0) {
         this.title = presetTitle;
       } else if (this.shouldShowMembershipTip()) {
@@ -98,6 +99,17 @@ struct QuickStartPage {
           LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
         }
       }
+      const presetDelayRaw = Number(params.delay ?? 0);
+      if (presetDelayRaw > 0) {
+        this.isDelayedEntry = true;
+        const delay = normalizeDelayMinutes(presetDelayRaw);
+        const options = getQuickStartDelayOptions(true);
+        if (options.indexOf(delay) >= 0) {
+          this.startDelayMinutes = delay;
+        } else if (options.length > 0) {
+          this.startDelayMinutes = options[0];
+        }
+      }
     } else {
       if (this.shouldShowMembershipTip()) {
         this.title = FIRST_FOCUS_TITLE;
@@ -110,12 +122,12 @@ struct QuickStartPage {
       }
     }
     this.focusStarted = false;
-    AnalyticsService.trackEvent('quick_start_viewed', {
-      'is_first_focus': getFocusCount(hostContext) === 0,
-      'from_onboarding': this.fromOnboarding,
-      'entry_source': this.fromOnboarding ? 'onboarding' : 'quick_start',
-      'screen_name': 'quick_start'
-    });
+    const viewedProps: Record<string, Object> = {};
+    viewedProps["is_first_focus"] = getFocusCount(hostContext) === 0;
+    viewedProps["from_onboarding"] = this.fromOnboarding;
+    viewedProps["entry_source"] = this.fromOnboarding ? "onboarding" : "quick_start";
+    viewedProps["screen_name"] = "quick_start";
+    AnalyticsService.trackEvent("quick_start_viewed", viewedProps);
     this.startMembershipUiTimer();
   }
 
@@ -166,8 +178,10 @@ struct QuickStartPage {
   private shouldShowMembershipTip(): boolean {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     expireMembershipUrgencyIfNeeded(hostContext);
-    return (this.fromOnboarding || shouldShowOnboardingActivationBanner(hostContext)) &&
-      isOnboardingMembershipBenefitActive(hostContext);
+    return (
+      (this.fromOnboarding || shouldShowOnboardingActivationBanner(hostContext)) &&
+      isOnboardingMembershipBenefitActive(hostContext)
+    );
   }
 
   private isGuestMembershipPath(): boolean {
@@ -181,49 +195,33 @@ struct QuickStartPage {
     return Math.max(this.durationMin, Math.min(this.durationMax, d));
   }
 
-  private durationLabel(): string {
-    if (this.durationMinutes >= 60) {
-      const h = Math.floor(this.durationMinutes / 60);
-      const m = this.durationMinutes % 60;
-      if (m === 0) {
-        return `${h} 小时`;
-      }
-      return `${h} 小时 ${m} 分钟`;
-    }
-    return `${this.durationMinutes} 分钟`;
-  }
-
   private appCardTitle(): string {
-    return this.mode === "shield" ? "要锁定的应用" : "要放行的应用";
+    return this.mode === "shield" ? "要锁定的应用" : "允许使用的应用";
   }
 
-  private durationCardTitle(): string {
-    if (this.timerMode === "countup") {
-      return "最短时长";
-    }
-    return this.mode === "shield" ? "锁定时长" : "放行时长";
+  private getPageTitle(): string {
+    return this.isDelayedEntry ? "延时专注" : "立即专注";
+  }
+
+  private shouldShowStartDelayCard(): boolean {
+    return !this.isMembershipSimplified() && this.isDelayedEntry;
+  }
+
+  private getStartDelayOptions(): number[] {
+    return getQuickStartDelayOptions(this.isDelayedEntry);
   }
 
   private toastError(message: string): void {
     showErrorToast(message, this.getUIContext());
   }
 
-  private async authorize(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const result = await requestScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, result.ok, result.message);
-    if (!result.ok) {
-      this.toastError(result.message);
-    }
-  }
-
   private async chooseApps(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!this.hasAuthorized) {
-      await this.authorize();
-      if (!SettingsStore.getState().hasAuthorized) {
-        return;
-      }
+    if (!(await ensureTaskPermission(hostContext, this.getUIContext(), {
+      entry_source: this.fromOnboarding ? 'onboarding' : 'quick_start',
+      screen_name: 'quick_start',
+    }))) {
+      return;
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     if (result.data) {
@@ -235,6 +233,14 @@ struct QuickStartPage {
 
   private async startFocus(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const uiContext = this.getUIContext();
+
+    if (!(await ensureTaskPermission(hostContext, uiContext, {
+      entry_source: this.fromOnboarding ? 'onboarding' : 'quick_start',
+      screen_name: 'quick_start',
+    }))) {
+      return;
+    }
 
     if (this.saveToQuickTask) {
       if (!UserStore.isLoggedIn()) {
@@ -247,6 +253,9 @@ struct QuickStartPage {
       }
       if (QuickTaskStore.isDirty()) {
         await QuickTaskStore.loadAll();
+      }
+      if (!ensureQuickTaskQuota()) {
+        return;
       }
       if (QuickTaskStore.titleExists(this.title.trim())) {
         showErrorToast("已有同名快捷任务，请修改名称", this.getUIContext());
@@ -264,9 +273,10 @@ struct QuickStartPage {
       try {
         const response = await QuickTaskStore.createTask(payload);
         if (response.statusCode !== 200) {
-          const errMsg = typeof response.message === 'string' && response.message.length > 0
-            ? response.message
-            : "保存快捷任务失败";
+          const errMsg =
+            typeof response.message === "string" && response.message.length > 0
+              ? response.message
+              : "保存快捷任务失败";
           showErrorToast(errMsg, this.getUIContext());
           return;
         }
@@ -290,23 +300,15 @@ struct QuickStartPage {
       return;
     }
 
-    const needMinutes = this.timerMode === 'countup' ? 0 : this.durationMinutes;
-    if (!(await ensureDailyFocusQuota(this.getUIContext(), needMinutes))) {
-      return;
-    }
     if (LockStore.isLocked()) {
       this.toastError("当前已有进行中的锁定，请先回首页结束后再开始新的专注");
       return;
     }
 
-    if (!this.hasAuthorized) {
-      await this.authorize();
-      if (!SettingsStore.getState().hasAuthorized) {
+    if (this.startDelayMinutes > 0) {
+      if (!ensureDelayStartAllowed(hostContext, this.startDelayMinutes)) {
         return;
       }
-    }
-
-    if (this.startDelayMinutes > 0) {
       clearMembershipUrgencyCountdown(hostContext);
       const scheduled = await schedulePendingQuickStart(hostContext, {
         title: this.title.trim(),
@@ -317,7 +319,7 @@ struct QuickStartPage {
         fromOnboarding: this.fromOnboarding,
       });
       if (!scheduled) {
-        this.toastError("预约失败，请检查健康使用设备权限");
+        this.toastError("预约失败，请稍后重试");
         return;
       }
       showToast(`${this.startDelayMinutes} 分钟后开始专注`, this.getUIContext());
@@ -349,14 +351,14 @@ struct QuickStartPage {
       this.mode,
       focusOptions,
     );
-    AnalyticsService.trackEvent('session_started', {
-      'plan_id': LockStore.getState().planId,
-      'focus_type': 'once',
-      'duration_minutes': this.durationMinutes,
-      'mode': this.mode,
-      'entry_source': this.fromOnboarding ? 'onboarding' : 'quick_start',
-      'is_first_focus': this.fromOnboarding
-    });
+    const sessionProps: Record<string, Object> = {};
+    sessionProps["plan_id"] = LockStore.getState().planId;
+    sessionProps["focus_type"] = "once";
+    sessionProps["duration_minutes"] = this.durationMinutes;
+    sessionProps["mode"] = this.mode;
+    sessionProps["entry_source"] = this.fromOnboarding ? "onboarding" : "quick_start";
+    sessionProps["is_first_focus"] = this.fromOnboarding;
+    AnalyticsService.trackEvent("session_started", sessionProps);
     returnToMainTab("focus");
   }
 
@@ -367,29 +369,16 @@ struct QuickStartPage {
     LockStore.setQuickFocusDurationMinutes(hostContext, next);
   }
 
-  private getStartDelayPickerLabel(minutes: number): string {
-    if (minutes === 0) {
-      return "立即";
-    }
-    if (minutes === 1 && ApiConfig.isDevEnvironment()) {
-      return "1 分钟";
-    }
-    if (minutes === 60) {
-      return "1 小时后";
-    }
-    return `${minutes} 分钟后`;
-  }
-
   private getStartDelayPickerLabels(): string[] {
     const labels: string[] = [];
-    getQuickStartDelayOptions().forEach((minutes: number) => {
-      labels.push(this.getStartDelayPickerLabel(minutes));
+    this.getStartDelayOptions().forEach((minutes: number) => {
+      labels.push(getStartDelayPickerLabel(minutes));
     });
     return labels;
   }
 
   private getStartDelayPickerSelectedIndex(): number {
-    const options = getQuickStartDelayOptions();
+    const options = this.getStartDelayOptions();
     const idx = options.indexOf(this.startDelayMinutes);
     return idx >= 0 ? idx : 0;
   }
@@ -411,7 +400,7 @@ struct QuickStartPage {
       canLoop: false,
       onAccept: (value: TextPickerResult) => {
         const index = this.resolvePickerIndex(value.index);
-        const options = getQuickStartDelayOptions();
+        const options = this.getStartDelayOptions();
         if (index >= 0 && index < options.length) {
           this.startDelayMinutes = options[index];
         }
@@ -428,12 +417,10 @@ struct QuickStartPage {
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
-
-        Text(this.getStartDelayPickerLabel(this.startDelayMinutes))
+        Text(getStartDelayPickerLabel(this.startDelayMinutes))
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
           .margin({ right: 4 })
-
         SymbolGlyph($r("sys.symbol.chevron_right"))
           .fontSize(14)
           .fontColor([AppTheme.colors.textMuted])
@@ -445,17 +432,16 @@ struct QuickStartPage {
       })
 
       if (this.startDelayMinutes > 0) {
-        Text(`可以玩一会手机，${this.startDelayMinutes}分钟后自动进入专注`)
+        Text(getStartDelayHint(this.startDelayMinutes))
           .fontSize(13)
           .fontColor(AppTheme.colors.warning)
-          .width("100%")
+          .width("100%");
       }
     }
     .width("100%")
-    .padding(20)
+    .padding(16)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(AppTheme.radius.lg);
   }
 
@@ -536,91 +522,39 @@ struct QuickStartPage {
       }
     }
     .width("100%")
-    .padding(20)
+    .padding(16)
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .borderRadius(AppTheme.radius.lg);
-  }
-
-  @Builder
-  buildDurationCard(): void {
-    Column({ space: 16 }) {
-      Text(this.durationCardTitle())
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width("100%")
-
-      if (this.timerMode === "countup") {
-        Text("满最短时长后可随时正常结束。")
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width("100%");
-      }
-      Text(this.durationLabel())
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.primary)
-        .width("100%")
-        .textAlign(TextAlign.Center)
-      Slider({
-        value: this.durationMinutes,
-        min: this.durationMin,
-        max: this.durationMax,
-        step: this.durationStep,
-        style: SliderStyle.OutSet,
-      })
-        .width("100%")
-        .blockColor(AppTheme.colors.primary)
-        .trackColor(AppTheme.colors.border)
-        .selectedColor(AppTheme.colors.primary)
-        .showSteps(false)
-        .showTips(false)
-        .onChange((v: number) => {
-          this.onDurationSliderChange(v);
-        })
-      Row() {
-        Text("5 分钟")
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
-        Blank()
-        Text("3 小时")
-          .fontSize(12)
-          .fontColor(AppTheme.colors.textMuted)
-      }.width("100%")
-    }
-    .width("100%")
-    .padding(20)
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor(AppTheme.colors.surface)
-    .border({ width: 1, color: AppTheme.colors.border })
     .borderRadius(AppTheme.radius.lg);
   }
 
   @Builder
   buildMembershipTip(): void {
     Column({ space: 6 }) {
-      Text(this.isGuestMembershipPath()
-        ? '完成本次专注后登录，领取 7 天会员'
-        : '完成本次专注，7 天会员立即到账！')
+      Text(
+        this.isGuestMembershipPath()
+          ? "完成本次专注后登录，领取 7 天会员"
+          : "完成本次专注，7 天会员立即到账！",
+      )
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.accentGreen)
-        .width('100%')
-      Text(this.isGuestMembershipPath()
-        ? '坚持完成锁机专注，登录后本次计入会员'
-        : '开始专注后，大部分APP会被暂时禁用，请坚持完成。')
+        .width("100%")
+      Text(
+        this.isGuestMembershipPath()
+          ? "坚持完成锁机专注，登录后本次计入会员"
+          : "开始专注后，大部分APP会被暂时禁用，请坚持完成。",
+      )
         .fontSize(13)
         .fontColor(AppTheme.colors.textSecondary)
         .lineHeight(20)
-        .width('100%')
+        .width("100%")
     }
-    .width('100%')
+    .width("100%")
     .padding(16)
     .alignItems(HorizontalAlign.Start)
-    .backgroundColor('#ECFDF5')
-    .border({ width: 1, color: 'rgba(16,185,129,0.22)' })
+    .backgroundColor("#ECFDF5")
+    .border({ width: 1, color: "rgba(16,185,129,0.22)" })
     .borderRadius(AppTheme.radius.lg);
   }
 
@@ -640,7 +574,7 @@ struct QuickStartPage {
             },
           })
           Blank()
-        }.width("100%")
+        }.width("100%");
       }
       // 锁定/放行模式切换暂时隐藏
       // this.buildModeSegment()
@@ -656,11 +590,16 @@ struct QuickStartPage {
         })
 
       this.buildAppCard()
-      this.buildDurationCard()
-      if (!this.isMembershipSimplified()) {
-        this.buildStartDelayCard()
+      FocusDurationCard({
+        timerMode: this.timerMode,
+        durationMinutes: this.durationMinutes,
+        onDurationChange: (value: number) => {
+          this.onDurationSliderChange(value);
+        },
+      })
+      if (this.shouldShowStartDelayCard()) {
+        this.buildStartDelayCard();
       }
-
       Column({ space: 6 }) {
         if (!this.isMembershipSimplified()) {
           Row({ space: 4 }) {
@@ -676,14 +615,17 @@ struct QuickStartPage {
               .layoutWeight(1)
           }
           .width("100%")
-          .alignItems(VerticalAlign.Center)
+          .alignItems(VerticalAlign.Center);
         }
-
-        Button(this.isMembershipSimplified()
-          ? "开始专注"
-          : (this.saveToQuickTask
-            ? "保存到快捷任务"
-            : (this.startDelayMinutes > 0 ? "预约开始" : "开始单人专注")))
+        Button(
+          this.isMembershipSimplified()
+            ? "开始专注"
+            : this.saveToQuickTask
+              ? "保存到快捷任务"
+              : this.startDelayMinutes > 0
+                ? "预约开始"
+                : "开始专注",
+        )
           .width("100%")
           .height(52)
           .type(ButtonType.Normal)
@@ -708,7 +650,7 @@ struct QuickStartPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: "单人专注",
+        title: this.getPageTitle(),
         showBack: true,
         usePageScroll: true,
         bottomSpacerHeight: 28,

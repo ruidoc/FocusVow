@@ -4,17 +4,18 @@ import { filterSessionAppsForHarmony } from '../models/DuoModel';
 import { showErrorToast, showToast } from '../common/Toast';
 import { UIContext } from '@kit.ArkUI';
 import { ensureSoloFocusAccess } from './GuestSoloFocusService';
-import { ensureDailyFocusQuota } from './DailyFocusQuotaService';
 import {
   getQuickStartDelayOptions,
   hasPendingQuickStart,
   schedulePendingQuickStart,
 } from './PendingQuickStartService';
 import { applyScreenRestriction } from './ScreenTimeService';
+import { ensureTaskPermission } from '../utils/TaskPermissionUtil';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { QuickFocusOptions } from '../models/ActiveLockModel';
 import { AnalyticsService } from './AnalyticsService';
+import { ensureDelayStartAllowed } from './ProQuotaService';
 
 function resolveDelayMinutes(delayMin: number): number {
   const options = getQuickStartDelayOptions();
@@ -37,6 +38,14 @@ export async function startQuickTask(
   if (!ensureSoloFocusAccess(context)) {
     return false;
   }
+
+  if (!(await ensureTaskPermission(context, uiContext, {
+    entry_source: 'quick_task',
+    screen_name: 'plans',
+  }))) {
+    return false;
+  }
+
   if (LockStore.isLocked()) {
     showErrorToast('已有专注任务正在进行中', uiContext);
     return false;
@@ -56,12 +65,11 @@ export async function startQuickTask(
 
   const delayMinutes = resolveDelayMinutes(task.delay_min);
   const title = task.title.trim().length > 0 ? task.title.trim() : '快捷任务';
-  const needMinutes = task.timer_mode === 'countup' ? 0 : task.duration_min;
-  if (!(await ensureDailyFocusQuota(uiContext, needMinutes))) {
-    return false;
-  }
 
   if (delayMinutes > 0) {
+    if (!ensureDelayStartAllowed(context, delayMinutes)) {
+      return false;
+    }
     const scheduled = await schedulePendingQuickStart(context, {
       title: title,
       durationMinutes: task.duration_min,
@@ -71,7 +79,7 @@ export async function startQuickTask(
       fromOnboarding: false,
     });
     if (!scheduled) {
-      showErrorToast('预约失败，请检查健康使用设备权限', uiContext);
+      showErrorToast('预约失败，请稍后重试', uiContext);
       return false;
     }
     showToast(`${delayMinutes} 分钟后开始专注`, uiContext);

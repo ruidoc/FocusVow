@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppTheme, resolveContentMaxWidthVp } from '../../constants/Theme';
 import { PageHeader } from './PageHeader';
+import { PageBackgroundDecoration } from './PageBackgroundDecoration';
 
 type PageHeaderMode = 'default' | 'custom' | 'none';
 
@@ -95,32 +96,7 @@ export struct PageScaffold {
 
   @Builder
   private buildDecoration(): void {
-    Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(AppTheme.colors.background)
-
-      Column()
-        .width(220)
-        .height(220)
-        .borderRadius(110)
-        .backgroundColor(AppTheme.colors.primarySoft)
-        .opacity(0.9)
-        .blur(36)
-        .position({ x: '-12%', y: '-6%' })
-
-      Column()
-        .width(180)
-        .height(180)
-        .borderRadius(90)
-        .backgroundColor(AppTheme.colors.primarySoft)
-        .opacity(0.65)
-        .blur(28)
-        .position({ x: '66%', y: '-2%' })
-    }
-    .width('100%')
-    .height('100%')
+    PageBackgroundDecoration()
   }
 
   @Builder
@@ -208,7 +184,7 @@ export struct PageScaffold {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(AppTheme.colors.background)
+    .backgroundColor(this.showDecoration ? '#00000000' : AppTheme.colors.background)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 }

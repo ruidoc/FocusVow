@@ -24,7 +24,9 @@ export class CycleGuardStore {
     const nextState = loadPersistedCycleGuardState(context) ?? createDefaultCycleGuardState();
 
     syncAppStorageValue(StoreKeys.CycleGuardEnabled, nextState.enabled);
+    syncAppStorageValue(StoreKeys.CycleGuardConfigured, nextState.configured);
     syncAppStorageValue(StoreKeys.CycleGuardQuotaMinutes, nextState.quotaMinutes);
+    syncAppStorageValue(StoreKeys.CycleGuardLockMinutes, nextState.lockMinutes);
     syncAppStorageValue(StoreKeys.CycleGuardSelectedTokens, nextState.selectedTokens);
     syncAppStorageValue(StoreKeys.CycleGuardSelectedAppCount, nextState.selectedAppCount);
     syncAppStorageValue(StoreKeys.CycleGuardPhase, nextState.phase);
@@ -35,7 +37,9 @@ export class CycleGuardStore {
     bootstrapStores();
     return {
       enabled: AppStorage.get<boolean>(StoreKeys.CycleGuardEnabled) ?? false,
+      configured: AppStorage.get<boolean>(StoreKeys.CycleGuardConfigured) ?? false,
       quotaMinutes: AppStorage.get<number>(StoreKeys.CycleGuardQuotaMinutes) ?? 60,
+      lockMinutes: AppStorage.get<number>(StoreKeys.CycleGuardLockMinutes) ?? 25,
       selectedTokens: AppStorage.get<string[]>(StoreKeys.CycleGuardSelectedTokens) ?? [],
       selectedAppCount: AppStorage.get<number>(StoreKeys.CycleGuardSelectedAppCount) ?? 0,
       phase: (AppStorage.get<string>(StoreKeys.CycleGuardPhase) ?? 'idle') as CycleGuardPhase,
@@ -46,6 +50,12 @@ export class CycleGuardStore {
   static updateQuotaMinutes(context: common.Context, quotaMinutes: number): void {
     bootstrapStores();
     syncAppStorageValue(StoreKeys.CycleGuardQuotaMinutes, quotaMinutes);
+    persistCurrentState(context);
+  }
+
+  static updateLockMinutes(context: common.Context, lockMinutes: number): void {
+    bootstrapStores();
+    syncAppStorageValue(StoreKeys.CycleGuardLockMinutes, lockMinutes);
     persistCurrentState(context);
   }
 
@@ -67,6 +77,12 @@ export class CycleGuardStore {
     syncAppStorageValue(StoreKeys.CycleGuardEnabled, enabled);
     syncAppStorageValue(StoreKeys.CycleGuardPhase, phase);
     syncAppStorageValue(StoreKeys.CycleGuardStatusMessage, statusMessage);
+    persistCurrentState(context);
+  }
+
+  static markConfigured(context: common.Context): void {
+    bootstrapStores();
+    syncAppStorageValue(StoreKeys.CycleGuardConfigured, true);
     persistCurrentState(context);
   }
 }

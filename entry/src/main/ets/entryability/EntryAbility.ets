@@ -1,4 +1,4 @@
-import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, UIAbility, Want } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
@@ -133,5 +133,9 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
     DuoBgSyncService.ensure(this.context);
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    ThemeStore.onSystemConfiguration(newConfig);
   }
 }

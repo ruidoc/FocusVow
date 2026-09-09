@@ -91,6 +91,14 @@ export function consumeOpenQuickTaskTabOnce(): boolean {
   return true;
 }
 
+export function consumeOpenScheduledTaskTabOnce(): boolean {
+  if (AppStorage.get<boolean>(StoreKeys.OpenScheduledTaskTabOnce) !== true) {
+    return false;
+  }
+  AppStorage.setOrCreate(StoreKeys.OpenScheduledTaskTabOnce, false);
+  return true;
+}
+
 export function scheduledSessionStrategyName(sessionId: string): string {
   return `session_${sessionId}`;
 }

@@ -5,6 +5,7 @@ import { FeatureFlagKeys } from '../config/FeatureFlags';
 import { PageRoutes } from '../router/PageRoutes';
 import { HttpService } from '../services/HttpService';
 import { readStoredString, writeStoredString } from '../services/PreferencesService';
+import { openVipPurchase as navigateToVipPurchase, OpenVipPurchaseOptions } from '../utils/PaywallNavigationUtil';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
@@ -92,15 +93,8 @@ export class FeatureFlagStore {
     return FeatureFlagStore.isPromoVipOn() ? PageRoutes.Paywall : PageRoutes.Redeem;
   }
 
-  static openVipPurchase(entrySource: string): void {
-    router.pushUrl({
-      url: FeatureFlagStore.getVipPurchaseRoute(),
-      params: {
-        'entry_source': entrySource,
-      },
-    }).catch((error: Error) => {
-      console.warn(`[FeatureFlag] openVipPurchase failed: ${String(error)}`);
-    });
+  static openVipPurchase(entrySource: string, options?: OpenVipPurchaseOptions): void {
+    navigateToVipPurchase(entrySource, options);
   }
 
   static openVipEntry(entrySource: string, isMemberActive: boolean): void {

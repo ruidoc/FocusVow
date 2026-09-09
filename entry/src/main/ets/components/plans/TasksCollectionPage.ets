@@ -8,11 +8,14 @@ import { TasksTabTitleBar } from './TasksTabTitleBar';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { UserStore } from '../../stores/UserStore';
+import { QuickTaskStore } from '../../stores/QuickTaskStore';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
+import { ensureQuickTaskQuota, ensureScheduledTaskQuota } from '../../services/ProQuotaService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import {
   consumeOpenQuickTaskTabOnce,
+  consumeOpenScheduledTaskTabOnce,
   hydrateScheduledGuardSyncFlags,
   needsScheduledGuardSync
 } from '../../services/ScheduledCovenantService';
@@ -35,6 +38,12 @@ export struct TasksCollectionPage {
   private scheduledScroller: Scroller = new Scroller();
   @State private quickScrollerReady: boolean = false;
   @State private scheduledScrollerReady: boolean = false;
+  @StorageLink(StoreKeys.OpenScheduledTaskTabOnce)
+  @Watch('onOpenScheduledTabOnceChanged')
+  private openScheduledTabOnce: boolean = false;
+  @StorageLink(StoreKeys.TasksSubTabIndex)
+  @Watch('onTasksSubTabIndexChanged')
+  private tasksSubTabIndex: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -46,17 +55,36 @@ export struct TasksCollectionPage {
     const initialTab = this.resolveInitialTabIndex(hostContext);
     this.subTabIndex = initialTab;
     this.tabProgress = initialTab;
+    this.swiperController.changeIndex(initialTab, false);
+  }
+
+  private onTasksSubTabIndexChanged(): void {
+    const next = AppStorage.get<number>(StoreKeys.TasksSubTabIndex) ?? 0;
+    if (next !== 0 && next !== 1) {
+      return;
+    }
+    this.goToTab(next, false);
   }
 
   private resolveInitialTabIndex(context: common.UIAbilityContext): number {
     if (consumeOpenQuickTaskTabOnce()) {
       return 0;
     }
+    if (consumeOpenScheduledTaskTabOnce()) {
+      return 1;
+    }
     if (needsScheduledGuardSync(context)) {
       return 1;
     }
     const saved = AppStorage.get<number>(StoreKeys.TasksSubTabIndex) ?? 0;
     return saved === 1 ? 1 : 0;
+  }
+
+  private onOpenScheduledTabOnceChanged(): void {
+    if (!consumeOpenScheduledTaskTabOnce()) {
+      return;
+    }
+    this.goToTab(1, false);
   }
 
   private onIsPageActiveChanged(): void {
@@ -66,6 +94,10 @@ export struct TasksCollectionPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (consumeOpenQuickTaskTabOnce()) {
       this.goToTab(0, false);
+      return;
+    }
+    if (consumeOpenScheduledTaskTabOnce()) {
+      this.goToTab(1, false);
       return;
     }
     this.goToScheduledIfNeeded(hostContext);
@@ -112,11 +144,9 @@ export struct TasksCollectionPage {
   }
 
   private goToTab(index: number, animate: boolean = true): void {
-    if (this.subTabIndex === index) {
-      return;
-    }
     this.subTabIndex = index;
     this.tabProgress = index;
+    AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, index);
     this.swiperController.changeIndex(index, animate);
   }
 
@@ -133,9 +163,17 @@ export struct TasksCollectionPage {
       showToast(message, this.getUIContext());
       return;
     }
+    ScheduledListStore.hydrate();
+    QuickTaskStore.hydrate();
     if (this.subTabIndex === 0) {
+      if (!ensureQuickTaskQuota()) {
+        return;
+      }
       AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
       pushRoute(PageRoutes.QuickTaskForm);
+      return;
+    }
+    if (!ensureScheduledTaskQuota()) {
       return;
     }
     AppStorage.setOrCreate(StoreKeys.ScheduledSessionCurrentId, '');

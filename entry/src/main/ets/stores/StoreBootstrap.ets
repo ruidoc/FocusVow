@@ -26,10 +26,12 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.SettingsStatusMessage, settingsState.statusMessage);
   AppStorage.setOrCreate(StoreKeys.CycleGuardEnabled, cycleGuardState.enabled);
   AppStorage.setOrCreate(StoreKeys.CycleGuardQuotaMinutes, cycleGuardState.quotaMinutes);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardLockMinutes, cycleGuardState.lockMinutes);
   AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedTokens, cycleGuardState.selectedTokens);
   AppStorage.setOrCreate(StoreKeys.CycleGuardSelectedAppCount, cycleGuardState.selectedAppCount);
   AppStorage.setOrCreate(StoreKeys.CycleGuardPhase, cycleGuardState.phase);
   AppStorage.setOrCreate(StoreKeys.CycleGuardStatusMessage, cycleGuardState.statusMessage);
+  AppStorage.setOrCreate(StoreKeys.CycleGuardConfigured, cycleGuardState.configured);
   AppStorage.setOrCreate(StoreKeys.UserAccessToken, '');
   AppStorage.setOrCreate(StoreKeys.UserIsLoggedIn, false);
   AppStorage.setOrCreate(StoreKeys.UserInfo, createEmptyUserInfo());
@@ -53,6 +55,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
   AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 0);
   AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
+  AppStorage.setOrCreate(StoreKeys.OpenScheduledTaskTabOnce, false);
   AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, false);
   AppStorage.setOrCreate(StoreKeys.AwaitingScheduledGuardSyncCheck, false);
   AppStorage.setOrCreate(StoreKeys.MainTabTarget, '');

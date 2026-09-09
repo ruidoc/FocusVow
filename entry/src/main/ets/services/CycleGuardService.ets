@@ -41,7 +41,9 @@ function saveState(
   const currentState = getCurrentState(context);
   const nextState: CycleGuardState = {
     enabled: patch.enabled ?? currentState.enabled,
+    configured: patch.configured ?? currentState.configured,
     quotaMinutes: patch.quotaMinutes ?? currentState.quotaMinutes,
+    lockMinutes: patch.lockMinutes ?? currentState.lockMinutes,
     selectedTokens: patch.selectedTokens ?? currentState.selectedTokens,
     selectedAppCount: patch.selectedAppCount ?? currentState.selectedAppCount,
     phase: patch.phase ?? currentState.phase,

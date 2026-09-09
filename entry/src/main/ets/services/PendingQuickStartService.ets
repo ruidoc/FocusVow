@@ -15,6 +15,7 @@ import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
 import { DuoBgSyncService } from './DuoBgSyncService';
 import { clearMembershipUrgencyCountdown } from '../utils/OnboardingMembershipUtil';
+import { ensureDelayStartAllowed } from './ProQuotaService';
 
 const PENDING_KEY: string = 'pending.quick_start';
 
@@ -76,10 +77,37 @@ async function startDelayedQuickFocus(
 const PROD_QUICK_START_DELAY_OPTIONS: number[] = [0, 5, 10, 15, 20, 30, 45, 60];
 const DEV_QUICK_START_DELAY_OPTIONS: number[] = [0, 1, 5, 10, 15, 20, 30, 45, 60];
 
-export function getQuickStartDelayOptions(): number[] {
-  return ApiConfig.isDevEnvironment()
+export function getQuickStartDelayOptions(excludeImmediate: boolean = false): number[] {
+  const base = ApiConfig.isDevEnvironment()
     ? DEV_QUICK_START_DELAY_OPTIONS
     : PROD_QUICK_START_DELAY_OPTIONS;
+  if (!excludeImmediate) {
+    return base;
+  }
+  const filtered: number[] = [];
+  base.forEach((minutes: number) => {
+    if (minutes > 0) {
+      filtered.push(minutes);
+    }
+  });
+  return filtered;
+}
+
+export function getStartDelayPickerLabel(minutes: number): string {
+  if (minutes <= 0) {
+    return '立即';
+  }
+  if (minutes === 1 && ApiConfig.isDevEnvironment()) {
+    return '1 分钟';
+  }
+  if (minutes === 60) {
+    return '1 小时后';
+  }
+  return `${minutes} 分钟后`;
+}
+
+export function getStartDelayHint(minutes: number): string {
+  return `安心玩一会手机，${minutes}分钟后自动进入专注`;
 }
 
 export interface PendingQuickStartPayload {
@@ -175,6 +203,9 @@ export async function schedulePendingQuickStart(
   context: common.Context,
   payload: PendingQuickStartPayload,
 ): Promise<boolean> {
+  if (!ensureDelayStartAllowed(context, payload.delayMinutes)) {
+    return false;
+  }
   const planId = `once_${Date.now()}`;
   // 对齐 RN：精确 now + N 分钟，倒计时从 N:00 起
   const startAtMs = Date.now() + payload.delayMinutes * 60_000;

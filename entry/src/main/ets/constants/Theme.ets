@@ -12,13 +12,16 @@ class ThemeColors {
   textPrimary: string = '#111827';
   textSecondary: string = '#5B6475';
   textMuted: string = '#98A2B3';
+  /** 对齐 RN colors.text3 */
+  text3: string = '#94A3B8';
   success: string = '#1F9D55';
   successSoft: string = '#E8F8EF';
   accentBlue: string = '#3B82F6';
   accentOrange: string = '#F97316';
   accentGreen: string = '#10B981';
-  warning: string = '#C98512';
-  danger: string = '#D64545';
+  fuchsia: string = '#D444F1';
+  warning: string = '#F59E0B';
+  danger: string = '#EF4444';
   dangerSoft: string = '#FDECEC';
   surfaceSecondary: string = '#F0F2F5';
   ring: string = '#E5E7EB';
@@ -48,14 +51,16 @@ const LIGHT_COLORS: ThemeColors = {
   primarySoft: '#F1EDFF',
   textPrimary: '#0F172A',
   textSecondary: '#64748B',
-  textMuted: '#64748B',
+  textMuted: '#94A3B8',
+  text3: '#94A3B8',
   success: '#16A34A',
   successSoft: '#E8F8EF',
-  accentBlue: '#2563EB',
+  accentBlue: '#3B82F6',
   accentOrange: '#F97316',
   accentGreen: '#10B981',
-  warning: '#C98512',
-  danger: '#D64545',
+  fuchsia: '#D444F1',
+  warning: '#F59E0B',
+  danger: '#EF4444',
   dangerSoft: '#FDECEC',
   surfaceSecondary: '#F0F2F5',
   ring: '#E5E7EB',
@@ -78,16 +83,18 @@ const DARK_COLORS: ThemeColors = {
   textPrimary: '#F5F5F5',
   textSecondary: '#A3A3A3',
   textMuted: '#737373',
+  text3: '#737373',
   success: '#22C55E',
   successSoft: '#143322',
   accentBlue: '#3B82F6',
   accentOrange: '#F97316',
   accentGreen: '#10B981',
+  fuchsia: '#D444F1',
   warning: '#F59E0B',
   danger: '#F87171',
   dangerSoft: '#3A1F1F',
   surfaceSecondary: '#1A1A1A',
-  ring: '#333333',
+  ring: 'rgba(255,255,255,0.14)',
   primaryMuted: '#2A2A2A',
   primaryMutedForeground: '#737373',
   paywallCardSelected: '#1C1A14',

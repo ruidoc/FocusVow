@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppTheme } from '../../constants/Theme';
+import { PageBackgroundDecoration } from '../../components/common/PageBackgroundDecoration';
 import { PageRoutes, pushRoute } from '../../router/PageRoutes';
 import { OnboardingApiService } from '../../services/OnboardingApiService';
 import { patchOnboardingMeta } from '../../utils/OnboardingMetaUtil';
@@ -61,9 +62,11 @@ struct WelcomePage {
   }
 
   build() {
-    Column() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      PageBackgroundDecoration()
       Column() {
-        Image($r('app.media.startIcon'))
+        Column() {
+          Image($r('app.media.startIcon'))
           .width(80)
           .height(80)
           .borderRadius(18)
@@ -137,11 +140,14 @@ struct WelcomePage {
         right: 32,
         bottom: Math.max(this.bottomInset, 16) + 24
       })
-      .alignItems(HorizontalAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ top: this.topInset })
+      .backgroundColor('#00000000')
     }
     .width('100%')
     .height('100%')
-    .padding({ top: this.topInset })
-    .backgroundColor(AppTheme.colors.background)
   }
 }

@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
+import { PageBackgroundDecoration } from '../../components/common/PageBackgroundDecoration';
 import { AppTheme } from '../../constants/Theme';
 import { FeatureFlagKeys } from '../../config/FeatureFlags';
 import { backRoute, PageRoutes, pushQuickStart, pushRoute, returnToMainTab } from '../../router/PageRoutes';
@@ -232,7 +233,8 @@ struct OnboardingPage {
   }
 
   private showPartnerStep(): boolean {
-    return !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.PARTNER);
+    // 搭子步骤暂隐藏，buildPartnerStep 保留供后续恢复
+    return false;
   }
 
   private isScreenTimeRequired(): boolean {
@@ -1455,7 +1457,8 @@ struct OnboardingPage {
   }
 
   build() {
-    Stack() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      PageBackgroundDecoration()
       Column() {
         this.buildTopBar()
         this.buildCurrentStep()
@@ -1463,7 +1466,7 @@ struct OnboardingPage {
       .width('100%')
       .height('100%')
       .padding({ top: this.topInset })
-      .backgroundColor(AppTheme.colors.background)
+      .backgroundColor('#00000000')
 
       if (this.showSkipConfirm) {
         this.buildSkipConfirmModal()

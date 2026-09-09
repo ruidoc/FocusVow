@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { router } from '@kit.ArkUI';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
@@ -15,7 +16,6 @@ import {
 import { PageRoutes, backRoute, replaceRoute } from '../../router/PageRoutes';
 import {
   chooseRestrictedApps,
-  ensureScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
@@ -30,6 +30,9 @@ import {
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
+import { ensureProMembership } from '../../utils/PaywallNavigationUtil';
+import { ensureTaskPermission } from '../../utils/TaskPermissionUtil';
+import { ensureScheduledTaskQuota } from '../../services/ProQuotaService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -41,6 +44,13 @@ const SHOW_PARTICIPATION_MODE: boolean = false;
 interface PlanTimePickerResult {
   hour: number;
   minute: number;
+}
+
+interface PlanAddRouteParams {
+  presetName?: string;
+  presetStart?: string;
+  presetEnd?: string;
+  presetRepeat?: string;
 }
 
 @Entry
@@ -210,6 +220,34 @@ struct PlanAddPage {
     return this.mode === 'allow' ? '允许使用的应用' : '要锁定的应用';
   }
 
+  private applyPresetFromParams(): void {
+    const params = router.getParams() as PlanAddRouteParams;
+    const presetName = params?.presetName?.trim() ?? '';
+    if (presetName.length === 0) {
+      return;
+    }
+    this.planName = presetName;
+    const presetStart = params?.presetStart?.trim() ?? '';
+    const presetEnd = params?.presetEnd?.trim() ?? '';
+    if (presetStart.length > 0) {
+      this.startTime = presetStart;
+    }
+    if (presetEnd.length > 0) {
+      this.endTime = presetEnd;
+    }
+    const presetRepeat = params?.presetRepeat?.trim() ?? '';
+    if (presetRepeat.length > 0) {
+      try {
+        const parsed = JSON.parse(presetRepeat) as number[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.repeatDays = [...parsed].sort((left: number, right: number) => left - right);
+        }
+      } catch (_error) {
+      }
+    }
+    this.hasInitializedDefaultTime = true;
+  }
+
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     SettingsStore.hydrate(hostContext);
@@ -226,6 +264,7 @@ struct PlanAddPage {
     this.statusMessage = '';
     const settingsState = SettingsStore.getState();
     this.selectedTokens = [...settingsState.selectedTokens];
+    this.applyPresetFromParams();
     if (!this.hasInitializedDefaultTime) {
       this.initDefaultTimeRange();
     }
@@ -258,12 +297,10 @@ struct PlanAddPage {
     }
     this.blurNameInput();
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const authResult = await ensureScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (!authResult.ok) {
-      if (authResult.message.length > 0) {
-        showErrorToast(authResult.message, this.getUIContext());
-      }
+    if (!(await ensureTaskPermission(hostContext, this.getUIContext(), {
+      entry_source: 'scheduled_task',
+      screen_name: 'plans_add',
+    }))) {
       return;
     }
 
@@ -311,8 +348,21 @@ struct PlanAddPage {
       showErrorToast('请输入契约名称', uiContext);
       return;
     }
-    if (this.participationMode === 'duo' && !UserStore.isLoggedIn()) {
-      showErrorToast('搭子互督需要先登录账号', uiContext);
+    ScheduledListStore.hydrate();
+    if (!(await ensureTaskPermission(hostContext, uiContext, {
+      entry_source: 'scheduled_task',
+      screen_name: 'plans_add',
+    }))) {
+      return;
+    }
+    if (this.participationMode === 'duo') {
+      if (!ensureProMembership('scheduled_duo', {
+        proUnlock: true,
+        reason: '定时互督为 Pro 专属功能，开通后即可使用',
+      })) {
+        return;
+      }
+    } else if (!this.isEditing() && !ensureScheduledTaskQuota()) {
       return;
     }
 
@@ -322,7 +372,6 @@ struct PlanAddPage {
       return;
     }
 
-    ScheduledListStore.hydrate();
     const scheduleTimeError = validateScheduledPlanTime(
       this.startTime,
       this.endTime,
@@ -335,13 +384,6 @@ struct PlanAddPage {
     }
 
     this.isSaving = true;
-    const authResult = await ensureScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (!authResult.ok) {
-      showErrorToast('未完成系统授权，无法注册屏时策略', uiContext);
-      this.isSaving = false;
-      return;
-    }
 
     const title = this.planName.trim();
     const schedulePayload: DuoScheduledCreatePayload = {
@@ -442,10 +484,10 @@ struct PlanAddPage {
     }
 
     this.isSaving = true;
-    const authResult = await ensureScreenTimeAuthorization(hostContext);
-    SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
-    if (!authResult.ok) {
-      showErrorToast('未完成系统授权，无法同步本机屏时策略', uiContext);
+    if (!(await ensureTaskPermission(hostContext, uiContext, {
+      entry_source: 'scheduled_task',
+      screen_name: 'plans_add',
+    }))) {
       this.isSaving = false;
       return;
     }

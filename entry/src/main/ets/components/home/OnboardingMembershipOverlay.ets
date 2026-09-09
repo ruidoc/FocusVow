@@ -297,19 +297,6 @@ export struct OnboardingMembershipOverlay {
 
   build() {
     Stack() {
-      if (this.shouldShowCapsule()) {
-        Stack({ alignContent: Alignment.Bottom }) {
-          Row() {
-            this.buildUrgencyCapsule();
-          }
-          .width('100%')
-          .justifyContent(FlexAlign.Center)
-        }
-        .width('100%')
-        .height('100%')
-        .hitTestBehavior(HitTestMode.Transparent)
-      }
-
       if (this.showActivationModal) {
         this.buildCenterModal(
           'check-large',
