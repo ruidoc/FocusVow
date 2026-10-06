@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { showToast } from '../../common/Toast';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { backRoute } from '../../router/PageRoutes';
@@ -11,6 +11,7 @@ import {
   checkScreenTimeAuthorized,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
+import { WeComCustomerService } from '../../services/WeComCustomerService';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -253,9 +254,36 @@ struct PermissionPage {
         .fontColor(AppTheme.colors.textMuted)
         .width('100%')
         .padding({ left: 8, right: 8 })
+
+      Column({ space: 4 }) {
+        Text('有权限问题或定时不生效，联系管理员')
+          .fontSize(13)
+          .lineHeight(18)
+          .fontColor(AppTheme.colors.textSecondary)
+          .textAlign(TextAlign.Center)
+        Text('联系客服')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#07C160')
+          .padding({ top: 4, bottom: 4 })
+          .onClick(() => {
+            void this.onContactSupport();
+          })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
+      .margin({ top: 16 })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  private async onContactSupport(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const errorMessage = await WeComCustomerService.open(hostContext, 'schedule_permissions');
+    if (errorMessage !== null) {
+      showErrorToast(errorMessage, this.getUIContext());
+    }
   }
 
   build() {

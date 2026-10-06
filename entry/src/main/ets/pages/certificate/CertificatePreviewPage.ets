@@ -15,13 +15,17 @@ import {
   isDuoHonorCertificate,
   ShameCertificateData
 } from '../../models/CertificateModel';
-import { backRoute } from '../../router/PageRoutes';
+import { backRoute, PageRoutes, pushRoute } from '../../router/PageRoutes';
 import {
   CERTIFICATE_SNAPSHOT_ID,
   formatSaveError,
   saveCertificateSnapshot
 } from '../../services/CertificateImageService';
 import { StoreKeys } from '../../stores/StoreKeys';
+import {
+  CERTIFICATE_TEMPLATES,
+  certificateTemplateLabel,
+} from '../../utils/CertificateTemplate';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -33,21 +37,48 @@ struct CertificatePreviewPage {
   @State honorData: HonorCertificateData = createEmptyHonorCertificateData();
   @State shameData: ShameCertificateData = createEmptyShameCertificateData();
   @State isSaving: boolean = false;
+  @State templateStyle: string = 'classic';
+  @State templateIndex: number = 0;
+  @State posterWidth: number = 320;
 
   aboutToAppear(): void {
+    this.reloadCertificate();
+  }
+
+  onPageShow(): void {
+    this.reloadCertificate();
+  }
+
+  private reloadCertificate(): void {
     this.kind = AppStorage.get<string>(StoreKeys.CertificateKind) ?? 'honor';
     this.honorData = AppStorage.get<HonorCertificateData>(StoreKeys.CertificateHonor) ?? createEmptyHonorCertificateData();
     this.shameData = AppStorage.get<ShameCertificateData>(StoreKeys.CertificateShame) ?? createEmptyShameCertificateData();
   }
 
+  private recordId(): string {
+    if (this.kind === 'shame') {
+      return this.shameData.recordId;
+    }
+    return this.honorData.recordId;
+  }
+
   private getPageTitle(): string {
     if (this.kind === 'shame') {
-      return this.shameData.cardTitle.length > 0 ? this.shameData.cardTitle : '违约记录';
+      return this.shameData.cardTitle.length > 0 ? this.shameData.cardTitle : '违约耻辱证';
     }
     if (isDuoHonorCertificate(this.honorData)) {
-      return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '双人履约证书';
+      return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '神仙搭子证';
     }
-    return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '履约证书';
+    return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '守约荣誉证';
+  }
+
+  private posterHeight(): number {
+    const width = this.posterWidth > 0 ? this.posterWidth : 320;
+    return Math.round(width * 1448 / 1086);
+  }
+
+  private snapshotIdFor(style: string): string {
+    return `${CERTIFICATE_SNAPSHOT_ID}_${style}`;
   }
 
   private async handleSave(): Promise<void> {
@@ -57,7 +88,7 @@ struct CertificatePreviewPage {
     this.isSaving = true;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     try {
-      await saveCertificateSnapshot(this.getUIContext(), hostContext, CERTIFICATE_SNAPSHOT_ID);
+      await saveCertificateSnapshot(this.getUIContext(), hostContext, this.snapshotIdFor(this.templateStyle));
       showToast('证书已保存到相册', this.getUIContext());
     } catch (error) {
       const message = formatSaveError(error as BusinessError);
@@ -68,19 +99,39 @@ struct CertificatePreviewPage {
   }
 
   @Builder
-  private buildCertificate(): void {
+  private buildCertificate(style: string): void {
     if (this.kind === 'shame') {
       if (this.shameData.shameVariant === 'victim') {
-        VictimShameCertificateCard({ data: this.shameData })
+        VictimShameCertificateCard({
+          data: this.shameData,
+          templateStyle: style,
+          snapshotId: this.snapshotIdFor(style)
+        })
       } else if (this.shameData.shameVariant === 'violator') {
-        TraitorShameCertificateCard({ data: this.shameData })
+        TraitorShameCertificateCard({
+          data: this.shameData,
+          templateStyle: style,
+          snapshotId: this.snapshotIdFor(style)
+        })
       } else {
-        ShameCertificateCard({ data: this.shameData })
+        ShameCertificateCard({
+          data: this.shameData,
+          templateStyle: style,
+          snapshotId: this.snapshotIdFor(style)
+        })
       }
     } else if (isDuoHonorCertificate(this.honorData)) {
-      DuoHonorCertificateCard({ data: this.honorData })
+      DuoHonorCertificateCard({
+        data: this.honorData,
+        templateStyle: style,
+        snapshotId: this.snapshotIdFor(style)
+      })
     } else {
-      HonorCertificateCard({ data: this.honorData })
+      HonorCertificateCard({
+        data: this.honorData,
+        templateStyle: style,
+        snapshotId: this.snapshotIdFor(style)
+      })
     }
   }
 
@@ -131,23 +182,73 @@ struct CertificatePreviewPage {
   @Builder
   private buildContent(): void {
     Column() {
-      Scroll() {
-        Column() {
-          Column() {
-            this.buildCertificate()
-          }
-          .width('100%')
-          .constraintSize({ maxWidth: AppTheme.certificateMaxWidth })
+      Column() {
+        Swiper() {
+          ForEach(CERTIFICATE_TEMPLATES, (style: string) => {
+            Column() {
+              this.buildCertificate(style)
+            }
+            .width('100%')
+            .height(this.posterHeight())
+          }, (style: string) => style)
         }
         .width('100%')
-        .alignItems(HorizontalAlign.Center)
+        .height(this.posterHeight())
+        .index(this.templateIndex)
+        .loop(false)
+        .indicator(false)
+        .onChange((index: number) => {
+          this.templateIndex = index;
+          const next = CERTIFICATE_TEMPLATES[index];
+          if (next !== undefined && next.length > 0) {
+            this.templateStyle = next;
+          }
+        })
+
+        Row({ space: 6 }) {
+          ForEach(CERTIFICATE_TEMPLATES, (style: string) => {
+            Column()
+              .width(this.templateStyle === style ? 16 : 6)
+              .height(6)
+              .borderRadius(3)
+              .backgroundColor(this.templateStyle === style ? AppTheme.colors.textPrimary : AppTheme.colors.text3)
+          }, (style: string) => `dot_${style}`)
+        }
+        .margin({ top: 14 })
+        .justifyContent(FlexAlign.Center)
+
+        Text(`风格：${certificateTemplateLabel(this.templateStyle)}`)
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .margin({ top: 26 })
       }
       .width('100%')
       .layoutWeight(1)
-      .align(Alignment.Top)
-      .scrollBar(BarState.Off)
+      .constraintSize({ maxWidth: AppTheme.certificateMaxWidth })
+      .alignItems(HorizontalAlign.Center)
+      .padding({ top: 12 })
+      .onAreaChange((_old: Area, area: Area) => {
+        const next = area.width as number;
+        if (next > 0 && Math.abs(next - this.posterWidth) > 1) {
+          this.posterWidth = next;
+          const scale = next / 340;
+          AppStorage.setOrCreate(StoreKeys.CertificateScale, scale > 0 ? scale : 1);
+        }
+      })
 
-      Column() {
+      Column({ space: 10 }) {
+        if (this.recordId().length > 0) {
+          Text('编辑记录')
+            .fontSize(15)
+            .fontColor(AppTheme.colors.primary)
+            .width('100%')
+            .height(44)
+            .textAlign(TextAlign.Center)
+            .onClick(() => {
+              pushRoute(PageRoutes.CertificateAdjust);
+            })
+        }
         this.buildSaveButton()
       }
       .width('100%')

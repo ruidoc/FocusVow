@@ -1,75 +1,38 @@
 import { ShameCertificateData, createEmptyShameCertificateData } from '../../models/CertificateModel';
 import { CERTIFICATE_SNAPSHOT_ID } from '../../services/CertificateImageService';
+import { shameCertificateBackground, isCertificateDarkTheme } from '../../utils/CertificateTemplate';
+import { CertificateContractBody } from './CertificateContractBody';
 import { CertificateFooter } from './CertificateFooter';
-import { CertificateInfoSection } from './CertificateInfoSection';
 
 const WARNING_ASPECT_RATIO: number = 1086 / 1448;
 const SEAL_SIZE: number = 126;
-const CARD_PADDING_H: number = 28;
-const CARD_PADDING_TOP: number = 44;
-const CARD_PADDING_BOTTOM: number = 44;
+const CARD_PADDING_H: number = 26;
+const CARD_PADDING_TOP: number = 50;
+const CARD_PADDING_BOTTOM: number = 38;
 
 @Component
 export struct ShameCertificateCard {
   @Prop data: ShameCertificateData = createEmptyShameCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
+  @Prop templateStyle: string = 'classic';
 
   @Builder
   private buildBody(): void {
-    Column({ space: 10 }) {
-      Text(this.data.modeLabel)
-        .fontSize(11)
-        .fontColor('#B07A7A')
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      Text(this.data.cardTitle)
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#F2D0D0')
-        .letterSpacing(4)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      CertificateInfoSection({
-        userName: this.data.userName,
-        partnerName: '',
-        datetimeLabel: this.data.footerDatetime,
-        darkTheme: true
-      })
-
-      Column({ space: 4 }) {
-        Text(`实际 ${this.data.actualMinutes} 分钟 / 计划 ${this.data.totalMinutes} 分钟`)
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#F2D0D0')
-          .width('100%')
-          .textAlign(TextAlign.Center)
-        Text(this.data.contractTitle)
-          .fontSize(13)
-          .fontColor('#E8CACA')
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .width('100%')
-      .padding(12)
-      .border({ width: 1, color: '#6A3030' })
-      .borderRadius(8)
-
-      Text(this.data.resultNarrative)
-        .fontSize(13)
-        .fontColor('#E8CACA')
-        .lineHeight(22)
-        .width('100%')
-    }
-    .width('100%')
+    CertificateContractBody({
+      kind: 'shame',
+      templateStyle: this.templateStyle,
+      title: this.data.cardTitle,
+      datetime: this.data.footerDatetime,
+      userName: this.data.userName,
+      contractTitle: this.data.contractTitle,
+      totalMinutes: this.data.totalMinutes,
+      actualMinutes: this.data.actualMinutes
+    })
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Image($r('app.media.temp_warning'))
+      Image(shameCertificateBackground(this.templateStyle))
         .width('100%')
         .aspectRatio(WARNING_ASPECT_RATIO)
         .objectFit(ImageFit.Cover)
@@ -92,9 +55,9 @@ export struct ShameCertificateCard {
           footerBrand: this.data.footerBrand,
           footerDatetime: this.data.footerDatetime,
           adSlogan: this.data.adSlogan,
-          darkTheme: true
+          darkTheme: isCertificateDarkTheme('shame', this.templateStyle)
         })
-          .margin({ left: CARD_PADDING_H, bottom: CARD_PADDING_BOTTOM })
+          .margin({ left: 36, bottom: 40 })
       }
       .width('100%')
       .height('100%')
@@ -105,7 +68,7 @@ export struct ShameCertificateCard {
           .width(SEAL_SIZE)
           .height(SEAL_SIZE)
           .objectFit(ImageFit.Contain)
-          .margin({ right: 20, bottom: 30 })
+          .margin({ right: 22, bottom: 38 })
       }
       .width('100%')
       .height('100%')

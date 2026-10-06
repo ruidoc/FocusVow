@@ -73,6 +73,7 @@ export class StoreKeys {
   static readonly InboxLoading: string = 'inbox.loading';
   static readonly InboxOpenId: string = 'inbox.openId';
   static readonly InboxDetailId: string = 'inbox.detailId';
+  static readonly CheckinKind: string = 'checkin.kind';
   static readonly OnboardingViaOldUser: string = 'onboarding.via_old_user';
   static readonly OnboardingAfterRegister: string = 'onboarding.after_register';
   static readonly LoginFrom: string = 'login.from';
@@ -82,6 +83,10 @@ export class StoreKeys {
   static readonly CertificateHonor: string = 'certificate.honor';
   static readonly CertificateShame: string = 'certificate.shame';
   static readonly CertificatePending: string = 'certificate.pending';
+  static readonly CertificateScale: string = 'certificate.scale';
+  static readonly ProQuickPayVisible: string = 'pay.quick.visible';
+  static readonly ProQuickPaySource: string = 'pay.quick.source';
+  static readonly ProQuickPayReason: string = 'pay.quick.reason';
   static readonly MembershipUrgencyTick: string = 'membership.urgencyTick';
   static readonly ShowGuestMembershipReclaim: string = 'membership.showGuestReclaim';
   static readonly ShowSignupTrialCelebration: string = 'membership.showCelebration';

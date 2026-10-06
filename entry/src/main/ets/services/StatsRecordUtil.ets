@@ -25,7 +25,7 @@ export function getShameSectionDividerColor(): string {
   return isDarkThemeMode() ? 'rgba(220, 90, 90, 0.10)' : SHAME_SECTION_DIVIDER_COLOR;
 }
 
-export type StatsPeriod = 'today' | 'week' | 'month';
+export type StatsPeriod = 'today' | 'yesterday' | 'week' | 'month';
 export type StatsDetailSection = 'timeline' | 'shame' | 'byTask';
 
 export interface HonorRecordItem {
@@ -39,6 +39,9 @@ export interface ShameRecordItem {
 }
 
 export function getStatsPeriodLabel(period: StatsPeriod): string {
+  if (period === 'yesterday') {
+    return '昨日';
+  }
   if (period === 'week') {
     return '本周';
   }

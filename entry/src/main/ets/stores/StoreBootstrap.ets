@@ -88,6 +88,10 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.MembershipUrgencyTick, 0);
   AppStorage.setOrCreate(StoreKeys.ShowGuestMembershipReclaim, false);
   AppStorage.setOrCreate(StoreKeys.ShowSignupTrialCelebration, false);
+  AppStorage.setOrCreate(StoreKeys.CertificateScale, 1);
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayVisible, false);
+  AppStorage.setOrCreate(StoreKeys.ProQuickPaySource, '');
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayReason, '');
   AppStorage.setOrCreate(StoreKeys.PendingOnboardingActivationModal, false);
   AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, false);
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());

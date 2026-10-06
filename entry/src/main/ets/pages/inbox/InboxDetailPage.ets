@@ -5,10 +5,14 @@ import { MarkdownBody } from '../../components/inbox/MarkdownBody';
 import { AppTheme } from '../../constants/Theme';
 import { InboxItem, createEmptyInboxItem } from '../../models/InboxModel';
 import { backToHome, pushLogin, pushWebView } from '../../router/PageRoutes';
+import { showErrorToast } from '../../common/Toast';
 import { InboxStore } from '../../stores/InboxStore';
+import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { isWecomCustomerServiceLink, WeComCustomerService } from '../../services/WeComCustomerService';
+import { openVipPurchase } from '../../utils/PaywallNavigationUtil';
 
 bootstrapStores();
 
@@ -51,8 +55,41 @@ struct InboxDetailPage {
     }
   }
 
-  private openLink(url: string): void {
+  private normalizeInboxPath(url: string): string {
+    let path = url.trim();
+    const scheme = path.indexOf('://');
+    if (scheme >= 0) {
+      path = path.substring(scheme + 3);
+    }
+    while (path.indexOf('/') === 0) {
+      path = path.substring(1);
+    }
+    const query = path.indexOf('?');
+    if (query >= 0) {
+      path = path.substring(0, query);
+    }
+    return path.toLowerCase();
+  }
+
+  private async openLink(url: string): Promise<void> {
     if (url.length === 0) {
+      return;
+    }
+    if (isWecomCustomerServiceLink(url)) {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const errorMessage = await WeComCustomerService.open(hostContext, 'inbox_link');
+      if (errorMessage !== null) {
+        showErrorToast(errorMessage, this.getUIContext());
+      }
+      return;
+    }
+    const path = this.normalizeInboxPath(url);
+    if (path === 'paywall' || path === 'paywall/index') {
+      openVipPurchase('inbox_link');
+      return;
+    }
+    if (path === 'user/membership' || path === 'membership') {
+      FeatureFlagStore.openVipEntry('inbox_link', false);
       return;
     }
     pushWebView(url, '详情');
@@ -87,14 +124,14 @@ struct InboxDetailPage {
         MarkdownBody({
           content: this.item.body,
           onLink: (url: string) => {
-            this.openLink(url);
+            void this.openLink(url);
           }
         })
         if (this.item.link.length > 0) {
           AppActionButton({
-            label: '查看详情',
+            label: isWecomCustomerServiceLink(this.item.link) ? '联系客服' : '查看详情',
             onPress: () => {
-              this.openLink(this.item.link);
+              void this.openLink(this.item.link);
             }
           })
         }

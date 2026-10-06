@@ -20,6 +20,7 @@ import {
 } from "../../services/GuestSoloFocusService";
 import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService";
 import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
+import { tryPresentAppUpdateOnLaunch } from "../../services/AppUpdateService";
 import { hasPendingOnboardingActivationModal } from "../../utils/OnboardingMembershipUtil";
 import { warmUpPreferencesStore } from "../../services/PreferencesService";
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
@@ -35,6 +36,7 @@ import { StoreKeys } from "../../stores/StoreKeys";
 import { ThemeStore } from "../../stores/ThemeStore";
 import { UserStore } from "../../stores/UserStore";
 import { InAppMessageBanner } from "../../components/common/InAppMessageBanner";
+import { ProQuickPayHost } from "../../components/paywall/ProQuickPayDialog";
 import { MainTabImmersiveLayout } from "./MainTabImmersiveLayout";
 import { MainTabLegacyLayout } from "./MainTabLegacyLayout";
 import { shouldHideMainTabBar, supportsImmersiveTab } from "./MainTabUtil";
@@ -113,6 +115,7 @@ struct MainTabPage {
       return;
     }
     void ensureNotifyOnLaunch(hostContext);
+    void tryPresentAppUpdateOnLaunch(hostContext, this.getUIContext());
   }
 
   private clearTimer(): void {
@@ -256,6 +259,7 @@ struct MainTabPage {
         });
       }
       InAppMessageBanner()
+      ProQuickPayHost()
     }
     .width("100%")
     .height("100%");

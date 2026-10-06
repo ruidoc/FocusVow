@@ -13,6 +13,7 @@ export interface HonorCertificateData {
   modeLabel: string;
   contractTitle: string;
   durationMinutes: number;
+  recordId: string;
   resultNarrative: string;
   footerBrand: string;
   footerDatetime: string;
@@ -28,6 +29,7 @@ export interface ShameCertificateData {
   contractTitle: string;
   totalMinutes: number;
   actualMinutes: number;
+  recordId: string;
   resultNarrative: string;
   footerBrand: string;
   footerDatetime: string;
@@ -43,6 +45,7 @@ export function createEmptyHonorCertificateData(): HonorCertificateData {
     modeLabel: '',
     contractTitle: '',
     durationMinutes: 0,
+    recordId: '',
     resultNarrative: '',
     footerBrand: CERTIFICATE_FOOTER_BRAND,
     footerDatetime: '',
@@ -60,6 +63,7 @@ export function createEmptyShameCertificateData(): ShameCertificateData {
     contractTitle: '',
     totalMinutes: 0,
     actualMinutes: 0,
+    recordId: '',
     resultNarrative: '',
     footerBrand: CERTIFICATE_FOOTER_BRAND,
     footerDatetime: '',

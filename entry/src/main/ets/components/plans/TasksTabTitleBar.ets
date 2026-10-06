@@ -15,6 +15,8 @@ interface TabMeasure {
 @Component
 export struct TasksTabTitleBar {
   @Prop progress: number = 0;
+  @Prop firstTabLabel: string = '快捷任务';
+  @Prop secondTabLabel: string = '定时任务';
   onTabPress?: (index: number) => void;
 
   @State private tabMeasures: TabMeasure[] = [
@@ -89,8 +91,8 @@ export struct TasksTabTitleBar {
   build() {
     Column() {
       Row({ space: TAB_GAP_VP }) {
-        this.buildTabTitle('快捷任务', 0)
-        this.buildTabTitle('定时任务', 1)
+        this.buildTabTitle(this.firstTabLabel, 0)
+        this.buildTabTitle(this.secondTabLabel, 1)
       }
       .alignItems(VerticalAlign.Bottom)
       .height(TITLE_LINE_VP)

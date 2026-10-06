@@ -97,10 +97,20 @@ export class FeatureFlagStore {
     navigateToVipPurchase(entrySource, options);
   }
 
-  static openVipEntry(entrySource: string, isMemberActive: boolean): void {
-    const route = isMemberActive ? PageRoutes.Redeem : FeatureFlagStore.getVipPurchaseRoute();
+  static openVipEntry(entrySource: string, _isMemberActive: boolean): void {
+    if (!FeatureFlagStore.isPromoVipOn()) {
+      router.pushUrl({
+        url: PageRoutes.Redeem,
+        params: {
+          'entry_source': entrySource,
+        },
+      }).catch((error: Error) => {
+        console.warn(`[FeatureFlag] openVipEntry failed: ${String(error)}`);
+      });
+      return;
+    }
     router.pushUrl({
-      url: route,
+      url: PageRoutes.Membership,
       params: {
         'entry_source': entrySource,
       },

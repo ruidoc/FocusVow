@@ -22,7 +22,7 @@ const BENEFITS: string[] = [
   "无限延时专注，自定义延时时长",
   "无限多段定时，工作日/周末自动循环",
   "无限快捷预设，一键开启",
-  "娱乐应用限额，到点强行锁机",
+  "短视频与应用限额，到点强行锁机",
 ];
 
 const GOLD: string = "#D4A44A";
@@ -138,6 +138,7 @@ struct PaywallPage {
   @State bottomInset: number = 12;
   private entrySource: string = "unknown";
   private proUnlock: boolean = false;
+  private membershipCenter: boolean = false;
   private proUnlockReason: string = "";
   private openedAtMs: number = 0;
   private paywallClosedTracked: boolean = false;
@@ -166,6 +167,19 @@ struct PaywallPage {
     this.entrySource = resolveEntrySource(routeParams);
     this.proUnlock = resolveProUnlock(routeParams);
     this.proUnlockReason = resolveProUnlockReason(routeParams);
+    const surfaceMembership = String(routeParams?.["surface"] ?? "") === "membership";
+    this.membershipCenter = surfaceMembership;
+    if (surfaceMembership) {
+      router.replaceUrl({
+        url: PageRoutes.Membership,
+        params: {
+          "entry_source": this.entrySource,
+        },
+      }).catch((error: Error) => {
+        console.warn(`[Paywall] redirect membership failed: ${String(error)}`);
+      });
+      return;
+    }
     this.openedAtMs = Date.now();
     this.paywallClosedTracked = false;
     AnalyticsService.trackEvent("paywall_opened", this.buildPaywallContextProps());
@@ -268,11 +282,25 @@ struct PaywallPage {
   private async loadProducts(): Promise<void> {
     this.loadingProducts = true;
     const list = await SubscriptionApiService.listVipProducts();
-    const sorted = list.slice().sort((a, b) => b.period - a.period);
-    this.products = sorted;
-    if (sorted.length > 0) {
-      this.selectedProductId = sorted[0].product_id;
+    const visible: VipProduct[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const product = list[i];
+      if (this.membershipCenter || product.period < 12) {
+        if (!this.proUnlock || product.period === 2) {
+          visible.push(product);
+        }
+      }
     }
+    const sorted = visible.slice().sort((a, b) => b.period - a.period);
+    this.products = sorted;
+    let selected = sorted.length > 0 ? sorted[0].product_id : "";
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].period === 2) {
+        selected = sorted[i].product_id;
+        break;
+      }
+    }
+    this.selectedProductId = selected;
     this.loadingProducts = false;
   }
 
@@ -424,7 +452,21 @@ struct PaywallPage {
   }
 
   private getPaywallTitle(): string {
+    if (this.membershipCenter) {
+      return "会员中心";
+    }
     return this.proUnlock ? PRO_UNLOCK_TITLE : "开通 Pro 会员";
+  }
+
+  private openMembershipCenter(): void {
+    router.pushUrl({
+      url: PageRoutes.Membership,
+      params: {
+        "entry_source": this.entrySource,
+      },
+    }).catch((error: Error) => {
+      console.warn(`[Paywall] open membership failed: ${String(error)}`);
+    });
   }
 
   private getPaywallSubtitle(): string {
@@ -556,6 +598,16 @@ struct PaywallPage {
       .width("100%")
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
+
+      if (this.proUnlock && !this.membershipCenter) {
+        Text("更多套餐")
+          .fontSize(13)
+          .fontColor(AppTheme.colors.primary)
+          .margin({ top: 8 })
+          .onClick(() => {
+            this.openMembershipCenter();
+          })
+      }
     }
     .width("100%")
     .padding({

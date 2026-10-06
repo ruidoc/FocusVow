@@ -1,5 +1,7 @@
+import { showToast } from '../common/Toast';
 import { DuoSessionView, getScheduleRepeatDays, getScheduledSessionEndMin, getScheduledSessionStartMin, isInactiveScheduledSession } from '../models/DuoModel';
-import { normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
+import { FocusPlan, getTodayRepeatDay, normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
+import { PlanStore } from '../stores/PlanStore';
 
 interface ScheduledSessionTimeRange {
   startMin: number;
@@ -118,6 +120,71 @@ export function findOverlappingScheduledSession(
     }
   }
   return undefined;
+}
+
+function nextRepeatDay(day: number): number {
+  return day === 7 ? 1 : day + 1;
+}
+
+function windowOverlapsPlan(
+  startMin: number,
+  windowMin: number,
+  planStart: number,
+  planEnd: number,
+  planDays: number[],
+  today: number,
+): boolean {
+  const endMin = startMin + Math.max(1, windowMin);
+  if (endMin <= 24 * 60) {
+    return isScheduledRangeOverlap(startMin, endMin, [today], planStart, planEnd, planDays);
+  }
+  if (isScheduledRangeOverlap(startMin, 24 * 60, [today], planStart, planEnd, planDays)) {
+    return true;
+  }
+  return isScheduledRangeOverlap(0, endMin - 24 * 60, [nextRepeatDay(today)], planStart, planEnd, planDays);
+}
+
+/** 正计时只用最短时长，避免误挡几小时后的定时契约。 */
+export function conflictWindowMinutes(timerMode: string, durationMin: number): number {
+  const minutes = durationMin > 0 ? durationMin : 25;
+  if (timerMode === 'countup') {
+    return Math.max(1, minutes);
+  }
+  return Math.max(1, minutes);
+}
+
+/**
+ * 本次锁机窗口是否盖住已启用的定时契约。
+ * 命中则提示并返回 true。
+ */
+export function blockIfOverlapsScheduledPlan(windowMin: number): boolean {
+  const now = new Date();
+  const startMinute = now.getHours() * 60 + now.getMinutes();
+  const today = getTodayRepeatDay();
+  const plans: FocusPlan[] = PlanStore.getPlans();
+  let conflictStart = -1;
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    if (!plan.enabled || plan.repeatDays.length === 0) {
+      continue;
+    }
+    const planStart = timeToMinutes(plan.startTime);
+    const planEnd = timeToMinutes(plan.endTime);
+    if (windowOverlapsPlan(startMinute, windowMin, planStart, planEnd, plan.repeatDays, today)) {
+      conflictStart = planStart;
+      break;
+    }
+  }
+  if (conflictStart < 0) {
+    return false;
+  }
+  const minutesUntil = conflictStart - startMinute;
+  if (minutesUntil > 0) {
+    showToast(`${minutesUntil}分钟后契约开始，不可超时`);
+  } else {
+    showToast('与其他契约时间重叠');
+  }
+  return true;
 }
 
 export function validateScheduledPlanTime(

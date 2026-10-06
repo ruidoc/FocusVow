@@ -1,10 +1,14 @@
+import { common } from '@kit.AbilityKit';
 import { getAppVersion } from '../../common/AppInfo';
-import { showErrorToast, showToast } from '../../common/Toast';
+import { showErrorToast } from '../../common/Toast';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute } from '../../router/PageRoutes';
 import { FeedbackApiService } from '../../services/FeedbackApiService';
+import { WeComCustomerService } from '../../services/WeComCustomerService';
+
+const WECHAT_ACCENT: string = '#07C160';
 
 interface FeedbackOption {
   label: string;
@@ -28,6 +32,8 @@ struct FeedbackPage {
   @State content: string = '';
   @State contact: string = '';
   @State loading: boolean = false;
+  @State submitted: boolean = false;
+  @State feedbackId: string = '';
 
   private isFormValid(): boolean {
     return this.feedbackType.length > 0 && this.content.trim().length > 0;
@@ -53,8 +59,19 @@ struct FeedbackPage {
       return;
     }
 
-    showToast('反馈成功', this.getUIContext());
-    backRoute();
+    const data = response.data;
+    const id = data ? String(data['id'] ?? '') : '';
+    this.feedbackId = id;
+    this.submitted = true;
+  }
+
+  private async onContactSupport(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const entrySource = this.feedbackId.length > 0 ? `feedback:${this.feedbackId}` : 'feedback';
+    const errorMessage = await WeComCustomerService.open(hostContext, entrySource);
+    if (errorMessage !== null) {
+      showErrorToast(errorMessage, this.getUIContext());
+    }
   }
 
   @Builder
@@ -196,6 +213,68 @@ struct FeedbackPage {
     .margin({ bottom: 30 })
   }
 
+  private isUrgentFeedback(): boolean {
+    return this.feedbackType === 'account_rights' || this.feedbackType === 'bug';
+  }
+
+  @Builder
+  private buildSuccessContent(): void {
+    Column({ space: 0 }) {
+      Column({ space: 12 }) {
+        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+          .fontSize(40)
+          .fontColor([AppTheme.colors.primary])
+        Text('已收到你的反馈')
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .textAlign(TextAlign.Center)
+        Text(this.isUrgentFeedback()
+          ? '账号或异常类问题我们会优先处理，回复将发到站内「消息」。'
+          : '处理结果会通过 App 内「消息」通知你，请留意推送。')
+          .fontSize(15)
+          .lineHeight(22)
+          .fontColor(AppTheme.colors.textSecondary)
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
+      .margin({ top: 48, bottom: 32 })
+
+      Column({ space: 8 }) {
+        Text('着急可先联系在线客服')
+          .fontSize(13)
+          .lineHeight(18)
+          .fontColor(AppTheme.colors.textMuted)
+          .textAlign(TextAlign.Center)
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.message'))
+            .fontSize(16)
+            .fontColor([WECHAT_ACCENT])
+          Text('联系客服')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(WECHAT_ACCENT)
+        }
+        .onClick(() => {
+          void this.onContactSupport();
+        })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
+      .margin({ bottom: 24 })
+
+      AppActionButton({
+        label: '完成',
+        onPress: () => {
+          backRoute();
+        }
+      })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+  }
+
   @Builder
   private buildFeedbackContent(): void {
     Column({ space: 0 }) {
@@ -228,7 +307,11 @@ struct FeedbackPage {
           backRoute();
         },
         content: (): void => {
-          this.buildFeedbackContent();
+          if (this.submitted) {
+            this.buildSuccessContent();
+          } else {
+            this.buildFeedbackContent();
+          }
         }
       })
     }

@@ -16,6 +16,7 @@ import { SettingsStore } from '../stores/SettingsStore';
 import { QuickFocusOptions } from '../models/ActiveLockModel';
 import { AnalyticsService } from './AnalyticsService';
 import { ensureDelayStartAllowed } from './ProQuotaService';
+import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from './ScheduledPlanValidation';
 
 function resolveDelayMinutes(delayMin: number): number {
   const options = getQuickStartDelayOptions();
@@ -84,6 +85,10 @@ export async function startQuickTask(
     }
     showToast(`${delayMinutes} 分钟后开始专注`, uiContext);
     return true;
+  }
+
+  if (blockIfOverlapsScheduledPlan(conflictWindowMinutes(task.timer_mode, task.duration_min))) {
+    return false;
   }
 
   const result = await applyScreenRestriction(selectedTokens, task.mode);

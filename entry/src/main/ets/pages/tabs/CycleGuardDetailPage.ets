@@ -24,7 +24,7 @@ struct CycleGuardDetailPage {
   @StorageLink(StoreKeys.CycleGuardLockMinutes) storedLockMinutes: number = 25;
   @StorageLink(StoreKeys.CycleGuardSelectedAppCount) selectedAppCount: number = 0;
   @StorageLink(StoreKeys.CycleGuardPhase) phase: string = 'idle';
-  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置总可用时长和目标应用后，即可启动娱乐限额';
+  @StorageLink(StoreKeys.CycleGuardStatusMessage) statusMessage: string = '配置总可用时长和目标应用后，即可启动短视频限额';
   @State private isSubmitting: boolean = false;
   @State private enableSwitchValue: boolean = false;
   @State private enableSwitchKey: number = 0;
@@ -121,14 +121,14 @@ struct CycleGuardDetailPage {
     }
     if (enabled) {
       if (this.selectedAppCount === 0) {
-        showToast('请先添加娱乐限额配置', this.getUIContext());
+        showToast('请先添加短视频限额配置', this.getUIContext());
         this.syncEnableSwitchValue(true);
         return;
       }
       await BenefitStore.refresh();
       if (!ensureProMembership('cycle_guard', {
         proUnlock: true,
-        reason: '娱乐限额为 Pro 专属功能，开通后即可使用',
+        reason: '短视频限额为 Pro 专属功能，开通后即可使用',
       })) {
         this.syncEnableSwitchValue(true);
         return;
@@ -150,7 +150,7 @@ struct CycleGuardDetailPage {
 
   private confirmDisable(): void {
     this.getUIContext().showAlertDialog({
-      title: '关闭娱乐限额？',
+      title: '关闭短视频限额？',
       message: '关闭后额度监控会立即停止，可能控制不住无限刷短视频或玩游戏。',
       autoCancel: true,
       primaryButton: {
@@ -172,7 +172,7 @@ struct CycleGuardDetailPage {
   @Builder
   private buildEnableSwitchCard(): void {
     Row() {
-      Text('启用娱乐限额')
+      Text('启用短视频限额')
         .layoutWeight(1)
         .fontSize(16)
         .fontColor(AppTheme.colors.textPrimary)
@@ -198,7 +198,7 @@ struct CycleGuardDetailPage {
       SymbolGlyph($r('sys.symbol.plus_circle'))
         .fontSize(36)
         .fontColor([AppTheme.colors.primary])
-      Text('添加娱乐限额')
+      Text('添加短视频限额')
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
@@ -229,7 +229,7 @@ struct CycleGuardDetailPage {
   private buildConfigCard(): void {
     Column({ space: 12 }) {
       Row() {
-        Text('娱乐限额配置')
+        Text('短视频限额配置')
           .layoutWeight(1)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
@@ -283,7 +283,7 @@ struct CycleGuardDetailPage {
         title: '给娱乐 App 设个上限',
         description: '抖音、游戏刷到停不下来？别拍，把它们加到限额，设置可用时长，用满了就自动锁住，帮你及时收手',
         confirmTitle: '确定关闭功能介绍？',
-        confirmMessage: '如果了解了娱乐限额功能，可以点击确认关闭，关闭后不再显示此介绍',
+        confirmMessage: '如果了解了短视频限额功能，可以点击确认关闭，关闭后不再显示此介绍',
       })
 
       this.buildEnableSwitchCard()
@@ -320,7 +320,7 @@ struct CycleGuardDetailPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: '娱乐限额',
+        title: '短视频限额',
         showBack: true,
         usePageScroll: true,
         useFloatingTabInset: false,

@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { showToast } from '../../common/Toast';
+import { showErrorToast, showToast } from '../../common/Toast';
 import { AgreementConsentRow } from '../../components/common/AgreementConsentRow';
 import { PageBackgroundDecoration } from '../../components/common/PageBackgroundDecoration';
 import { AppTheme } from '../../constants/Theme';
@@ -16,6 +16,7 @@ import {
   OnboardingApiService
 } from '../../services/OnboardingApiService';
 import { ReferralApiService } from '../../services/ReferralApiService';
+import { WeComCustomerService } from '../../services/WeComCustomerService';
 import { AnalyticsService } from '../../services/AnalyticsService';
 import {
   checkScreenTimeAuthorized,
@@ -239,6 +240,18 @@ struct OnboardingPage {
 
   private isScreenTimeRequired(): boolean {
     return !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.SKIP_OVERLAY);
+  }
+
+  private isLoginSkipHidden(): boolean {
+    return FeatureFlagStore.isFeatureOff(FeatureFlagKeys.OB_LOGIN_SKIP);
+  }
+
+  private async onContactSupport(entrySource: string): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const errorMessage = await WeComCustomerService.open(hostContext, entrySource);
+    if (errorMessage !== null) {
+      showErrorToast(errorMessage, this.getUIContext());
+    }
   }
 
   private getTotalSteps(): number {
@@ -977,7 +990,7 @@ struct OnboardingPage {
           Column() {
             this.buildInviteBenefitItem(
               '权益二',
-              '+15天会员',
+              '+7天会员',
               '填写邀请码注册，首次专注后再加赠',
               true
             )
@@ -1028,6 +1041,24 @@ struct OnboardingPage {
                 .margin({ top: 8 })
                 .padding({ left: 38, right: 38 })
             }
+
+            Text('没有邀请码？参与调研可领取会员权益')
+              .fontSize(14)
+              .lineHeight(20)
+              .fontColor(AppTheme.colors.textSecondary)
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .margin({ top: 20 })
+            Text('联系客服领会员')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.colors.textPrimary)
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .padding({ top: 10, bottom: 4 })
+              .onClick(() => {
+                void this.onContactSupport('onboarding_referral');
+              })
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -1101,14 +1132,24 @@ struct OnboardingPage {
       .scrollBar(BarState.Off)
       .align(Alignment.Top)
 
-      Text('放弃权益，去专注')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.textMuted)
-        .padding({ top: 8, bottom: 8 })
-        .opacity(this.referralStatus === 'checking' ? 0.4 : 1)
-        .onClick(() => {
-          this.openSkipConfirm();
-        })
+      if (this.isLoginSkipHidden()) {
+        Text('有疑问？联系客服')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textMuted)
+          .padding({ top: 8, bottom: 8 })
+          .onClick(() => {
+            void this.onContactSupport('onboarding_login');
+          })
+      } else {
+        Text('放弃权益，去专注')
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textMuted)
+          .padding({ top: 8, bottom: 8 })
+          .opacity(this.referralStatus === 'checking' ? 0.4 : 1)
+          .onClick(() => {
+            this.openSkipConfirm();
+          })
+      }
     }
     .width('100%')
     .layoutWeight(1)

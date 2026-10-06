@@ -110,11 +110,11 @@ function resolveShameVariant(record: DuoShameRecord): ShameCertificateVariant {
 }
 
 function buildSoloHonorCardTitle(): string {
-  return '履约证书';
+  return '守约荣誉证';
 }
 
 function buildDuoHonorCardTitle(): string {
-  return '双人履约证书';
+  return '神仙搭子证';
 }
 
 function buildSoloHonorResultNarrative(record: DuoTimelineRecord): string {
@@ -126,15 +126,15 @@ function buildDuoHonorResultNarrative(record: DuoTimelineRecord): string {
 }
 
 function buildSoloShameCardTitle(): string {
-  return '违约记录';
+  return '违约耻辱证';
 }
 
 function buildViolatorShameCardTitle(): string {
-  return '连坐违约证书';
+  return '千古罪人证';
 }
 
 function buildVictimShameCardTitle(): string {
-  return '连坐中止证书';
+  return '千古奇冤证';
 }
 
 function buildSoloShameResultNarrative(record: DuoShameRecord): string {
@@ -165,6 +165,7 @@ export function buildHonorCertificateData(
     modeLabel: getTimelineModeLabel(record),
     contractTitle: record.title,
     durationMinutes: record.actual_min,
+    recordId: record.id,
     resultNarrative: isDuo
       ? buildDuoHonorResultNarrative(record)
       : buildSoloHonorResultNarrative(record),
@@ -205,6 +206,7 @@ export function buildShameCertificateData(
     contractTitle: record.title,
     totalMinutes: record.total_min,
     actualMinutes: record.actual_min,
+    recordId: record.id,
     resultNarrative,
     footerBrand: CERTIFICATE_FOOTER_BRAND,
     footerDatetime: formatChineseDateTime(completedRaw, fallbackDate),

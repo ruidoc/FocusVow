@@ -15,6 +15,7 @@ export class PageRoutes {
   static readonly DuoWait: string = 'pages/focus/DuoWaitPage';
   static readonly DuoJoin: string = 'pages/focus/DuoJoinPage';
   static readonly DuoMatch: string = 'pages/focus/DuoMatchPage';
+  static readonly FocusResult: string = 'pages/focus/FocusResultPage';
   static readonly Welcome: string = 'pages/onboarding/WelcomePage';
   static readonly Onboarding: string = 'pages/onboarding/OnboardingPage';
   static readonly PlanList: string = 'pages/plans/PlanListPage';
@@ -24,6 +25,7 @@ export class PageRoutes {
   static readonly QuickTaskDetail: string = 'pages/plans/QuickTaskDetailPage';
   static readonly StatsDetail: string = 'pages/stats/StatsDetailPage';
   static readonly CertificatePreview: string = 'pages/certificate/CertificatePreviewPage';
+  static readonly CertificateAdjust: string = 'pages/certificate/CertificateAdjustPage';
   static readonly Settings: string = 'pages/settings/SettingsPage';
   static readonly Permission: string = 'pages/settings/PermissionPage';
   static readonly CycleGuard: string = 'pages/tabs/CycleGuardDetailPage';
@@ -40,6 +42,7 @@ export class PageRoutes {
   static readonly WechatBind: string = 'pages/login/WechatBindPage';
   static readonly Redeem: string = 'pages/user/RedeemPage';
   static readonly Paywall: string = 'pages/user/PaywallPage';
+  static readonly Membership: string = 'pages/user/MembershipPage';
   static readonly InviteRecord: string = 'pages/user/InviteRecordPage';
   static readonly ProfileEdit: string = 'pages/user/ProfileEditPage';
   static readonly AvatarCrop: string = 'pages/user/AvatarCropPage';
@@ -52,6 +55,8 @@ export class PageRoutes {
   static readonly OrgClassroomJoin: string = 'pages/org/OrgClassroomJoinPage';
   static readonly InboxList: string = 'pages/inbox/InboxListPage';
   static readonly InboxDetail: string = 'pages/inbox/InboxDetailPage';
+  static readonly GlobalRank: string = 'pages/rank/GlobalRankPage';
+  static readonly Checkin: string = 'pages/checkin/CheckinPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {

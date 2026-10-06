@@ -6,6 +6,7 @@
     "pages/focus/DuoWaitPage",
     "pages/focus/DuoJoinPage",
     "pages/focus/DuoMatchPage",
+    "pages/focus/FocusResultPage",
     "pages/onboarding/WelcomePage",
     "pages/onboarding/OnboardingPage",
     "pages/plans/PlanListPage",
@@ -15,6 +16,7 @@
     "pages/plans/QuickTaskDetailPage",
     "pages/stats/StatsDetailPage",
     "pages/certificate/CertificatePreviewPage",
+    "pages/certificate/CertificateAdjustPage",
     "pages/settings/SettingsPage",
     "pages/settings/PermissionPage",
     "pages/settings/CycleGuardPage",
@@ -31,6 +33,7 @@
     "pages/login/WechatBindPage",
     "pages/user/RedeemPage",
     "pages/user/PaywallPage",
+    "pages/user/MembershipPage",
     "pages/user/InviteRecordPage",
     "pages/user/ProfileEditPage",
     "pages/user/AvatarCropPage",
@@ -42,6 +45,8 @@
     "pages/org/OrgClassroomCreatePage",
     "pages/org/OrgClassroomJoinPage",
     "pages/inbox/InboxListPage",
-    "pages/inbox/InboxDetailPage"
+    "pages/inbox/InboxDetailPage",
+    "pages/rank/GlobalRankPage",
+    "pages/checkin/CheckinPage"
   ]
 }

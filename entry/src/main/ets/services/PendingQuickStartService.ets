@@ -16,6 +16,7 @@ import { bootstrapStores } from '../stores/StoreBootstrap';
 import { DuoBgSyncService } from './DuoBgSyncService';
 import { clearMembershipUrgencyCountdown } from '../utils/OnboardingMembershipUtil';
 import { ensureDelayStartAllowed } from './ProQuotaService';
+import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from './ScheduledPlanValidation';
 
 const PENDING_KEY: string = 'pending.quick_start';
 
@@ -28,6 +29,10 @@ async function startDelayedQuickFocus(
   pending: PendingQuickStartState,
   fallbackPlanId: string = '',
 ): Promise<void> {
+  if (blockIfOverlapsScheduledPlan(conflictWindowMinutes(pending.timerMode, pending.durationMinutes))) {
+    clearPendingQuickStart(context);
+    return;
+  }
   const planId = pending.planId.length > 0 ? pending.planId : fallbackPlanId;
   const now = Date.now();
   const startedAtMs = pending.startAtMs > 0 ? pending.startAtMs : now;

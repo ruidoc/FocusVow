@@ -101,6 +101,7 @@ import { UserStore } from "../../stores/UserStore";
 import { InboxStore } from "../../stores/InboxStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
+import { FLOATING_TAB_EXTRA_BOTTOM_VP } from "./MainTabUtil";
 
 bootstrapStores();
 
@@ -130,6 +131,7 @@ export struct FocusHomePage {
   @State showActivationModal: boolean = false;
   @State activationGuestPath: boolean = false;
   @State homeStatsRefreshTick: number = 0;
+  @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
 
   private timerId: number = -1;
   private postOnboardingFlowStarted: boolean = false;
@@ -381,13 +383,14 @@ export struct FocusHomePage {
     AnalyticsService.trackEvent("home_entry_clicked", props);
   }
 
-  private onOrgEntryPress(): void {
+  private onRankPress(): void {
     if (!UserStore.isLoggedIn()) {
       showToast("请先登录", this.getUIContext());
       pushLogin();
       return;
     }
-    pushRoute(PageRoutes.OrgList);
+    this.trackHomeEntry('global_rank');
+    pushRoute(PageRoutes.GlobalRank);
   }
 
   private onInboxPress(): void {
@@ -764,6 +767,9 @@ export struct FocusHomePage {
     }
     if (this.activeLock.kind === "covenant") {
       return "单人定时契约";
+    }
+    if (this.activeLock.kind === "cycle_guard") {
+      return isCountupLock(this.activeLock) ? "短视频限额 · 正计时" : "短视频限额";
     }
     if (this.activeLock.kind === "quick_focus") {
       if (isOrgClassroomLockPlanId(this.activeLock.planId)) {
@@ -1162,7 +1168,7 @@ export struct FocusHomePage {
           },
         })
         HomeActionCard({
-          label: '延时开始',
+          label: '放松后开始',
           symbol: $r('sys.symbol.hourglass'),
           iconColor: AppTheme.colors.warning,
           onPress: () => {
@@ -1191,7 +1197,7 @@ export struct FocusHomePage {
           },
         })
         HomeActionCard({
-          label: '娱乐限额',
+          label: '短视频限额',
           symbol: $r('sys.symbol.play'),
           iconColor: AppTheme.colors.fuchsia,
           onPress: () => {
@@ -1256,6 +1262,10 @@ export struct FocusHomePage {
     .alignItems(HorizontalAlign.Center)
   }
 
+  private getHomeScrollBottomPadding(): number {
+    return 16 + (this.floatingTabBar ? FLOATING_TAB_EXTRA_BOTTOM_VP : 0);
+  }
+
   @Builder
   private buildIdleHomeContent(): void {
     Column({ space: 0 }) {
@@ -1299,7 +1309,7 @@ export struct FocusHomePage {
     .padding({
       left: 20,
       right: 20,
-      bottom: 32,
+      bottom: this.getHomeScrollBottomPadding(),
     })
     .alignItems(HorizontalAlign.Start)
   }
@@ -1316,13 +1326,16 @@ export struct FocusHomePage {
 
       Row({ space: 4 }) {
         Button({ type: ButtonType.Normal }) {
-          UsersIcon({ iconSize: 22, color: AppTheme.colors.textPrimary })
+          Image($r('app.media.ranking'))
+            .width(26)
+            .height(26)
+            .objectFit(ImageFit.Contain)
         }
         .width(36)
         .height(36)
         .backgroundColor(Color.Transparent)
         .onClick(() => {
-          this.onOrgEntryPress();
+          this.onRankPress();
         })
 
         Stack() {
@@ -1410,7 +1423,6 @@ export struct FocusHomePage {
               }
             }
             .width('100%')
-            .constraintSize({ minHeight: '100%' })
           }
           .width('100%')
           .height('100%')
@@ -1439,6 +1451,8 @@ export struct FocusHomePage {
         horizontalPadding: 0,
         showPageDecoration: true,
         hiddenTitleTopPadding: 0,
+        bottomSpacerHeight: 0,
+        useFloatingTabInset: false,
         content: (): void => {
           this.buildHomeContent();
         },

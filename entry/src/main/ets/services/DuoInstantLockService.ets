@@ -9,6 +9,7 @@ import { LockStore } from '../stores/LockStore';
 import { DuoBgSyncService } from './DuoBgSyncService';
 import { FocusStartedNotifyService } from './FocusStartedNotifyService';
 import { applyScreenRestriction } from './ScreenTimeService';
+import { blockIfOverlapsScheduledPlan } from './ScheduledPlanValidation';
 import { clearDuoWaitContext } from './DuoWaitContextService';
 import {
   COUNTUP_OPEN_LOCK_MIN,
@@ -207,6 +208,26 @@ export async function startOrAlignInstantDuoFocus(
 
   // 空 selectedTokens + allow = 全锁（对齐 RN）；不拦截
   // 发起互督额度在创建页已校验；加入互督不校验；补锁不再重复拦
+  const timerFields = resolveSessionTimerFields(session);
+  const userDuration = timerFields[1];
+  let lockMinutes = userDuration;
+  if (alignToServerEnd) {
+    const endAtMs = parseDuoServerTimeMs(session.end_at);
+    if (endAtMs > Date.now()) {
+      lockMinutes = Math.max(1, Math.ceil((endAtMs - Date.now()) / 60000));
+    }
+  }
+  const conflictWindow = timerFields[0] === 'countup'
+    ? Math.max(1, userDuration || 25)
+    : Math.max(1, lockMinutes);
+  if (blockIfOverlapsScheduledPlan(conflictWindow)) {
+    const blocked: DuoInstantLockResult = {
+      ok: false,
+      message: 'schedule_overlap',
+      alreadyLocked: false
+    };
+    return blocked;
+  }
   const lockResult = await applyScreenRestriction(selectedTokens, 'allow');
   if (!lockResult.ok) {
     const failed: DuoInstantLockResult = {
@@ -220,9 +241,7 @@ export async function startOrAlignInstantDuoFocus(
   const focusOptions = alignToServerEnd
     ? buildDuoAlignedOptions(session, options?.title)
     : buildDuoFullDurationOptions(session, options?.title);
-  const fields = resolveSessionTimerFields(session);
-  const userDuration = fields[1];
-  const timerMode = fields[0];
+  const timerMode = timerFields[0];
   LockStore.startQuickFocus(context, selectedTokens, userDuration, 'allow', focusOptions);
 
   FocusStartedNotifyService.report(context, {

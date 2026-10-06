@@ -1,75 +1,38 @@
 import { HonorCertificateData, createEmptyHonorCertificateData } from '../../models/CertificateModel';
 import { CERTIFICATE_SNAPSHOT_ID } from '../../services/CertificateImageService';
+import { honorCertificateBackground, isCertificateDarkTheme } from '../../utils/CertificateTemplate';
+import { CertificateContractBody } from './CertificateContractBody';
 import { CertificateFooter } from './CertificateFooter';
-import { CertificateInfoSection } from './CertificateInfoSection';
 
 const HONOR_ASPECT_RATIO: number = 1086 / 1448;
 const SEAL_SIZE: number = 126;
-const CARD_PADDING_H: number = 28;
-const CARD_PADDING_TOP: number = 64;
-const CARD_PADDING_BOTTOM: number = 44;
+const CARD_PADDING_H: number = 26;
+const CARD_PADDING_TOP: number = 58;
+const CARD_PADDING_BOTTOM: number = 38;
 
 @Component
 export struct DuoHonorCertificateCard {
   @Prop data: HonorCertificateData = createEmptyHonorCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
+  @Prop templateStyle: string = 'classic';
 
   @Builder
   private buildBody(): void {
-    Column({ space: 14 }) {
-      Text(this.data.modeLabel)
-        .fontSize(11)
-        .fontColor('#9A8458')
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      Text(this.data.cardTitle)
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#4A3B1F')
-        .letterSpacing(4)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      CertificateInfoSection({
-        userName: this.data.userName,
-        partnerName: this.data.partnerName,
-        datetimeLabel: this.data.footerDatetime,
-        darkTheme: false
-      })
-
-      Column({ space: 4 }) {
-        Text(`${this.data.durationMinutes} 分钟`)
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#6B4F1F')
-          .width('100%')
-          .textAlign(TextAlign.Center)
-        Text(this.data.contractTitle)
-          .fontSize(13)
-          .fontColor('#4A3B1F')
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .width('100%')
-      .padding({ top: 10, bottom: 10 })
-      .border({ width: 1, color: '#D8C8A0' })
-      .borderRadius(8)
-
-      Text(this.data.resultNarrative)
-        .fontSize(13)
-        .fontColor('#3D3424')
-        .lineHeight(22)
-        .width('100%')
-    }
-    .width('100%')
+    CertificateContractBody({
+      kind: 'duo',
+      templateStyle: this.templateStyle,
+      title: this.data.cardTitle,
+      datetime: this.data.footerDatetime,
+      userName: this.data.userName,
+      partnerName: this.data.partnerName,
+      contractTitle: this.data.contractTitle,
+      minutes: this.data.durationMinutes
+    })
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Image($r('app.media.temp_honor'))
+      Image(honorCertificateBackground(this.templateStyle))
         .width('100%')
         .aspectRatio(HONOR_ASPECT_RATIO)
         .objectFit(ImageFit.Cover)
@@ -92,9 +55,9 @@ export struct DuoHonorCertificateCard {
           footerBrand: this.data.footerBrand,
           footerDatetime: this.data.footerDatetime,
           adSlogan: this.data.adSlogan,
-          darkTheme: false
+          darkTheme: isCertificateDarkTheme('honor', this.templateStyle)
         })
-          .margin({ left: CARD_PADDING_H, bottom: CARD_PADDING_BOTTOM })
+          .margin({ left: 36, bottom: 40 })
       }
       .width('100%')
       .height('100%')
@@ -105,7 +68,7 @@ export struct DuoHonorCertificateCard {
           .width(SEAL_SIZE)
           .height(SEAL_SIZE)
           .objectFit(ImageFit.Contain)
-          .margin({ right: 20, bottom: 30 })
+          .margin({ right: 22, bottom: 38 })
       }
       .width('100%')
       .height('100%')

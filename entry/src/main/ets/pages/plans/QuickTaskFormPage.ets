@@ -11,7 +11,11 @@ import {
   chooseRestrictedApps,
   requestScreenTimeAuthorization,
 } from "../../services/ScreenTimeService";
-import { getQuickStartDelayOptions, getStartDelayHint, getStartDelayPickerLabel } from "../../services/PendingQuickStartService";
+import {
+  getQuickStartDelayOptions,
+  getStartDelayHint,
+  getStartDelayPickerLabel,
+} from "../../services/PendingQuickStartService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { QuickTaskStore } from "../../stores/QuickTaskStore";
 import { SettingsStore } from "../../stores/SettingsStore";

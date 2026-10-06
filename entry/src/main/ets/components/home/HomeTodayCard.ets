@@ -1,16 +1,27 @@
 import { common } from "@kit.AbilityKit";
+import { showToast } from "../../common/Toast";
 import { createEmptyUserInfo, UserInfo } from "../../models/UserModel";
 import {
   FocusPlan,
   findNextUpcomingPlanToday,
   getPlanSecondsUntilStart,
 } from "../../models/PlanModel";
-import { PageRoutes, openScheduledTaskTabOnce, pushRoute } from "../../router/PageRoutes";
+import { PageRoutes, openScheduledTaskTabOnce, pushLogin, pushRoute } from "../../router/PageRoutes";
+import { isHarmonyUpdateAvailable, openHarmonyUpdate } from "../../services/AppUpdateService";
+import { AnalyticsService } from "../../services/AnalyticsService";
 import { DuoApiService } from "../../services/DuoApiService";
+import { CheckinPickerDialog } from "./CheckinPickerDialog";
 import { homeTodayMetricsBg } from "../../constants/HomeCardStyle";
 import { HomeGlassSurface } from "./HomeGlassSurface";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { UserStore } from "../../stores/UserStore";
+import {
+  CheckinKind,
+  isSleepCheckinOpen,
+  isWakeCheckinOpen,
+  sleepWindowLabel,
+  wakeWindowLabel,
+} from "../../utils/CheckinUtil";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -38,6 +49,8 @@ function formatSuccessRate(raw: number | string): string {
   return `${Math.round(n)}%`;
 }
 
+const HOME_HEADER_ICON_SIZE: number = 25;
+
 function formatNextPlanCountdown(totalSeconds: number): string {
   const minutes = Math.max(0, Math.ceil(totalSeconds / 60));
   if (minutes < 60) {
@@ -63,22 +76,91 @@ export struct HomeTodayCard {
   @State nextPlanName: string = "";
   @State nextPlanSecondsLeft: number = 0;
   @State showNextPlan: boolean = false;
+  @State updateAvailable: boolean = false;
   private timerId: number = -1;
   private cardTick: number = 0;
+  private checkinDialog: CustomDialogController = new CustomDialogController({
+    builder: CheckinPickerDialog({
+      onSelect: (kind: string): void => {
+        this.onCheckinSelected(kind);
+      }
+    }),
+    customStyle: true,
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: 'rgba(0, 0, 0, 0.4)'
+  });
 
   aboutToAppear(): void {
     void this.loadTodayStats();
     this.refreshNextPlan();
     this.startTimer();
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.refreshAppUpdate();
+  }
+
+  private refreshAppUpdate(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void isHarmonyUpdateAvailable(hostContext).then((available: boolean) => {
+      this.updateAvailable = available;
+    });
+  }
+
+  private trackHomeEntry(entryKey: string): void {
+    const props: Record<string, Object> = {};
+    props['entry_key'] = entryKey;
+    AnalyticsService.trackEvent('home_entry_clicked', props);
   }
 
   aboutToDisappear(): void {
     this.clearTimer();
+    this.checkinDialog.close();
+  }
+
+  private openCheckin(kind: CheckinKind, open: boolean): void {
+    if (!open) {
+      const windowLabel = kind === 'wake' ? wakeWindowLabel() : sleepWindowLabel();
+      showToast(`开放时段 ${windowLabel}`, this.getUIContext());
+      return;
+    }
+    if (!UserStore.isLoggedIn()) {
+      showToast('请先登录', this.getUIContext());
+      pushLogin();
+      return;
+    }
+    AppStorage.setOrCreate(StoreKeys.CheckinKind, kind);
+    pushRoute(PageRoutes.Checkin);
+  }
+
+  private onCheckinSelected(kind: string): void {
+    if (kind === 'wake') {
+      this.openCheckin('wake', isWakeCheckinOpen());
+      return;
+    }
+    if (kind === 'sleep') {
+      this.openCheckin('sleep', isSleepCheckinOpen());
+      return;
+    }
+    if (kind === 'focus') {
+      this.openCheckin('focus', true);
+    }
+  }
+
+  private openCheckinPicker(): void {
+    this.trackHomeEntry('checkin');
+    this.checkinDialog.open();
+  }
+
+  private onAppUpdatePress(): void {
+    this.trackHomeEntry('app_update');
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void openHarmonyUpdate(hostContext);
   }
 
   private onRefreshTickChanged(): void {
     void this.loadTodayStats();
     this.refreshNextPlan();
+    this.refreshAppUpdate();
   }
 
   private startTimer(): void {
@@ -313,6 +395,46 @@ export struct HomeTodayCard {
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .layoutWeight(1);
+            }
+            Row({ space: 8 }) {
+              Row() {
+                Image($r("app.media.check_in"))
+                  .width(this.updateAvailable ? HOME_HEADER_ICON_SIZE : 20)
+                  .height(this.updateAvailable ? HOME_HEADER_ICON_SIZE : 20)
+                if (!this.updateAvailable) {
+                  Text("打卡")
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor("rgba(255,255,255,0.96)")
+                    .margin({ left: 4 })
+                    .letterSpacing(0.3)
+                }
+              }
+              .padding(this.updateAvailable ? { left: 0, right: 0, top: 0, bottom: 0 } : {
+                left: 8,
+                right: 11,
+                top: 5,
+                bottom: 5
+              })
+              .borderRadius(this.updateAvailable ? 0 : 18)
+              .backgroundColor(this.updateAvailable ? Color.Transparent : "rgba(255,255,255,0.18)")
+              .border({
+                width: this.updateAvailable ? 0 : 1,
+                color: "rgba(255,255,255,0.32)"
+              })
+              .alignItems(VerticalAlign.Center)
+              .onClick(() => {
+                this.openCheckinPicker();
+              })
+
+              if (this.updateAvailable) {
+                Image($r("app.media.upversion"))
+                  .width(HOME_HEADER_ICON_SIZE)
+                  .height(HOME_HEADER_ICON_SIZE)
+                  .onClick(() => {
+                    this.onAppUpdatePress();
+                  })
+              }
             }
           }
           .width("100%")

@@ -247,6 +247,20 @@ export class DuoApiService {
     return HttpService.getWithQuery('/duo/stats/by-task', query);
   }
 
+  static async getStatsByDay(period: string): Promise<ApiEnvelope> {
+    const query: Record<string, string> = {
+      'period': period
+    };
+    return HttpService.getWithQuery('/duo/stats/by-day', query);
+  }
+
+  static async getCheckinStatsByDay(period: string): Promise<ApiEnvelope> {
+    const query: Record<string, string> = {
+      'period': period
+    };
+    return HttpService.getWithQuery('/checkins/stats/by-day', query);
+  }
+
   static parseSession(envelope: ApiEnvelope): DuoSessionView | null {
     if (envelope.statusCode !== 200) {
       return null;

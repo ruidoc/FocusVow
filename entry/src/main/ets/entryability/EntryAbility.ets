@@ -1,7 +1,7 @@
 import { AbilityConstant, Configuration, UIAbility, Want } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
+import { font, window } from '@kit.ArkUI';
 import { MsgContent, PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { ExtensionNetworkService } from '../services/ExtensionNetworkService';
@@ -24,6 +24,10 @@ const TAG = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    font.registerFont({
+      familyName: 'LuoXiGangBiXingKai',
+      familySrc: $rawfile('LuoXiGangBiXingKai.ttf')
+    });
     AppContextHolder.bind(this.context);
     ThemeStore.hydrate(this.context);
     AnalyticsService.ensureInitialized(this.context);

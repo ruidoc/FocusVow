@@ -8,6 +8,8 @@ export class FeatureFlagKeys {
   static readonly PARTNER: string = 'partner';
   /** 在 features_off 黑名单中则允许跳过悬浮窗 */
   static readonly SKIP_OVERLAY: string = 'skip_overlay';
+  /** Onboarding 注册领会员页「放弃权益，去专注」；在 features_off 中则隐藏 */
+  static readonly OB_LOGIN_SKIP: string = 'ob_login_skip';
 }
 
 /** Android / 鸿蒙微信支付会员商品 */

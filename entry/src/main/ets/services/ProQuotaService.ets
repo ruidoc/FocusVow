@@ -3,54 +3,12 @@ import { ApiConfig } from "../config/ApiConfig";
 import { QuickTaskStore } from "../stores/QuickTaskStore";
 import { ScheduledListStore } from "../stores/ScheduledListStore";
 import { ensureProMembership, isMemberActive } from "../utils/PaywallNavigationUtil";
-import { readStoredString, writeStoredString } from "./PreferencesService";
 
-export const FREE_QUICK_TASK_LIMIT: number = 3;
-export const FREE_SCHEDULED_TASK_LIMIT: number = 2;
+export const FREE_QUICK_TASK_LIMIT: number = 2;
+export const FREE_SCHEDULED_TASK_LIMIT: number = 1;
 export const FREE_DELAYED_START_MINUTES: number = 5;
-export const FREE_DELAYED_START_DAILY_LIMIT: number = 2;
+export const FREE_DELAYED_START_MINUTES_LIST: number[] = [5, 10, 15];
 const DEV_FREE_DELAYED_START_MINUTES: number = 1;
-
-const DELAYED_START_USAGE_KEY: string = "delayed_start_usage";
-
-interface DelayedStartUsage {
-  date: string;
-  count: number;
-}
-
-function todayKey(): string {
-  const d = new Date();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
-
-function parseDelayedUsage(raw: string): DelayedStartUsage | null {
-  if (raw.length === 0) {
-    return null;
-  }
-  try {
-    const data = JSON.parse(raw) as DelayedStartUsage;
-    if (!data.date) {
-      return null;
-    }
-    return {
-      date: String(data.date),
-      count: Number(data.count) || 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function getDelayedStartUsageToday(context: common.Context): number {
-  const raw = readStoredString(context, DELAYED_START_USAGE_KEY, "");
-  const parsed = parseDelayedUsage(raw);
-  if (!parsed || parsed.date !== todayKey()) {
-    return 0;
-  }
-  return parsed.count;
-}
 
 export function getQuickTaskCount(): number {
   return QuickTaskStore.getTasks().length;
@@ -101,32 +59,8 @@ export function ensureScheduledTaskQuota(): boolean {
   });
 }
 
-export function recordDelayedStartUsage(context: common.Context): void {
-  if (isMemberActive()) {
-    return;
-  }
-  const usage: DelayedStartUsage = {
-    date: todayKey(),
-    count: getDelayedStartUsageToday(context) + 1,
-  };
-  writeStoredString(context, DELAYED_START_USAGE_KEY, JSON.stringify(usage));
-}
-
-function ensureDelayedStartDailyQuota(context: common.Context): boolean {
-  if (isMemberActive()) {
-    return true;
-  }
-  if (getDelayedStartUsageToday(context) < FREE_DELAYED_START_DAILY_LIMIT) {
-    return true;
-  }
-  return ensureProMembership("delayed_start_limit", {
-    proUnlock: true,
-    reason: `免费用户每天可使用 ${FREE_DELAYED_START_DAILY_LIMIT} 次延时契约（每次 ${FREE_DELAYED_START_MINUTES} 分钟）`,
-  });
-}
-
 function isFreeAllowedDelayMinutes(delayMinutes: number): boolean {
-  if (delayMinutes === FREE_DELAYED_START_MINUTES) {
+  if (FREE_DELAYED_START_MINUTES_LIST.indexOf(delayMinutes) >= 0) {
     return true;
   }
   if (ApiConfig.isDevEnvironment() && delayMinutes === DEV_FREE_DELAYED_START_MINUTES) {
@@ -145,7 +79,7 @@ export function ensureDelayMinutesAllowed(delayMinutes: number): boolean {
   if (!isFreeAllowedDelayMinutes(delayMinutes)) {
     return ensureProMembership("delayed_start_limit", {
       proUnlock: true,
-      reason: `免费用户仅可用 ${FREE_DELAYED_START_MINUTES} 分钟延时`,
+      reason: '免费用户可用 5、10、15 分钟延时',
     });
   }
   return true;

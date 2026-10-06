@@ -76,7 +76,7 @@ struct CycleGuardPage {
       return;
     }
     if (this.cycleEnabled) {
-      showToast("请先关闭娱乐限额开关后再编辑", this.getUIContext());
+      showToast("请先关闭短视频限额开关后再编辑", this.getUIContext());
       return;
     }
     if (this.selectedAppCount === 0) {
@@ -178,7 +178,7 @@ struct CycleGuardPage {
   build() {
     Stack() {
       SystemNavPage({
-        title: this.cycleConfigured ? "编辑娱乐限额" : "添加娱乐限额",
+        title: this.cycleConfigured ? "编辑短视频限额" : "添加短视频限额",
         showBack: true,
         usePageScroll: true,
         horizontalPadding: 0,

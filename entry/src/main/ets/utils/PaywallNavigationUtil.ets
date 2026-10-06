@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { BenefitStore } from '../stores/BenefitStore';
 import { FeatureFlagStore } from '../stores/FeatureFlagStore';
+import { StoreKeys } from '../stores/StoreKeys';
 
 export const PRO_UNLOCK_TITLE: string = '解锁 Pro 后继续';
 
@@ -29,12 +30,15 @@ export function ensureProMembership(
 }
 
 export function openVipPurchase(entrySource: string, options?: OpenVipPurchaseOptions): void {
+  if (options?.proUnlock === true) {
+    AppStorage.setOrCreate(StoreKeys.ProQuickPaySource, entrySource);
+    AppStorage.setOrCreate(StoreKeys.ProQuickPayReason, options.reason?.trim() ?? '');
+    AppStorage.setOrCreate(StoreKeys.ProQuickPayVisible, true);
+    return;
+  }
   const params: Record<string, Object> = {
     'entry_source': entrySource,
   };
-  if (options?.proUnlock === true) {
-    params['pro_unlock'] = '1';
-  }
   const reason = options?.reason?.trim() ?? '';
   if (reason.length > 0) {
     params['pro_unlock_reason'] = reason;

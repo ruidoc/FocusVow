@@ -129,7 +129,7 @@ async function hasAuthorization(): Promise<boolean> {
 
 function validateState(state: CycleGuardState): GuardResult<boolean> | null {
   if (state.selectedTokens.length === 0) {
-    return { ok: false, data: false, message: '请先选择需要纳入娱乐限额的应用' };
+    return { ok: false, data: false, message: '请先选择需要纳入短视频限额的应用' };
   }
   if (state.quotaMinutes <= 0) {
     return { ok: false, data: false, message: '总可用时长需要大于 0 分钟' };
@@ -186,10 +186,10 @@ async function restartQuotaStrategy(
     saveState(context, {
       enabled: false,
       phase: 'idle',
-      statusMessage: '启动娱乐限额失败'
+      statusMessage: '启动短视频限额失败'
     });
     clearActiveLockIfCycleGuard(context);
-    return { ok: false, data: false, message: '启动娱乐限额失败' };
+    return { ok: false, data: false, message: '启动短视频限额失败' };
   }
 }
 
@@ -201,8 +201,8 @@ export async function restartCycleGuardIfEnabled(context: common.Context): Promi
 
   await restartQuotaStrategy(
     context,
-    '正在重新开始娱乐限额计时',
-    `娱乐限额已重新开始：${state.quotaMinutes} 分钟`
+    '正在重新开始短视频限额计时',
+    `短视频限额已重新开始：${state.quotaMinutes} 分钟`
   );
 }
 
@@ -219,8 +219,8 @@ export async function activateCycleGuard(context: common.Context): Promise<Guard
   const state = getCurrentState(context);
   return restartQuotaStrategy(
     context,
-    '正在开始娱乐限额计时',
-    `娱乐限额已开始：${state.quotaMinutes} 分钟`
+    '正在开始短视频限额计时',
+    `短视频限额已开始：${state.quotaMinutes} 分钟`
   );
 }
 
@@ -228,16 +228,16 @@ export async function deactivateCycleGuard(context: common.Context): Promise<Gua
   saveState(context, {
     enabled: false,
     phase: 'idle',
-    statusMessage: '娱乐限额已停止'
+    statusMessage: '短视频限额已停止'
   });
   clearActiveLockIfCycleGuard(context);
 
   try {
     await stopGuardStrategyIfStarted(QUOTA_STRATEGY_NAME);
     await removeGuardStrategyIfExists(QUOTA_STRATEGY_NAME);
-    return { ok: true, data: true, message: '娱乐限额已停止' };
+    return { ok: true, data: true, message: '短视频限额已停止' };
   } catch {
-    return { ok: false, data: false, message: '停止娱乐限额失败' };
+    return { ok: false, data: false, message: '停止短视频限额失败' };
   }
 }
 
@@ -277,7 +277,7 @@ export async function handleCycleStrategyStop(
   saveState(context, {
     enabled: true,
     phase: 'quota_running',
-    statusMessage: `娱乐限额已恢复：${state.quotaMinutes} 分钟`
+    statusMessage: `短视频限额已恢复：${state.quotaMinutes} 分钟`
   });
   clearActiveLockIfCycleGuard(context);
 }
@@ -287,7 +287,7 @@ export async function endCurrentCycleGuardLockAndRestart(
 ): Promise<GuardResult<boolean>> {
   const state = getCurrentState(context);
   if (!state.enabled) {
-    return { ok: false, data: false, message: '娱乐限额未启动' };
+    return { ok: false, data: false, message: '短视频限额未启动' };
   }
   if (!isPhase(state, 'locked')) {
     return { ok: false, data: false, message: '当前不在锁定状态' };
@@ -296,13 +296,13 @@ export async function endCurrentCycleGuardLockAndRestart(
   saveState(context, {
     enabled: true,
     phase: 'locked',
-    statusMessage: '正在结束当前锁定并重新开始娱乐限额计时'
+    statusMessage: '正在结束当前锁定并重新开始短视频限额计时'
   });
 
   const nextState = getCurrentState(context);
   return restartQuotaStrategy(
     context,
-    '正在重新开始娱乐限额计时',
-    `娱乐限额已重新开始：${nextState.quotaMinutes} 分钟`
+    '正在重新开始短视频限额计时',
+    `短视频限额已重新开始：${nextState.quotaMinutes} 分钟`
   );
 }

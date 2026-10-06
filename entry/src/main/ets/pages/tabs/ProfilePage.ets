@@ -2,13 +2,11 @@ import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { showErrorToast } from "../../common/Toast";
 import { AppTheme } from "../../constants/Theme";
 import { common } from "@kit.AbilityKit";
-import { OrgListItem } from "../../models/OrgModel";
 import { createEmptyUserInfo, UserInfo } from "../../models/UserModel";
 import { router } from "@kit.ArkUI";
 import { PageRoutes, pushLogin, pushRoute } from "../../router/PageRoutes";
 import { WeComCustomerService } from "../../services/WeComCustomerService";
 import { BenefitStore } from "../../stores/BenefitStore";
-import { OrgStore } from "../../stores/OrgStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { FeatureFlagKeys } from "../../config/FeatureFlags";
@@ -28,7 +26,6 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
   @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = "none";
-  @StorageLink(StoreKeys.OrgList) orgList: OrgListItem[] = [];
   @StorageLink(StoreKeys.FeatureFlagsOff) featuresOff: string[] = [];
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = "light";
 
@@ -39,29 +36,10 @@ export struct ProfilePage {
     BenefitStore.hydrate(hostContext);
     FeatureFlagStore.hydrate(hostContext);
     void FeatureFlagStore.sync(hostContext);
-    OrgStore.hydrate();
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
       void BenefitStore.refresh();
-      void OrgStore.listMine();
     }
-  }
-
-  private hasOwnedOrg(): boolean {
-    for (let i = 0; i < this.orgList.length; i++) {
-      if (this.orgList[i].role === "owner") {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private openOrgManage(): void {
-    if (!this.isLoggedIn) {
-      pushLogin();
-      return;
-    }
-    pushRoute(PageRoutes.OrgManage);
   }
 
   private getDisplayName(): string {
@@ -120,7 +98,7 @@ export struct ProfilePage {
 
   private async openContactSupport(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext);
+    const errorMessage = await WeComCustomerService.open(hostContext, 'user_tab');
     if (errorMessage !== null) {
       showErrorToast(errorMessage, this.getUIContext());
     }
@@ -148,7 +126,7 @@ export struct ProfilePage {
 
   private getMemberDesc(): string {
     if (this.isMembershipActive()) {
-      return "邀请搭子加入，再领60天会员！";
+      return "邀请搭子加入，再领30天会员！";
     }
     return this.isPromoVipEnabled()
       ? "开通会员，解锁全部高级专注能力"
@@ -367,11 +345,6 @@ export struct ProfilePage {
         this.buildMenuRow("意见反馈", $r("sys.symbol.ellipsis_message"), "", true, () => {
           pushRoute(PageRoutes.Feedback);
         })
-        if (this.hasOwnedOrg()) {
-          this.buildMenuRow("组织管理", $r("sys.symbol.person_2"), "", true, () => {
-            this.openOrgManage();
-          });
-        }
         this.buildMenuRow("关于我们", $r("sys.symbol.square_grid_2x2"), "", true, () => {
           pushRoute(PageRoutes.About);
         })

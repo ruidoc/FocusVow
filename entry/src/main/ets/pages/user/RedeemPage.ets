@@ -27,9 +27,9 @@ interface InviteStep {
 }
 
 const INVITE_STEPS: InviteStep[] = [
-  { need: 1, days: 15 },
-  { need: 2, days: 30 },
-  { need: 3, days: 60 },
+  { need: 1, days: 7 },
+  { need: 2, days: 14 },
+  { need: 3, days: 30 },
 ];
 
 @Entry
@@ -193,7 +193,7 @@ struct RedeemPage {
 
   private async onContactSupport(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext);
+    const errorMessage = await WeComCustomerService.open(hostContext, 'user_redeem');
     if (errorMessage !== null) {
       showErrorToast(errorMessage, this.getUIContext());
     }
@@ -425,7 +425,7 @@ struct RedeemPage {
   private buildInviteSection(): void {
     Column({ space: 14 }) {
       Column({ space: 16 }) {
-        Text(this.showSuccess() ? "邀请搭子，再得60天会员！" : "邀请搭子得60天会员！")
+        Text(this.showSuccess() ? "邀请搭子，再得30天会员！" : "邀请搭子得30天会员！")
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)

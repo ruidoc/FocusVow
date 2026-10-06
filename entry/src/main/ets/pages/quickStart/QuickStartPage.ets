@@ -8,10 +8,8 @@ import { FocusDurationCard } from "../../components/focus/FocusDurationCard";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
 import { backRoute, openQuickTaskTabOnce, returnToMainTab } from "../../router/PageRoutes";
-import {
-  applyScreenRestriction,
-  chooseRestrictedApps,
-} from "../../services/ScreenTimeService";
+import { applyScreenRestriction, chooseRestrictedApps } from "../../services/ScreenTimeService";
+import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from "../../services/ScheduledPlanValidation";
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
 import { ensureTaskPermission } from "../../utils/TaskPermissionUtil";
 import { AnalyticsService } from "../../services/AnalyticsService";
@@ -38,7 +36,11 @@ import {
   shouldShowOnboardingActivationBanner,
   startMembershipUrgencyCountdown,
 } from "../../utils/OnboardingMembershipUtil";
-import { ensureQuickTaskQuota, ensureDelayStartAllowed, normalizeDelayMinutes } from "../../services/ProQuotaService";
+import {
+  ensureQuickTaskQuota,
+  ensureDelayStartAllowed,
+  normalizeDelayMinutes,
+} from "../../services/ProQuotaService";
 import { FIRST_FOCUS_TITLE } from "../../services/FirstFocusPromptService";
 
 bootstrapStores();
@@ -217,10 +219,12 @@ struct QuickStartPage {
 
   private async chooseApps(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!(await ensureTaskPermission(hostContext, this.getUIContext(), {
-      entry_source: this.fromOnboarding ? 'onboarding' : 'quick_start',
-      screen_name: 'quick_start',
-    }))) {
+    if (
+      !(await ensureTaskPermission(hostContext, this.getUIContext(), {
+        entry_source: this.fromOnboarding ? "onboarding" : "quick_start",
+        screen_name: "quick_start",
+      }))
+    ) {
       return;
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
@@ -235,10 +239,12 @@ struct QuickStartPage {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const uiContext = this.getUIContext();
 
-    if (!(await ensureTaskPermission(hostContext, uiContext, {
-      entry_source: this.fromOnboarding ? 'onboarding' : 'quick_start',
-      screen_name: 'quick_start',
-    }))) {
+    if (
+      !(await ensureTaskPermission(hostContext, uiContext, {
+        entry_source: this.fromOnboarding ? "onboarding" : "quick_start",
+        screen_name: "quick_start",
+      }))
+    ) {
       return;
     }
 
@@ -324,6 +330,10 @@ struct QuickStartPage {
       }
       showToast(`${this.startDelayMinutes} 分钟后开始专注`, this.getUIContext());
       returnToMainTab("focus");
+      return;
+    }
+
+    if (blockIfOverlapsScheduledPlan(conflictWindowMinutes(this.timerMode, this.durationMinutes))) {
       return;
     }
 
