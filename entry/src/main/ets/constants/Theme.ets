@@ -25,7 +25,7 @@ class ThemeColors {
   dangerSoft: string = '#FDECEC';
   surfaceSecondary: string = '#F0F2F5';
   ring: string = '#E5E7EB';
-  primaryMuted: string = '#7A5AF880';
+  primaryMuted: string = 'rgba(122, 90, 248, 0.53)';
   primaryMutedForeground: string = '#A78BFA';
   paywallCardSelected: string = '#FFFBF0';
   paywallCloseBtnBg: string = '#EEF2F7';
@@ -64,7 +64,7 @@ const LIGHT_COLORS: ThemeColors = {
   dangerSoft: '#FDECEC',
   surfaceSecondary: '#F0F2F5',
   ring: '#E5E7EB',
-  primaryMuted: '#7A5AF880',
+  primaryMuted: 'rgba(122, 90, 248, 0.53)',
   primaryMutedForeground: '#A78BFA',
   paywallCardSelected: '#FFFBF0',
   paywallCloseBtnBg: '#EEF2F7',

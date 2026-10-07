@@ -367,17 +367,19 @@ struct MembershipPage {
         .fontColor(this.goldText())
         .opacity(this.isActive() ? 0.12 : 0.07)
         .letterSpacing(2)
-        .position({ x: "58%", y: this.isActive() ? this.topInsetVp + 4 : this.topInsetVp + 32 })
+        .position({ x: "66%", y: this.isActive() ? this.topInsetVp - 46 : this.topInsetVp - 14 })
       Column() {
         Row() {
           Row() {
             SymbolGlyph($r("sys.symbol.chevron_left"))
-              .fontSize(24)
+              .fontSize(26)
+              .fontWeight(FontWeight.Bold)
               .fontColor([this.goldText()])
           }
           .width(44)
           .height(44)
-          .justifyContent(FlexAlign.Center)
+          .justifyContent(FlexAlign.Start)
+          .alignItems(VerticalAlign.Center)
           .onClick(() => {
             backRoute();
           })
@@ -454,7 +456,7 @@ struct MembershipPage {
             ["#F7E7C6", 1],
           ],
     })
-    .margin({ top: -this.topInsetVp });
+    .margin({ top: 0 });
   }
 
   private goldText(): string {
@@ -498,7 +500,13 @@ struct MembershipPage {
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
-        Row() {
+          .width("100%")
+          .textAlign(TextAlign.Start)
+        Flex({
+          direction: FlexDirection.Row,
+          alignItems: ItemAlign.Baseline,
+          justifyContent: FlexAlign.Start,
+        }) {
           Text(splitPriceDisplay(formatPrice(product.price))[0])
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
@@ -508,16 +516,17 @@ struct MembershipPage {
             .fontSize(36)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
-            .lineHeight(40)
         }
-        .alignItems(VerticalAlign.Bottom)
         .margin({ top: 16 })
         Text(`约 ${dayPrice(product)}/天`)
           .fontSize(11)
           .fontColor(AppTheme.colors.textSecondary)
+          .width("100%")
+          .textAlign(TextAlign.Start)
           .margin({ top: 4 })
       }
       .width("100%")
+      .alignItems(HorizontalAlign.Start)
       .padding({ left: 12, right: 12, top: 18, bottom: 16 })
       .borderRadius(24)
       .backgroundColor(
@@ -607,14 +616,19 @@ struct MembershipPage {
               (product: VipProduct) => product.product_id,
             )
           }
-          .width('100%')
           .justifyContent(FlexAlign.Start)
           .alignItems(VerticalAlign.Top)
           .padding({ left: 20, right: 20, top: 10, bottom: 4 })
         }
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(BarState.Off)
-        .width("100%");
+        .edgeEffect(EdgeEffect.Spring)
+        .nestedScroll({
+          scrollForward: NestedScrollMode.SELF_FIRST,
+          scrollBackward: NestedScrollMode.SELF_FIRST,
+        })
+        .width("100%")
+        .align(Alignment.TopStart);
       }
       Text("会员权益")
         .fontSize(17)
@@ -660,7 +674,8 @@ struct MembershipPage {
       .padding({ left: 20, right: 20, top: 28 })
     }
     .width("100%")
-    .padding({ top: 20, bottom: 24 })
+    .layoutWeight(1)
+    .padding({ top: 20 })
     .margin({ top: -20 })
     .borderRadius({ topLeft: 24, topRight: 24 })
     .backgroundColor(AppTheme.colors.surface);
@@ -734,6 +749,7 @@ struct MembershipPage {
           this.buildSheet()
         }
         .width("100%")
+        .constraintSize({ minHeight: "100%" })
         .onAreaChange((_old: Area, area: Area) => {
           const next = area.width as number;
           if (next > 0 && Math.abs(next - this.contentWidth) > 1) {

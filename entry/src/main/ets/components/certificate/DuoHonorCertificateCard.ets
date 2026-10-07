@@ -1,6 +1,7 @@
 import { HonorCertificateData, createEmptyHonorCertificateData } from '../../models/CertificateModel';
 import { CERTIFICATE_SNAPSHOT_ID } from '../../services/CertificateImageService';
 import { honorCertificateBackground, isCertificateDarkTheme } from '../../utils/CertificateTemplate';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { CertificateContractBody } from './CertificateContractBody';
 import { CertificateFooter } from './CertificateFooter';
 
@@ -15,6 +16,12 @@ export struct DuoHonorCertificateCard {
   @Prop data: HonorCertificateData = createEmptyHonorCertificateData();
   @Prop snapshotId: string = CERTIFICATE_SNAPSHOT_ID;
   @Prop templateStyle: string = 'classic';
+  @StorageLink(StoreKeys.CertificateScale) certScale: number = 1;
+
+  private fs(value: number): number {
+    const scale = this.certScale > 0 ? this.certScale : 1;
+    return Math.round(value * scale * 10) / 10;
+  }
 
   @Builder
   private buildBody(): void {
@@ -43,10 +50,10 @@ export struct DuoHonorCertificateCard {
       .width('100%')
       .height('100%')
       .padding({
-        left: CARD_PADDING_H,
-        right: CARD_PADDING_H,
-        top: CARD_PADDING_TOP,
-        bottom: CARD_PADDING_BOTTOM + 72
+        left: this.fs(CARD_PADDING_H),
+        right: this.fs(CARD_PADDING_H),
+        top: this.fs(CARD_PADDING_TOP),
+        bottom: this.fs(CARD_PADDING_BOTTOM + 72)
       })
       .zIndex(1)
 
@@ -57,7 +64,7 @@ export struct DuoHonorCertificateCard {
           adSlogan: this.data.adSlogan,
           darkTheme: isCertificateDarkTheme('honor', this.templateStyle)
         })
-          .margin({ left: 36, bottom: 40 })
+          .margin({ left: this.fs(36), bottom: this.fs(40) })
       }
       .width('100%')
       .height('100%')
@@ -65,10 +72,10 @@ export struct DuoHonorCertificateCard {
 
       Stack({ alignContent: Alignment.BottomEnd }) {
         Image($r('app.media.seal_fulfill'))
-          .width(SEAL_SIZE)
-          .height(SEAL_SIZE)
+          .width(this.fs(SEAL_SIZE))
+          .height(this.fs(SEAL_SIZE))
           .objectFit(ImageFit.Contain)
-          .margin({ right: 22, bottom: 38 })
+          .margin({ right: this.fs(22), bottom: this.fs(38) })
       }
       .width('100%')
       .height('100%')
@@ -77,8 +84,6 @@ export struct DuoHonorCertificateCard {
     }
     .width('100%')
     .aspectRatio(HONOR_ASPECT_RATIO)
-    .borderRadius(12)
-    .clip(true)
     .id(this.snapshotId)
   }
 }

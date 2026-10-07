@@ -43,7 +43,7 @@ export struct HonorRecordListSection {
               title: item.record.title,
               timeLabel: formatStatsDateTimeLabel(item.record.completed_at ?? item.day, item.day),
               modeTag: getParticipationModeTag(item.record.participation_mode),
-              durationMinutes: item.record.actual_min,
+              durationMinutes: Math.max(0, Math.floor(item.record.actual_min)),
               onPress: () => {
                 this.onItemPress?.(item);
               }

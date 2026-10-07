@@ -1,21 +1,14 @@
-import { common } from '@kit.AbilityKit';
-import {
-  ActiveLockState,
-  QuickFocusOptions
-} from '../models/ActiveLockModel';
-import { DuoSessionView, resolveDuoCounterpartName } from '../models/DuoModel';
-import { returnToMainTab } from '../router/PageRoutes';
-import { LockStore } from '../stores/LockStore';
-import { DuoBgSyncService } from './DuoBgSyncService';
-import { FocusStartedNotifyService } from './FocusStartedNotifyService';
-import { applyScreenRestriction } from './ScreenTimeService';
-import { blockIfOverlapsScheduledPlan } from './ScheduledPlanValidation';
-import { clearDuoWaitContext } from './DuoWaitContextService';
-import {
-  COUNTUP_OPEN_LOCK_MIN,
-  isCountupMode,
-  normalizeTimerMode
-} from '../utils/TimerMode';
+import { common } from "@kit.AbilityKit";
+import { ActiveLockState, QuickFocusOptions } from "../models/ActiveLockModel";
+import { DuoSessionView, resolveDuoCounterpartName } from "../models/DuoModel";
+import { returnToMainTab } from "../router/PageRoutes";
+import { LockStore } from "../stores/LockStore";
+import { DuoBgSyncService } from "./DuoBgSyncService";
+import { FocusStartedNotifyService } from "./FocusStartedNotifyService";
+import { applyScreenRestriction } from "./ScreenTimeService";
+import { blockIfOverlapsScheduledPlan } from "./ScheduledPlanValidation";
+import { clearDuoWaitContext } from "./DuoWaitContextService";
+import { COUNTUP_OPEN_LOCK_MIN, isCountupMode, normalizeTimerMode } from "../utils/TimerMode";
 
 export interface DuoInstantLockResult {
   ok: boolean;
@@ -46,33 +39,30 @@ export function parseDuoServerTimeMs(value?: string): number {
 function resolveSessionTimerFields(session: DuoSessionView): [string, number, number] {
   const timerMode = normalizeTimerMode(session.timer_mode);
   const userDuration = session.duration_min > 0 ? session.duration_min : 25;
-  const minDurationMin = timerMode === 'countup' ? userDuration : 0;
+  const minDurationMin = timerMode === "countup" ? userDuration : 0;
   return [timerMode, userDuration, minDurationMin];
 }
 
 /** 加入方：完整时长，不绑服务端 end_at */
 export function buildDuoFullDurationOptions(
   session: DuoSessionView,
-  title?: string
+  title?: string,
 ): QuickFocusOptions {
   const fields = resolveSessionTimerFields(session);
   const options: QuickFocusOptions = {
     title: title && title.length > 0 ? title : session.title,
     duoSessionId: session.session_id,
-    recordId: session.my_record_id || session.record_id || '',
-    participationMode: 'duo',
+    recordId: session.my_record_id || session.record_id || "",
+    participationMode: "duo",
     partnerNickname: resolveDuoCounterpartName(session),
     timerMode: fields[0],
-    minDurationMin: fields[2]
+    minDurationMin: fields[2],
   };
   return options;
 }
 
 /** 发起方补锁：按服务端 active_at / end_at 对齐 */
-export function buildDuoAlignedOptions(
-  session: DuoSessionView,
-  title?: string
-): QuickFocusOptions {
+export function buildDuoAlignedOptions(session: DuoSessionView, title?: string): QuickFocusOptions {
   const fields = resolveSessionTimerFields(session);
   const timerMode = fields[0];
   const durationMin = fields[1];
@@ -95,13 +85,13 @@ export function buildDuoAlignedOptions(
   const options: QuickFocusOptions = {
     title: title && title.length > 0 ? title : session.title,
     duoSessionId: session.session_id,
-    recordId: session.my_record_id || session.record_id || '',
-    participationMode: 'duo',
+    recordId: session.my_record_id || session.record_id || "",
+    participationMode: "duo",
     partnerNickname: resolveDuoCounterpartName(session),
     startedAtMs: startedAtMs > 0 ? startedAtMs : undefined,
     endAtMs: endAtMs > 0 ? endAtMs : undefined,
     timerMode: timerMode,
-    minDurationMin: minDurationMin
+    minDurationMin: minDurationMin,
   };
   return options;
 }
@@ -115,13 +105,13 @@ export async function startOrAlignInstantDuoFocus(
   context: common.Context,
   session: DuoSessionView,
   selectedTokens: string[],
-  options?: DuoInstantLockOptions
+  options?: DuoInstantLockOptions,
 ): Promise<DuoInstantLockResult> {
-  if (session.status !== 'active' || session.type === 'scheduled') {
+  if (session.status !== "active" || session.type === "scheduled") {
     const skipped: DuoInstantLockResult = {
       ok: false,
-      message: 'session_not_active_instant',
-      alreadyLocked: false
+      message: "session_not_active_instant",
+      alreadyLocked: false,
     };
     return skipped;
   }
@@ -140,18 +130,22 @@ export async function startOrAlignInstantDuoFocus(
     }
     const ended: DuoInstantLockResult = {
       ok: false,
-      message: 'session_already_ended',
-      alreadyLocked: false
+      message: "session_already_ended",
+      alreadyLocked: false,
     };
     return ended;
   }
 
   LockStore.hydrate(context);
   const current = LockStore.getState();
-  if (current.kind === 'quick_focus' && current.duoSessionId === session.session_id) {
+  if (current.kind === "quick_focus" && current.duoSessionId === session.session_id) {
     if (alignToServerEnd) {
       const focusOptions = buildDuoAlignedOptions(session, options?.title);
-      if (focusOptions.endAtMs && focusOptions.endAtMs > 0 && current.endAt !== focusOptions.endAtMs) {
+      if (
+        focusOptions.endAtMs &&
+        focusOptions.endAtMs > 0 &&
+        current.endAt !== focusOptions.endAtMs
+      ) {
         const aligned: ActiveLockState = {
           kind: current.kind,
           strategyName: current.strategyName,
@@ -160,24 +154,28 @@ export async function startOrAlignInstantDuoFocus(
           selectedTokens: current.selectedTokens,
           selectedCount: current.selectedCount,
           mode: current.mode,
-          startedAt: focusOptions.startedAtMs && focusOptions.startedAtMs > 0
-            ? focusOptions.startedAtMs
-            : current.startedAt,
+          startedAt:
+            focusOptions.startedAtMs && focusOptions.startedAtMs > 0
+              ? focusOptions.startedAtMs
+              : current.startedAt,
           endAt: focusOptions.endAtMs,
           updatedAt: Date.now(),
           duoSessionId: current.duoSessionId,
-          recordId: focusOptions.recordId && focusOptions.recordId.length > 0
-            ? focusOptions.recordId
-            : current.recordId,
-          participationMode: 'duo',
-          partnerNickname: focusOptions.partnerNickname && focusOptions.partnerNickname.length > 0
-            ? focusOptions.partnerNickname
-            : current.partnerNickname,
-          timerMode: focusOptions.timerMode === 'countup' ? 'countup' : current.timerMode,
-          minDurationMin: focusOptions.minDurationMin && focusOptions.minDurationMin > 0
-            ? focusOptions.minDurationMin
-            : current.minDurationMin,
-          isDelayedSolo: current.isDelayedSolo
+          recordId:
+            focusOptions.recordId && focusOptions.recordId.length > 0
+              ? focusOptions.recordId
+              : current.recordId,
+          participationMode: "duo",
+          partnerNickname:
+            focusOptions.partnerNickname && focusOptions.partnerNickname.length > 0
+              ? focusOptions.partnerNickname
+              : current.partnerNickname,
+          timerMode: focusOptions.timerMode === "countup" ? "countup" : current.timerMode,
+          minDurationMin:
+            focusOptions.minDurationMin && focusOptions.minDurationMin > 0
+              ? focusOptions.minDurationMin
+              : current.minDurationMin,
+          isDelayedSolo: current.isDelayedSolo,
         };
         LockStore.setState(context, aligned);
       }
@@ -187,12 +185,12 @@ export async function startOrAlignInstantDuoFocus(
     }
     DuoBgSyncService.ensure();
     if (options?.navigateHome !== false) {
-      returnToMainTab('focus');
+      returnToMainTab("focus");
     }
     const already: DuoInstantLockResult = {
       ok: true,
-      message: '',
-      alreadyLocked: true
+      message: "",
+      alreadyLocked: true,
     };
     return already;
   }
@@ -200,8 +198,8 @@ export async function startOrAlignInstantDuoFocus(
   if (LockStore.isLocked()) {
     const busy: DuoInstantLockResult = {
       ok: false,
-      message: 'already_locked_other',
-      alreadyLocked: true
+      message: "already_locked_other",
+      alreadyLocked: true,
     };
     return busy;
   }
@@ -217,23 +215,22 @@ export async function startOrAlignInstantDuoFocus(
       lockMinutes = Math.max(1, Math.ceil((endAtMs - Date.now()) / 60000));
     }
   }
-  const conflictWindow = timerFields[0] === 'countup'
-    ? Math.max(1, userDuration || 25)
-    : Math.max(1, lockMinutes);
+  const conflictWindow =
+    timerFields[0] === "countup" ? Math.max(1, userDuration || 25) : Math.max(1, lockMinutes);
   if (blockIfOverlapsScheduledPlan(conflictWindow)) {
     const blocked: DuoInstantLockResult = {
       ok: false,
-      message: 'schedule_overlap',
-      alreadyLocked: false
+      message: "schedule_overlap",
+      alreadyLocked: false,
     };
     return blocked;
   }
-  const lockResult = await applyScreenRestriction(selectedTokens, 'allow');
+  const lockResult = await applyScreenRestriction(selectedTokens, "allow");
   if (!lockResult.ok) {
     const failed: DuoInstantLockResult = {
       ok: false,
       message: lockResult.message,
-      alreadyLocked: false
+      alreadyLocked: false,
     };
     return failed;
   }
@@ -242,15 +239,15 @@ export async function startOrAlignInstantDuoFocus(
     ? buildDuoAlignedOptions(session, options?.title)
     : buildDuoFullDurationOptions(session, options?.title);
   const timerMode = timerFields[0];
-  LockStore.startQuickFocus(context, selectedTokens, userDuration, 'allow', focusOptions);
+  LockStore.startQuickFocus(context, selectedTokens, userDuration, "allow", focusOptions);
 
   FocusStartedNotifyService.report(context, {
-    scene: alignToServerEnd ? 'duo_initiate_start' : 'duo_join_start',
+    scene: alignToServerEnd ? "duo_initiate_start" : "duo_join_start",
     durationMin: userDuration,
     sessionId: session.session_id,
-    sessionType: 'instant',
+    sessionType: "instant",
     title: focusOptions.title,
-    timerMode: timerMode
+    timerMode: timerMode,
   });
 
   if (options?.clearWait !== false) {
@@ -258,12 +255,12 @@ export async function startOrAlignInstantDuoFocus(
   }
   DuoBgSyncService.ensure();
   if (options?.navigateHome !== false) {
-    returnToMainTab('focus');
+    returnToMainTab("focus");
   }
   const started: DuoInstantLockResult = {
     ok: true,
-    message: '',
-    alreadyLocked: false
+    message: "",
+    alreadyLocked: false,
   };
   return started;
 }

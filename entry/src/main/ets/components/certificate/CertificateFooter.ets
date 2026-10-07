@@ -23,7 +23,7 @@ export struct CertificateFooter {
         .fontColor(this.darkTheme ? 'rgba(242, 208, 208, 0.95)' : '#3E2A12')
         .margin({ bottom: 5 })
       if (this.footerDatetime.length > 0) {
-        Text(`日期：${this.footerDatetime}`)
+        Text(this.footerDatetime)
           .fontSize(this.fs(13))
           .fontFamily(CONTRACT_FONT)
           .letterSpacing(0.5)

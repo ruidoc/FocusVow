@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
-import { CheckinPoster } from '../../components/home/CheckinPoster';
+import { CheckinPeekCarousel } from '../../components/checkin/CheckinPeekCarousel';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { createEmptyUserInfo, UserInfo } from '../../models/UserModel';
@@ -59,7 +59,7 @@ struct CheckinPage {
   @State focusMinutes: number = 0;
   @State taskCount: number = 0;
   @State successRate: string = '0%';
-  @State posterWidth: number = 320;
+  @State viewportWidth: number = 0;
   @State clockText: string = '';
   private clockTimer: number = -1;
 
@@ -126,11 +126,6 @@ struct CheckinPage {
     }
     const i = Math.min(this.index, this.cards.length - 1);
     return this.cards[i];
-  }
-
-  private posterHeight(): number {
-    const width = this.posterWidth > 0 ? this.posterWidth : 320;
-    return Math.round(width * 1.45);
   }
 
   private snapshotId(): string {
@@ -257,21 +252,6 @@ struct CheckinPage {
   }
 
   @Builder
-  private buildPoster(card: ShareCardItem): void {
-    CheckinPoster({
-      kind: this.kind(),
-      card: card,
-      focusMinutes: this.focusMinutes,
-      taskCount: this.taskCount,
-      successRate: this.successRate,
-      username: this.displayName(),
-      avatar: this.userInfo.avatar,
-      posterWidth: this.posterWidth,
-      snapshotId: `checkinPoster_${card.id}`
-    })
-  }
-
-  @Builder
   private buildContent(): void {
     Column() {
       if (this.phase === 'loading') {
@@ -355,48 +335,24 @@ struct CheckinPage {
               .fontColor('#16B364')
           }
           .margin({ bottom: 30 })
-          Swiper() {
-            ForEach(this.cards, (card: ShareCardItem) => {
-              Column() {
-                this.buildPoster(card)
-              }
-              .width(this.posterWidth)
-              .height(this.posterHeight())
-            }, (card: ShareCardItem) => card.id)
-          }
-          .width(this.posterWidth)
-          .height(this.posterHeight())
-          .index(this.index)
-          .loop(false)
-          .indicator(false)
-          .onChange((idx: number) => {
-            this.index = idx;
-          })
-
-          if (this.cards.length > 1) {
-            Row({ space: 6 }) {
-              ForEach(this.cards, (card: ShareCardItem, cardIndex: number) => {
-                Column()
-                  .width(cardIndex === this.index ? 16 : 6)
-                  .height(6)
-                  .borderRadius(3)
-                  .backgroundColor(cardIndex === this.index ? AppTheme.colors.textPrimary : AppTheme.colors.text3)
-              }, (card: ShareCardItem) => `dot_${card.id}`)
-            }
-            .margin({ top: 14 })
-            .justifyContent(FlexAlign.Center)
+          if (this.cards.length > 0) {
+            CheckinPeekCarousel({
+              kind: this.kind(),
+              cards: this.cards,
+              focusMinutes: this.focusMinutes,
+              taskCount: this.taskCount,
+              successRate: this.successRate,
+              username: this.displayName(),
+              avatar: this.userInfo.avatar,
+              activeIndex: $index,
+              viewportWidth: $viewportWidth,
+            })
           }
         }
         .width('100%')
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
-        .onAreaChange((_old: Area, area: Area) => {
-          const next = Math.min(area.width as number, 380);
-          if (next > 0 && Math.abs(next - this.posterWidth) > 1) {
-            this.posterWidth = next;
-          }
-        })
       }
 
       if (this.phase === 'done') {

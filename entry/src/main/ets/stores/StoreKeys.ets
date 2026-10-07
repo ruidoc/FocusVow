@@ -74,6 +74,10 @@ export class StoreKeys {
   static readonly InboxOpenId: string = 'inbox.openId';
   static readonly InboxDetailId: string = 'inbox.detailId';
   static readonly CheckinKind: string = 'checkin.kind';
+  static readonly HomeActualMins: string = 'home.actualMins';
+  static readonly HomeTaskCount: string = 'home.taskCount';
+  static readonly HomeFailCount: string = 'home.failCount';
+  static readonly HomeSuccessRate: string = 'home.successRate';
   static readonly OnboardingViaOldUser: string = 'onboarding.via_old_user';
   static readonly OnboardingAfterRegister: string = 'onboarding.after_register';
   static readonly LoginFrom: string = 'login.from';

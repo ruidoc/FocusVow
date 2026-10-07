@@ -76,7 +76,13 @@ struct GlobalRankPage {
     this.listRows = rest;
     this.hasMyRank = data.hasMyRank;
     this.myRank = data.myRank;
-    this.myRankText = data.hasMyRank ? '' : '未上榜（满 5 分钟才计入）';
+    if (data.hasMyRank) {
+      this.myRankText = '';
+    } else if (data.myMinutes > 0 && data.myMinutes < GLOBAL_RANK_MIN_MINS) {
+      this.myRankText = '未上榜（满 5 分钟才计入）';
+    } else {
+      this.myRankText = '未上榜';
+    }
   }
 
   private rowAtRank(rank: number): RankRow | null {

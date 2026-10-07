@@ -77,8 +77,6 @@ export struct ShameCertificateCard {
     }
     .width('100%')
     .aspectRatio(WARNING_ASPECT_RATIO)
-    .borderRadius(12)
-    .clip(true)
     .id(this.snapshotId)
   }
 }

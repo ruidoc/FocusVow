@@ -72,6 +72,9 @@ export function createEmptyShameCertificateData(): ShameCertificateData {
   };
 }
 
-export function isDuoHonorCertificate(data: HonorCertificateData): boolean {
+export function isDuoHonorCertificate(data: HonorCertificateData | undefined): boolean {
+  if (data === undefined) {
+    return false;
+  }
   return data.partnerName.trim().length > 0;
 }

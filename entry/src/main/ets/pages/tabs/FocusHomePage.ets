@@ -38,6 +38,8 @@ import {
   tearQuickFocus,
 } from "../../services/ActiveLockLifecycleService";
 import { DuoApiService } from "../../services/DuoApiService";
+import { RecordStatisSnapshot, refreshHomeRecordStatis } from "../../stores/HomeRecordStatStore";
+import { registerHomeStatsReload, unregisterHomeStatsReload } from "../../stores/StatsStore";
 import {
   queueHonorCertificate,
   queueShameCertificate,
@@ -121,6 +123,13 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.PendingQuickStartStartAtMs) pendingQuickStartStartAtMs: number = 0;
   @StorageLink(StoreKeys.InboxUnread) inboxUnread: number = 0;
   @StorageLink(StoreKeys.InboxImportantUnread) inboxImportant: number = 0;
+  @State homeStatis: RecordStatisSnapshot = {
+    actual_mins: 0,
+    task_count: 0,
+    fail_count: 0,
+    success_rate: 0,
+    total_mins: 0,
+  };
   @State remainingLabel: string = LockStore.getRemainingLabel();
   @State pendingRemainTick: number = 0;
   @State showTearConfirm: boolean = false;
@@ -130,7 +139,6 @@ export struct FocusHomePage {
   @State isRefreshing: boolean = false;
   @State showActivationModal: boolean = false;
   @State activationGuestPath: boolean = false;
-  @State homeStatsRefreshTick: number = 0;
   @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
 
   private timerId: number = -1;
@@ -162,6 +170,10 @@ export struct FocusHomePage {
     this.loadTopSafeInset(hostContext);
     this.loadHomeContentLift();
     UserStore.hydrate(hostContext);
+    registerHomeStatsReload(() => {
+      void this.loadHomeTodayStats(hostContext);
+    });
+    void this.loadHomeTodayStats(hostContext);
     this.tryShowActivationModal(hostContext);
     void this.runPostOnboardingHomeFlow(hostContext);
   }
@@ -178,6 +190,7 @@ export struct FocusHomePage {
     void reconcileOrgClassroomOnForeground(hostContext);
     if (UserStore.isLoggedIn()) {
       void InboxStore.fetchUnread();
+      void this.loadHomeTodayStats(hostContext);
     } else if (!this.isActiveLocked()) {
       onCertificateGuideDismissed(this.getUIContext());
     }
@@ -310,6 +323,7 @@ export struct FocusHomePage {
   }
 
   aboutToDisappear(): void {
+    unregisterHomeStatsReload();
     this.clearTimer();
   }
 
@@ -511,6 +525,15 @@ export struct FocusHomePage {
     this.remainingLabel = LockStore.getRemainingLabel();
   }
 
+  /** 与统计页 this.summary = 一样：接口结果直接写入本页 @State */
+  private async loadHomeTodayStats(hostContext: common.UIAbilityContext): Promise<void> {
+    const statis: RecordStatisSnapshot | null = await refreshHomeRecordStatis(hostContext);
+    if (statis === null) {
+      return;
+    }
+    this.homeStatis = statis;
+  }
+
   /** 对齐 RN 首页下拉刷新：专注中不刷新，否则拉权益与消息未读 */
   private async onHomeRefresh(): Promise<void> {
     if (this.isActiveLocked()) {
@@ -520,9 +543,10 @@ export struct FocusHomePage {
     this.isRefreshing = true;
     try {
       if (UserStore.isLoggedIn()) {
+        const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
         await BenefitStore.refresh();
         await InboxStore.fetchUnread();
-        this.homeStatsRefreshTick += 1;
+        await this.loadHomeTodayStats(hostContext);
       }
     } finally {
       this.isRefreshing = false;
@@ -1269,7 +1293,12 @@ export struct FocusHomePage {
   @Builder
   private buildIdleHomeContent(): void {
     Column({ space: 0 }) {
-      HomeTodayCard({ refreshTick: this.homeStatsRefreshTick })
+      HomeTodayCard({
+        actualMins: this.homeStatis.actual_mins,
+        taskCount: this.homeStatis.task_count,
+        failCount: this.homeStatis.fail_count,
+        successRate: this.homeStatis.success_rate,
+      })
       HomeMembershipUrgencyCapsule({
         hasActiveLock: this.isActiveLocked(),
         hasPendingQuickStart: this.hasPendingQuickStart(),

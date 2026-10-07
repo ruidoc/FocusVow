@@ -12,12 +12,16 @@ export class FeatureFlagKeys {
   static readonly OB_LOGIN_SKIP: string = 'ob_login_skip';
 }
 
-/** Android / 鸿蒙微信支付会员商品 */
+/** Android / 鸿蒙微信支付会员商品（含年包，与 RN 微信渠道 catalog 一致） */
 export const PROMO_VIP_PRODUCT_IDS: string[] = [
   'com.focusone.vip_month',
   'com.focusone.vip_2month',
+  'com.focusone.vip_12',
 ];
 
 export function isPromoVipProductId(productId: string): boolean {
-  return PROMO_VIP_PRODUCT_IDS.includes(productId);
+  if (PROMO_VIP_PRODUCT_IDS.includes(productId)) {
+    return true;
+  }
+  return /^com\.focusone\.vip_/.test(productId);
 }

@@ -100,6 +100,7 @@ export class SubscriptionApiService {
     const query: Record<string, string> = {
       'product_class': 'focus',
       'is_subscription': '1',
+      'billing_channel': 'wechat',
     };
     const response: ApiEnvelope = await HttpService.getWithQuery(
       '/product/list',

@@ -1,11 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
-import { DuoHonorCertificateCard } from '../../components/certificate/DuoHonorCertificateCard';
-import { HonorCertificateCard } from '../../components/certificate/HonorCertificateCard';
-import { ShameCertificateCard } from '../../components/certificate/ShameCertificateCard';
-import { TraitorShameCertificateCard } from '../../components/certificate/TraitorShameCertificateCard';
-import { VictimShameCertificateCard } from '../../components/certificate/VictimShameCertificateCard';
+import { CertificatePreviewPeekCarousel } from '../../components/certificate/CertificatePreviewPeekCarousel';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
@@ -17,14 +13,23 @@ import {
 } from '../../models/CertificateModel';
 import { backRoute, PageRoutes, pushRoute } from '../../router/PageRoutes';
 import {
+  captureComponentSnapshot,
   CERTIFICATE_SNAPSHOT_ID,
   formatSaveError,
   saveCertificateSnapshot
 } from '../../services/CertificateImageService';
+import {
+  buildStatsShareCachePath,
+  formatShareError,
+  shareStatsImageFile,
+  writePixelMapToFile,
+} from '../../services/StatsShareService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import {
+  CERTIFICATE_DESIGN_WIDTH,
   CERTIFICATE_TEMPLATES,
   certificateTemplateLabel,
+  peekCarouselCardWidth,
 } from '../../utils/CertificateTemplate';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
@@ -36,10 +41,17 @@ struct CertificatePreviewPage {
   @State kind: string = 'honor';
   @State honorData: HonorCertificateData = createEmptyHonorCertificateData();
   @State shameData: ShameCertificateData = createEmptyShameCertificateData();
-  @State isSaving: boolean = false;
+  @State busy: string = '';
   @State templateStyle: string = 'classic';
-  @State templateIndex: number = 0;
-  @State posterWidth: number = 320;
+  @State @Watch('onTemplateIndexChanged') templateIndex: number = 0;
+  @State @Watch('onViewportWidthChanged') viewportWidth: number = 0;
+
+  onTemplateIndexChanged(): void {
+    const next = CERTIFICATE_TEMPLATES[this.templateIndex];
+    if (next !== undefined && next.length > 0) {
+      this.templateStyle = next;
+    }
+  }
 
   aboutToAppear(): void {
     this.reloadCertificate();
@@ -72,9 +84,25 @@ struct CertificatePreviewPage {
     return this.honorData.cardTitle.length > 0 ? this.honorData.cardTitle : '守约荣誉证';
   }
 
+  private cardWidth(): number {
+    const base = this.viewportWidth > 0 ? this.viewportWidth : 390;
+    return peekCarouselCardWidth(base);
+  }
+
   private posterHeight(): number {
-    const width = this.posterWidth > 0 ? this.posterWidth : 320;
-    return Math.round(width * 1448 / 1086);
+    return Math.round(this.cardWidth() * 1448 / 1086);
+  }
+
+  private syncCertificateScale(): void {
+    const width = this.cardWidth();
+    if (width <= 0) {
+      return;
+    }
+    AppStorage.setOrCreate(StoreKeys.CertificateScale, width / CERTIFICATE_DESIGN_WIDTH);
+  }
+
+  private onViewportWidthChanged(): void {
+    this.syncCertificateScale();
   }
 
   private snapshotIdFor(style: string): string {
@@ -82,10 +110,10 @@ struct CertificatePreviewPage {
   }
 
   private async handleSave(): Promise<void> {
-    if (this.isSaving) {
+    if (this.busy.length > 0) {
       return;
     }
-    this.isSaving = true;
+    this.busy = 'save';
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     try {
       await saveCertificateSnapshot(this.getUIContext(), hostContext, this.snapshotIdFor(this.templateStyle));
@@ -94,171 +122,120 @@ struct CertificatePreviewPage {
       const message = formatSaveError(error as BusinessError);
       showErrorToast(message, this.getUIContext());
     } finally {
-      this.isSaving = false;
+      this.busy = '';
     }
   }
 
-  @Builder
-  private buildCertificate(style: string): void {
-    if (this.kind === 'shame') {
-      if (this.shameData.shameVariant === 'victim') {
-        VictimShameCertificateCard({
-          data: this.shameData,
-          templateStyle: style,
-          snapshotId: this.snapshotIdFor(style)
-        })
-      } else if (this.shameData.shameVariant === 'violator') {
-        TraitorShameCertificateCard({
-          data: this.shameData,
-          templateStyle: style,
-          snapshotId: this.snapshotIdFor(style)
-        })
-      } else {
-        ShameCertificateCard({
-          data: this.shameData,
-          templateStyle: style,
-          snapshotId: this.snapshotIdFor(style)
-        })
-      }
-    } else if (isDuoHonorCertificate(this.honorData)) {
-      DuoHonorCertificateCard({
-        data: this.honorData,
-        templateStyle: style,
-        snapshotId: this.snapshotIdFor(style)
-      })
-    } else {
-      HonorCertificateCard({
-        data: this.honorData,
-        templateStyle: style,
-        snapshotId: this.snapshotIdFor(style)
-      })
+  private async handleShare(): Promise<void> {
+    if (this.busy.length > 0) {
+      return;
+    }
+    this.busy = 'share';
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      const pixelMap = await captureComponentSnapshot(
+        this.getUIContext(),
+        this.snapshotIdFor(this.templateStyle),
+        { scale: 1, waitUntilRenderFinished: true },
+      );
+      const cachePath = buildStatsShareCachePath(hostContext);
+      await writePixelMapToFile(pixelMap, cachePath);
+      const shareTitle = this.kind === 'shame' ? '违约证书' : '荣誉证书';
+      await shareStatsImageFile(hostContext, cachePath, shareTitle, '专注契约证书');
+    } catch (error) {
+      showErrorToast(formatShareError(error as BusinessError), this.getUIContext());
+    } finally {
+      this.busy = '';
     }
   }
 
-  @Builder
-  private buildSaveButton(): void {
-    if (this.isSaving) {
-      Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.arrow_down'))
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor([AppTheme.colors.primary])
+  private openAdjust(): void {
+    if (this.recordId().length === 0) {
+      return;
+    }
+    pushRoute(PageRoutes.CertificateAdjust);
+  }
 
-        Text('保存中...')
-          .fontSize(15)
-          .fontColor(AppTheme.colors.primary)
+  @Builder
+  private buildPeekCarousel(): void {
+    CertificatePreviewPeekCarousel({
+      kind: this.kind,
+      honorData: this.honorData,
+      shameData: this.shameData,
+      activeIndex: $templateIndex,
+      viewportWidth: $viewportWidth,
+    })
+  }
+
+  @Builder
+  private buildBottomActions(): void {
+    Row({ space: 12 }) {
+      Row() {
+        if (this.busy === 'save') {
+          LoadingProgress().width(22).height(22).color(AppTheme.colors.textPrimary)
+        } else {
+          Text('保存到相册')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+        }
       }
-      .width('100%')
-      .height(50)
+      .layoutWeight(1)
+      .height(48)
       .justifyContent(FlexAlign.Center)
-      .backgroundColor(AppTheme.colors.primarySoft)
-      .opacity(0.7)
-      .borderRadius(AppTheme.radius.pill)
-    } else {
-      SaveButton({
-        icon: SaveIconStyle.FULL_FILLED,
-        text: SaveDescription.SAVE_TO_GALLERY,
-        buttonType: ButtonType.Capsule
+      .borderRadius(24)
+      .border({ width: 1, color: AppTheme.colors.text3 })
+      .onClick(() => {
+        void this.handleSave();
       })
-        .width('100%')
-        .height(50)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.primary)
-        .iconColor(AppTheme.colors.primary)
-        .iconSize(18)
-        .textIconSpace(8)
-        .layoutDirection(SecurityComponentLayoutDirection.HORIZONTAL)
-        .backgroundColor(AppTheme.colors.primarySoft)
-        .onClick(async (_event: ClickEvent, result: SaveButtonOnClickResult) => {
-          if (result === SaveButtonOnClickResult.SUCCESS) {
-            await this.handleSave();
-          } else {
-            showErrorToast('未获得相册保存授权', this.getUIContext());
-          }
-        })
+
+      Row() {
+        if (this.busy === 'share') {
+          LoadingProgress().width(22).height(22).color('#FFFFFF')
+        } else {
+          Text('分享')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+        }
+      }
+      .layoutWeight(1)
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .borderRadius(24)
+      .backgroundColor(AppTheme.colors.primary)
+      .onClick(() => {
+        void this.handleShare();
+      })
     }
+    .width('100%')
+    .padding({ left: 20, right: 20, bottom: 12 })
   }
 
   @Builder
   private buildContent(): void {
     Column() {
       Column() {
-        Swiper() {
-          ForEach(CERTIFICATE_TEMPLATES, (style: string) => {
-            Column() {
-              this.buildCertificate(style)
-            }
-            .width('100%')
-            .height(this.posterHeight())
-          }, (style: string) => style)
-        }
-        .width('100%')
-        .height(this.posterHeight())
-        .index(this.templateIndex)
-        .loop(false)
-        .indicator(false)
-        .onChange((index: number) => {
-          this.templateIndex = index;
-          const next = CERTIFICATE_TEMPLATES[index];
-          if (next !== undefined && next.length > 0) {
-            this.templateStyle = next;
-          }
-        })
-
-        Row({ space: 6 }) {
-          ForEach(CERTIFICATE_TEMPLATES, (style: string) => {
-            Column()
-              .width(this.templateStyle === style ? 16 : 6)
-              .height(6)
-              .borderRadius(3)
-              .backgroundColor(this.templateStyle === style ? AppTheme.colors.textPrimary : AppTheme.colors.text3)
-          }, (style: string) => `dot_${style}`)
-        }
-        .margin({ top: 14 })
-        .justifyContent(FlexAlign.Center)
+        this.buildPeekCarousel()
 
         Text(`风格：${certificateTemplateLabel(this.templateStyle)}`)
           .fontSize(17)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
+          .textAlign(TextAlign.Center)
           .margin({ top: 26 })
       }
       .width('100%')
       .layoutWeight(1)
-      .constraintSize({ maxWidth: AppTheme.certificateMaxWidth })
       .alignItems(HorizontalAlign.Center)
       .padding({ top: 12 })
-      .onAreaChange((_old: Area, area: Area) => {
-        const next = area.width as number;
-        if (next > 0 && Math.abs(next - this.posterWidth) > 1) {
-          this.posterWidth = next;
-          const scale = next / 340;
-          AppStorage.setOrCreate(StoreKeys.CertificateScale, scale > 0 ? scale : 1);
-        }
-      })
 
-      Column({ space: 10 }) {
-        if (this.recordId().length > 0) {
-          Text('编辑记录')
-            .fontSize(15)
-            .fontColor(AppTheme.colors.primary)
-            .width('100%')
-            .height(44)
-            .textAlign(TextAlign.Center)
-            .onClick(() => {
-              pushRoute(PageRoutes.CertificateAdjust);
-            })
-        }
-        this.buildSaveButton()
-      }
-      .width('100%')
-      .constraintSize({ maxWidth: AppTheme.certificateMaxWidth })
-      .padding({ top: 12 })
+      this.buildBottomActions()
     }
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.SpaceBetween)
-    .alignItems(HorizontalAlign.Center)
+    .alignItems(HorizontalAlign.Start)
   }
 
   build() {
@@ -266,10 +243,17 @@ struct CertificatePreviewPage {
       SystemNavPage({
         title: this.getPageTitle(),
         showBack: true,
+        showAction: this.recordId().length > 0,
+        actionIcon: $r('sys.symbol.square_and_pencil'),
+        showActionIcon: true,
         usePageScroll: false,
+        horizontalPadding: 0,
         bottomSpacerHeight: 0,
         onBack: () => {
           backRoute();
+        },
+        onAction: () => {
+          this.openAdjust();
         },
         content: (): void => {
           this.buildContent();

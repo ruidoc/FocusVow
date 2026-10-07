@@ -58,7 +58,11 @@ struct StatsDetailPage {
     UserStore.hydrate(hostContext);
     const storedPeriod = String(AppStorage.get<string>(StoreKeys.StatsDetailPeriod) ?? 'today');
     const storedSection = String(AppStorage.get<string>(StoreKeys.StatsDetailSection) ?? 'timeline');
-    this.currentPeriod = storedPeriod === 'week' || storedPeriod === 'month' ? storedPeriod : 'today';
+    if (storedPeriod === 'yesterday' || storedPeriod === 'week' || storedPeriod === 'month') {
+      this.currentPeriod = storedPeriod;
+    } else {
+      this.currentPeriod = 'today';
+    }
     if (storedSection === 'shame') {
       this.currentSection = 'shame';
     } else if (storedSection === 'byTask') {

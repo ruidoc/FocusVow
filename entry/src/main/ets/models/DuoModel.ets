@@ -78,6 +78,7 @@ export interface DuoTimelineRecord {
   participation_mode: string;
   total_min: number;
   actual_min: number;
+  created_at?: string;
   completed_at?: string;
   partner?: DuoPartnerBrief | null;
 }
@@ -738,6 +739,7 @@ function parseDuoTimelineRecord(raw: Record<string, Object>): DuoTimelineRecord 
     participation_mode: String(raw['participation_mode'] ?? ''),
     total_min: Number(raw['total_min'] ?? 0),
     actual_min: Number(raw['actual_min'] ?? 0),
+    created_at: raw['created_at'] ? String(raw['created_at']) : undefined,
     completed_at: raw['completed_at'] ? String(raw['completed_at']) : undefined,
     partner: raw['partner'] as DuoPartnerBrief | null | undefined
   };
@@ -753,6 +755,7 @@ function parseDuoShameRecord(raw: Record<string, Object>): DuoShameRecord {
     participation_mode: base.participation_mode,
     total_min: base.total_min,
     actual_min: base.actual_min,
+    created_at: base.created_at,
     completed_at: base.completed_at,
     partner: base.partner,
     breach_role: String(raw['breach_role'] ?? ''),

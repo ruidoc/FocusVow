@@ -82,6 +82,10 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.InboxLoading, false);
   AppStorage.setOrCreate(StoreKeys.InboxOpenId, '');
   AppStorage.setOrCreate(StoreKeys.InboxDetailId, '');
+  AppStorage.setOrCreate(StoreKeys.HomeActualMins, 0);
+  AppStorage.setOrCreate(StoreKeys.HomeTaskCount, 0);
+  AppStorage.setOrCreate(StoreKeys.HomeFailCount, 0);
+  AppStorage.setOrCreate(StoreKeys.HomeSuccessRate, 0);
   AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
   AppStorage.setOrCreate(StoreKeys.OnboardingAfterRegister, false);
   AppStorage.setOrCreate(StoreKeys.LoginFrom, '');

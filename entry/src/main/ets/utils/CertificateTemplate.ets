@@ -1,10 +1,24 @@
+/** 与 RN certificate-scale：字号/间距缩放基准宽 */
+export const CERTIFICATE_DESIGN_WIDTH: number = 340;
+
+export const CERTIFICATE_CARD_WIDTH_RATIO: number = 0.86;
+
+export const CERTIFICATE_PEEK_SIDE_SCALE: number = 0.86;
+
+export const CERTIFICATE_PEEK_GAP: number = 16;
+
+export function peekCarouselCardWidth(screenWidth: number): number {
+  return Math.round(screenWidth * CERTIFICATE_CARD_WIDTH_RATIO);
+}
+
+/** 顺序与 RN CERTIFICATE_TEMPLATE_STYLES 一致 */
 export const CERTIFICATE_TEMPLATES: string[] = [
   'classic',
+  'valorant',
   'minimal',
+  'delta',
   'retro',
   'retroLite',
-  'valorant',
-  'delta',
 ];
 
 export function certificateTemplateLabel(style: string): string {

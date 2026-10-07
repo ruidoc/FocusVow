@@ -40,7 +40,7 @@ export struct ShameRecordListSection {
               title: item.record.title,
               timeLabel: formatStatsDateTimeLabel(item.record.completed_at ?? item.day, item.day),
               modeTag: getParticipationModeTag(item.record.participation_mode),
-              actualMinutes: item.record.actual_min,
+              actualMinutes: Math.max(0, Math.floor(item.record.actual_min)),
               totalMinutes: item.record.total_min,
               onPress: () => {
                 this.onItemPress?.(item);
