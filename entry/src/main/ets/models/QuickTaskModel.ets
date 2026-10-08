@@ -9,6 +9,8 @@ export interface QuickTask {
   delay_min: number;
   no_stop: boolean;
   apps: string[];
+  /** 未下发时视为已启用，与 RN enabled !== false 一致 */
+  enabled: boolean;
 }
 
 export interface QuickTaskUpsertPayload {
@@ -19,6 +21,7 @@ export interface QuickTaskUpsertPayload {
   delay_min: number;
   no_stop: boolean;
   apps: string[];
+  enabled?: boolean;
 }
 
 export function parseQuickTask(raw: Record<string, Object> | null | undefined): QuickTask | null {
@@ -50,7 +53,9 @@ export function parseQuickTask(raw: Record<string, Object> | null | undefined): 
     mode: mode,
     delay_min: Number(raw['delay_min']) || 0,
     no_stop: noStop,
-    apps: apps
+    apps: apps,
+    enabled: raw['enabled'] !== false && raw['enabled'] !== 0 && String(raw['enabled'] ?? '') !== '0' &&
+      String(raw['enabled'] ?? '') !== 'false',
   };
 }
 

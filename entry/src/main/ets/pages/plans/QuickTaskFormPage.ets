@@ -21,7 +21,7 @@ import { QuickTaskStore } from "../../stores/QuickTaskStore";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { UserStore } from "../../stores/UserStore";
 import { StoreKeys } from "../../stores/StoreKeys";
-import { ensureQuickTaskQuota } from "../../services/ProQuotaService";
+import { upsellIfProSlotQuota } from "../../services/ProQuotaService";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { TimerMode } from "../../utils/TimerMode";
 
@@ -190,10 +190,6 @@ struct QuickTaskFormPage {
       return;
     }
 
-    if (!this.isEditing() && !ensureQuickTaskQuota()) {
-      return;
-    }
-
     this.isSaving = true;
     try {
       if (QuickTaskStore.isDirty()) {
@@ -221,7 +217,10 @@ struct QuickTaskFormPage {
         backRoute();
         return;
       }
-      showErrorToast(response.message ?? "保存失败", this.getUIContext());
+      const failMessage = response.message ?? "保存失败";
+      if (!upsellIfProSlotQuota(failMessage, "quick")) {
+        showErrorToast(failMessage, this.getUIContext());
+      }
     } finally {
       this.isSaving = false;
     }

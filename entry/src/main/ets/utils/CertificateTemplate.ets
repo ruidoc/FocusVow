@@ -11,6 +11,14 @@ export function peekCarouselCardWidth(screenWidth: number): number {
   return Math.round(screenWidth * CERTIFICATE_CARD_WIDTH_RATIO);
 }
 
+/** 与 RN checkin index：posterHeight = min(width - 40, 380) * 1.45 */
+export const CHECKIN_POSTER_MAX_CARD_WIDTH: number = 380;
+
+export function checkinPosterHeight(screenWidthVp: number): number {
+  const w = screenWidthVp > 0 ? screenWidthVp : 390;
+  return Math.round(Math.min(w - 40, CHECKIN_POSTER_MAX_CARD_WIDTH) * 1.45);
+}
+
 /** 顺序与 RN CERTIFICATE_TEMPLATE_STYLES 一致 */
 export const CERTIFICATE_TEMPLATES: string[] = [
   'classic',

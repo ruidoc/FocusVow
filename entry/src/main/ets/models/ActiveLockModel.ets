@@ -87,7 +87,7 @@ export function normalizeActiveLockState(state?: Partial<ActiveLockState> | null
     planId: state.planId ?? idle.planId,
     selectedTokens: state.selectedTokens ? [...state.selectedTokens] : [...idle.selectedTokens],
     selectedCount: state.selectedCount ?? idle.selectedCount,
-    mode: state.mode ?? idle.mode,
+    mode: (state.kind ?? idle.kind) === 'cycle_guard' ? 'shield' : (state.mode ?? idle.mode),
     startedAt: state.startedAt ?? idle.startedAt,
     endAt: state.endAt ?? idle.endAt,
     updatedAt: state.updatedAt ?? idle.updatedAt,
@@ -95,7 +95,9 @@ export function normalizeActiveLockState(state?: Partial<ActiveLockState> | null
     recordId: state.recordId ?? idle.recordId,
     participationMode: state.participationMode ?? idle.participationMode,
     partnerNickname: state.partnerNickname ?? idle.partnerNickname,
-    timerMode: state.timerMode === 'countup' ? 'countup' : 'countdown',
+    timerMode: (state.kind ?? idle.kind) === 'cycle_guard' || state.timerMode === 'countup'
+      ? 'countup'
+      : 'countdown',
     minDurationMin: state.minDurationMin ?? idle.minDurationMin,
     isDelayedSolo: state.isDelayedSolo ?? idle.isDelayedSolo
   };
@@ -131,7 +133,7 @@ export function isLocked(state: ActiveLockState): boolean {
 }
 
 export function isCountupLock(state: ActiveLockState): boolean {
-  return isCountupMode(state.timerMode);
+  return state.kind === 'cycle_guard' || isCountupMode(state.timerMode);
 }
 
 export function resolveDuoSessionIdFromLock(lock: ActiveLockState): string {
@@ -291,8 +293,10 @@ export function createCovenantLockState(
 export function createCycleGuardLockState(
   selectedTokens: string[],
   selectedCount: number,
+  lockMinutes: number = 25,
   nowAt: number = Date.now()
 ): ActiveLockState {
+  const minutes = Math.max(1, Math.floor(lockMinutes) || 25);
   return {
     kind: 'cycle_guard',
     strategyName: CYCLE_GUARD_STRATEGY_NAME,
@@ -300,7 +304,7 @@ export function createCycleGuardLockState(
     planId: '',
     selectedTokens: [...selectedTokens],
     selectedCount,
-    mode: 'allow',
+    mode: 'shield',
     startedAt: nowAt,
     endAt: 0,
     updatedAt: nowAt,
@@ -308,8 +312,8 @@ export function createCycleGuardLockState(
     recordId: '',
     participationMode: '',
     partnerNickname: '',
-    timerMode: 'countdown',
-    minDurationMin: 0,
+    timerMode: 'countup',
+    minDurationMin: minutes,
     isDelayedSolo: false
   };
 }

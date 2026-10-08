@@ -261,7 +261,11 @@ export async function handleCycleStrategyStart(
   });
   savePersistedActiveLockState(
     context,
-    createCycleGuardLockState(state.selectedTokens, state.selectedAppCount)
+    createCycleGuardLockState(
+      state.selectedTokens,
+      state.selectedAppCount,
+      state.lockMinutes
+    )
   );
 }
 

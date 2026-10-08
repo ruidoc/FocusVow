@@ -37,7 +37,7 @@ import {
   startMembershipUrgencyCountdown,
 } from "../../utils/OnboardingMembershipUtil";
 import {
-  ensureQuickTaskQuota,
+  upsellIfProSlotQuota,
   ensureDelayStartAllowed,
   normalizeDelayMinutes,
 } from "../../services/ProQuotaService";
@@ -260,9 +260,6 @@ struct QuickStartPage {
       if (QuickTaskStore.isDirty()) {
         await QuickTaskStore.loadAll();
       }
-      if (!ensureQuickTaskQuota()) {
-        return;
-      }
       if (QuickTaskStore.titleExists(this.title.trim())) {
         showErrorToast("已有同名快捷任务，请修改名称", this.getUIContext());
         return;
@@ -283,7 +280,9 @@ struct QuickStartPage {
             typeof response.message === "string" && response.message.length > 0
               ? response.message
               : "保存快捷任务失败";
-          showErrorToast(errMsg, this.getUIContext());
+          if (!upsellIfProSlotQuota(errMsg, "quick")) {
+            showErrorToast(errMsg, this.getUIContext());
+          }
           return;
         }
         showToast("已保存到快捷任务", this.getUIContext());

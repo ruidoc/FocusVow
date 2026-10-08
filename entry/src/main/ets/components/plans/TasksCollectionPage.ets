@@ -11,7 +11,6 @@ import { UserStore } from '../../stores/UserStore';
 import { QuickTaskStore } from '../../stores/QuickTaskStore';
 import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
-import { ensureQuickTaskQuota, ensureScheduledTaskQuota } from '../../services/ProQuotaService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import {
   consumeOpenQuickTaskTabOnce,
@@ -166,14 +165,8 @@ export struct TasksCollectionPage {
     ScheduledListStore.hydrate();
     QuickTaskStore.hydrate();
     if (this.subTabIndex === 0) {
-      if (!ensureQuickTaskQuota()) {
-        return;
-      }
       AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
       pushRoute(PageRoutes.QuickTaskForm);
-      return;
-    }
-    if (!ensureScheduledTaskQuota()) {
       return;
     }
     AppStorage.setOrCreate(StoreKeys.ScheduledSessionCurrentId, '');

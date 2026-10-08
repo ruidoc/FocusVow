@@ -1,7 +1,5 @@
-import { CheckinPoster } from '../home/CheckinPoster';
 import { AppTheme } from '../../constants/Theme';
-import { CheckinKind, ShareCardItem } from '../../utils/CheckinUtil';
-import { peekCarouselCardWidth } from '../../utils/CertificateTemplate';
+import { CheckinPoster } from '../home/CheckinPoster';
 import {
   peekCarouselPageStride,
   peekCarouselPeekMargin,
@@ -11,6 +9,36 @@ import {
   peekCarouselTrackOffset,
   peekCarouselZIndexFor,
 } from '../common/PeekCarouselUtil';
+import { CheckinKind, fallbackShareCard, ShareCardItem } from '../../utils/CheckinUtil';
+import { checkinPosterHeight, peekCarouselCardWidth } from '../../utils/CertificateTemplate';
+
+@Component
+struct CheckinCarouselPosterSlot {
+  @Prop kind: CheckinKind = 'focus';
+  @Prop card: ShareCardItem = fallbackShareCard('focus');
+  @Prop focusMinutes: number = 0;
+  @Prop taskCount: number = 0;
+  @Prop successRate: string = '0%';
+  @Prop username: string = '';
+  @Prop avatar: string = '';
+  @Prop posterWidth: number = 320;
+  @Prop layoutScreenWidthVp: number = 390;
+
+  build() {
+    CheckinPoster({
+      kind: this.kind,
+      card: this.card,
+      focusMinutes: this.focusMinutes,
+      taskCount: this.taskCount,
+      successRate: this.successRate,
+      username: this.username,
+      avatar: this.avatar,
+      posterWidth: this.posterWidth,
+      layoutScreenWidthVp: this.layoutScreenWidthVp,
+      snapshotId: `checkinPoster_${this.card.id}`,
+    })
+  }
+}
 
 @Component
 export struct CheckinPeekCarousel {
@@ -22,8 +50,7 @@ export struct CheckinPeekCarousel {
   @Prop username: string = '';
   @Prop avatar: string = '';
   @Link @Watch('onActiveIndexChanged') activeIndex: number;
-  @Link viewportWidth: number;
-
+  @State private viewportWidth: number = 0;
   @State private carouselProgress: number = 0;
   private carouselSnapDuration: number = 320;
   private panStartProgress: number = 0;
@@ -39,13 +66,16 @@ export struct CheckinPeekCarousel {
     }
   }
 
-  private posterCardWidth(): number {
-    const base = this.viewportWidth > 0 ? this.viewportWidth : 320;
-    return peekCarouselCardWidth(base);
+  private layoutWidth(): number {
+    return this.viewportWidth > 0 ? this.viewportWidth : 390;
   }
 
-  private posterHeight(): number {
-    return Math.round(this.posterCardWidth() * 1.45);
+  private posterCardWidth(): number {
+    return peekCarouselCardWidth(this.layoutWidth());
+  }
+
+  private carouselHeight(): number {
+    return checkinPosterHeight(this.layoutWidth());
   }
 
   private maxIndex(): number {
@@ -57,7 +87,7 @@ export struct CheckinPeekCarousel {
   }
 
   private onPanUpdate(offsetX: number): void {
-    const stride = peekCarouselPageStride(this.viewportWidth);
+    const stride = peekCarouselPageStride(this.layoutWidth());
     if (stride <= 0) {
       return;
     }
@@ -84,8 +114,8 @@ export struct CheckinPeekCarousel {
   }
 
   @Builder
-  private buildPoster(card: ShareCardItem): void {
-    CheckinPoster({
+  private buildPosterSlot(card: ShareCardItem, cardWidth: number): void {
+    CheckinCarouselPosterSlot({
       kind: this.kind,
       card: card,
       focusMinutes: this.focusMinutes,
@@ -93,8 +123,8 @@ export struct CheckinPeekCarousel {
       successRate: this.successRate,
       username: this.username,
       avatar: this.avatar,
-      posterWidth: this.posterCardWidth(),
-      snapshotId: `checkinPoster_${card.id}`,
+      posterWidth: cardWidth,
+      layoutScreenWidthVp: this.layoutWidth(),
     })
   }
 
@@ -104,14 +134,14 @@ export struct CheckinPeekCarousel {
         Row() {
           if (this.cards.length === 1) {
             Column() {
-              this.buildPoster(this.cards[0])
+              this.buildPosterSlot(this.cards[0], this.posterCardWidth())
             }
             .width(this.posterCardWidth())
-            .height(this.posterHeight())
+            .height(this.carouselHeight())
           }
         }
         .width('100%')
-        .height(this.posterHeight())
+        .height(this.carouselHeight())
         .justifyContent(FlexAlign.Center)
       } else {
         Stack({ alignContent: Alignment.Start }) {
@@ -119,10 +149,10 @@ export struct CheckinPeekCarousel {
             ForEach(this.cards, (card: ShareCardItem, index: number) => {
               Row() {
                 Column() {
-                  this.buildPoster(card)
+                  this.buildPosterSlot(card, this.posterCardWidth())
                 }
                 .width(this.posterCardWidth())
-                .height(this.posterHeight())
+                .height(this.carouselHeight())
                 .scale({
                   x: peekCarouselScaleFor(index, this.carouselProgress),
                   y: peekCarouselScaleFor(index, this.carouselProgress),
@@ -131,19 +161,19 @@ export struct CheckinPeekCarousel {
                 })
                 .zIndex(peekCarouselZIndexFor(index, this.carouselProgress))
               }
-              .width(peekCarouselPageStride(this.viewportWidth))
-              .height(this.posterHeight())
+              .width(peekCarouselPageStride(this.layoutWidth()))
+              .height(this.carouselHeight())
               .justifyContent(FlexAlign.Start)
             }, (card: ShareCardItem) => card.id)
           }
           .padding({
-            left: peekCarouselPeekMargin(this.viewportWidth),
-            right: peekCarouselPeekMargin(this.viewportWidth),
+            left: peekCarouselPeekMargin(this.layoutWidth()),
+            right: peekCarouselPeekMargin(this.layoutWidth()),
           })
-          .translate({ x: peekCarouselTrackOffset(this.carouselProgress, this.viewportWidth) })
+          .translate({ x: peekCarouselTrackOffset(this.carouselProgress, this.layoutWidth()) })
         }
         .width('100%')
-        .height(this.posterHeight())
+        .height(this.carouselHeight())
         .clip(false)
         .gesture(
           PanGesture({ direction: PanDirection.Horizontal })

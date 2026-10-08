@@ -32,7 +32,7 @@ import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { ensureProMembership } from '../../utils/PaywallNavigationUtil';
 import { ensureTaskPermission } from '../../utils/TaskPermissionUtil';
-import { ensureScheduledTaskQuota } from '../../services/ProQuotaService';
+import { upsellIfProSlotQuota } from '../../services/ProQuotaService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -358,12 +358,9 @@ struct PlanAddPage {
     if (this.participationMode === 'duo') {
       if (!ensureProMembership('scheduled_duo', {
         proUnlock: true,
-        reason: '定时互督为 Pro 专属功能，开通后即可使用',
       })) {
         return;
       }
-    } else if (!this.isEditing() && !ensureScheduledTaskQuota()) {
-      return;
     }
 
     const startTimeError = validateScheduledStartTime(this.startTime, this.repeatDays, this.endTime);
@@ -400,7 +397,10 @@ struct PlanAddPage {
     const scheduleResponse = await DuoApiService.scheduledCreate(schedulePayload);
     const session = DuoApiService.parseSession(scheduleResponse);
     if (!session) {
-      showErrorToast(scheduleResponse.message ?? '创建契约失败', uiContext);
+      const failMessage = scheduleResponse.message ?? '创建契约失败';
+      if (!upsellIfProSlotQuota(failMessage, 'scheduled')) {
+        showErrorToast(failMessage, uiContext);
+      }
       this.isSaving = false;
       return;
     }

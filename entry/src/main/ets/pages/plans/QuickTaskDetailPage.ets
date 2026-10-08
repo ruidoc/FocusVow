@@ -4,13 +4,14 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { minutesToHours } from '../../models/ActiveLockModel';
 import { filterSessionAppsForHarmony } from '../../models/DuoModel';
-import { QuickTask, startWhenLabel } from '../../models/QuickTaskModel';
+import { QuickTask, QuickTaskUpsertPayload, startWhenLabel } from '../../models/QuickTaskModel';
 import { PageRoutes, backRoute, navigateToMainTab, pushRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { QuickTaskStore } from '../../stores/QuickTaskStore';
 import { UserStore } from '../../stores/UserStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { promptEnableQuickTaskSlot, upsellIfProSlotQuota } from '../../services/ProQuotaService';
 
 bootstrapStores();
 
@@ -20,6 +21,9 @@ struct QuickTaskDetailPage {
   @State private taskId: string = '';
   @State private task: QuickTask | null = null;
   @State private isLoading: boolean = true;
+  @State private switchEnabled: boolean = true;
+  @State private toggleBusy: boolean = false;
+  @State private switchSlot: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -38,6 +42,9 @@ struct QuickTaskDetailPage {
     const cached = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === this.taskId) ?? null;
     if (cached) {
       this.task = cached;
+      if (!this.toggleBusy) {
+        this.switchEnabled = cached.enabled;
+      }
       this.isLoading = false;
       return;
     }
@@ -49,8 +56,71 @@ struct QuickTaskDetailPage {
         return;
       }
       this.task = loaded;
+      this.switchEnabled = loaded.enabled;
       this.isLoading = false;
     });
+  }
+
+  private buildTogglePayload(task: QuickTask, enabled: boolean): QuickTaskUpsertPayload {
+    return {
+      title: task.title,
+      duration_min: task.duration_min,
+      timer_mode: task.timer_mode,
+      mode: task.mode,
+      delay_min: task.delay_min,
+      no_stop: task.no_stop,
+      apps: task.apps,
+      enabled: enabled,
+    };
+  }
+
+  private applySwitch(enabled: boolean): void {
+    this.switchEnabled = enabled;
+    this.switchSlot += 1;
+  }
+
+  private async onToggleEnabled(next: boolean): Promise<void> {
+    const task = this.task;
+    if (!task || this.toggleBusy) {
+      return;
+    }
+    if (next) {
+      if (!promptEnableQuickTaskSlot(task.id)) {
+        this.applySwitch(false);
+        return;
+      }
+      this.toggleBusy = true;
+      const response = await QuickTaskStore.updateTask(task.id, this.buildTogglePayload(task, true));
+      this.toggleBusy = false;
+      const loaded = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === task.id) ?? null;
+      if (response.statusCode !== 200 || !loaded || !loaded.enabled) {
+        const message = response.message ?? '保存失败';
+        if (response.statusCode !== 200 && !upsellIfProSlotQuota(message, 'quick')) {
+          showErrorToast(message, this.getUIContext());
+        }
+        this.applySwitch(false);
+        return;
+      }
+      this.task = loaded;
+      this.applySwitch(true);
+      return;
+    }
+    this.switchEnabled = false;
+    task.enabled = false;
+    this.task = task;
+    this.toggleBusy = true;
+    const response = await QuickTaskStore.updateTask(task.id, this.buildTogglePayload(task, false));
+    this.toggleBusy = false;
+    if (response.statusCode !== 200) {
+      showErrorToast(response.message ?? '保存失败', this.getUIContext());
+      this.loadTask();
+      return;
+    }
+    const loaded = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === task.id) ?? null;
+    if (loaded) {
+      this.task = loaded;
+      this.switchEnabled = loaded.enabled;
+    }
   }
 
   private toEdit(): void {
@@ -202,6 +272,47 @@ struct QuickTaskDetailPage {
           }
         }
         .width('100%')
+      }
+      .width('100%')
+      .padding(20)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor(AppTheme.colors.surface)
+      .border({ width: 1, color: AppTheme.colors.border })
+      .borderRadius(AppTheme.radius.lg)
+
+      Column({ space: 8 }) {
+        Row() {
+          Text('启用任务')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+            .layoutWeight(1)
+          if (this.switchSlot % 2 === 0) {
+            Toggle({ type: ToggleType.Switch, isOn: this.switchEnabled })
+              .enabled(!this.toggleBusy)
+              .onChange((isOn: boolean) => {
+                if (isOn === this.switchEnabled) {
+                  return;
+                }
+                void this.onToggleEnabled(isOn);
+              })
+          } else {
+            Toggle({ type: ToggleType.Switch, isOn: this.switchEnabled })
+              .enabled(!this.toggleBusy)
+              .onChange((isOn: boolean) => {
+                if (isOn === this.switchEnabled) {
+                  return;
+                }
+                void this.onToggleEnabled(isOn);
+              })
+          }
+        }
+        .width('100%')
+        Text('启用后才会生效，关闭则不生效')
+          .fontSize(13)
+          .lineHeight(20)
+          .fontColor(AppTheme.colors.textMuted)
+          .width('100%')
       }
       .width('100%')
       .padding(20)

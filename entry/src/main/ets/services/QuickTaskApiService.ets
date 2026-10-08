@@ -3,7 +3,7 @@ import { QuickTask, QuickTaskUpsertPayload, parseQuickTask } from '../models/Qui
 import { HttpService } from './HttpService';
 
 function buildUpsertBody(payload: QuickTaskUpsertPayload): Record<string, Object> {
-  return {
+  const body: Record<string, Object> = {
     'title': payload.title,
     'duration_min': payload.duration_min,
     'timer_mode': payload.timer_mode,
@@ -12,6 +12,10 @@ function buildUpsertBody(payload: QuickTaskUpsertPayload): Record<string, Object
     'no_stop': payload.no_stop,
     'apps': payload.apps
   };
+  if (payload.enabled !== undefined) {
+    body['enabled'] = payload.enabled === true;
+  }
+  return body;
 }
 
 export class QuickTaskApiService {

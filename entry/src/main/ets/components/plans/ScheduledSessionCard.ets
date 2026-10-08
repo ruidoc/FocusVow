@@ -29,7 +29,8 @@ export struct ScheduledSessionCard {
     duration_min: 0,
     timer_mode: 'countdown',
     mode: 'allow',
-    participation_mode: 'solo'
+    participation_mode: 'solo',
+    enabled: true,
   };
   onPress?: () => void;
   @State private statusTick: number = 0;
@@ -135,6 +136,9 @@ export struct ScheduledSessionCard {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
+        if (!this.session.enabled) {
+          this.buildStatusTag('未启用')
+        }
         this.buildStatusTag(this.getStatusLabel())
       }
       .width('100%')

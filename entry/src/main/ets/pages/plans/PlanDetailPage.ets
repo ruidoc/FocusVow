@@ -32,6 +32,7 @@ import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { loadExitPlanIds } from '../../services/ExitPlanIdsService';
+import { promptEnableScheduledSlot, upsellIfProSlotQuota } from '../../services/ProQuotaService';
 
 bootstrapStores();
 
@@ -56,6 +57,9 @@ struct PlanDetailPage {
   @State private statusTick: number = 0;
   @State guardSyncIssueMessage: string = '';
   @State isRetryingGuard: boolean = false;
+  @State switchEnabled: boolean = true;
+  @State private toggleBusy: boolean = false;
+  @State private switchSlot: number = 0;
 
   private statusTimerId: number = -1;
 
@@ -109,10 +113,72 @@ struct PlanDetailPage {
     const reconciled = await reconcileStaleScheduledWindows([nextSession], hostContext);
     nextSession = reconciled[0] ?? nextSession;
     this.session = nextSession;
+    if (!this.toggleBusy) {
+      this.switchEnabled = nextSession.enabled;
+    }
     this.fillFormFromSession(nextSession);
     this.refreshGuardSyncIssue();
     ScheduledListStore.patchSession(nextSession);
     this.isLoading = false;
+  }
+
+  private applySwitch(enabled: boolean): void {
+    this.switchEnabled = enabled;
+    this.switchSlot += 1;
+  }
+
+  private async onToggleEnabled(next: boolean): Promise<void> {
+    const session = this.session;
+    if (!session || !this.isInitiator() || this.toggleBusy) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (next) {
+      if (!promptEnableScheduledSlot(session.session_id)) {
+        this.applySwitch(false);
+        return;
+      }
+      this.toggleBusy = true;
+      const response = await DuoApiService.scheduledUpdate(session.session_id, { enabled: true });
+      const updated = DuoApiService.parseSession(response);
+      this.toggleBusy = false;
+      if (!updated || !updated.enabled) {
+        const message = response.message ?? '更新失败';
+        if (!updated) {
+          if (!upsellIfProSlotQuota(message, 'scheduled')) {
+            showErrorToast(message, this.getUIContext());
+          }
+        }
+        this.applySwitch(false);
+        return;
+      }
+      this.session = updated;
+      this.applySwitch(true);
+      ScheduledListStore.patchSession(updated);
+      await syncGuardForSession(hostContext, updated);
+      return;
+    }
+    const wasEnabled = session.enabled;
+    this.switchEnabled = false;
+    session.enabled = false;
+    this.session = session;
+    ScheduledListStore.patchSession(session);
+    await removeGuardForSession(hostContext, session.session_id);
+    this.toggleBusy = true;
+    const response = await DuoApiService.scheduledUpdate(session.session_id, { enabled: false });
+    const updated = DuoApiService.parseSession(response);
+    this.toggleBusy = false;
+    if (!updated) {
+      showErrorToast(response.message ?? '更新失败', this.getUIContext());
+      await this.loadSession();
+      if (wasEnabled && this.session) {
+        await syncGuardForSession(hostContext, this.session);
+      }
+      return;
+    }
+    this.session = updated;
+    this.switchEnabled = updated.enabled;
+    ScheduledListStore.patchSession(updated);
   }
 
   private refreshGuardSyncIssue(): void {
@@ -515,6 +581,49 @@ struct PlanDetailPage {
       }
 
       this.buildInviteCard()
+
+      if (this.isInitiator()) {
+        Column({ space: 8 }) {
+          Row() {
+            Text('启用任务')
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.textPrimary)
+              .layoutWeight(1)
+            if (this.switchSlot % 2 === 0) {
+              Toggle({ type: ToggleType.Switch, isOn: this.switchEnabled })
+                .enabled(!this.toggleBusy)
+                .onChange((isOn: boolean) => {
+                  if (isOn === this.switchEnabled) {
+                    return;
+                  }
+                  void this.onToggleEnabled(isOn);
+                })
+            } else {
+              Toggle({ type: ToggleType.Switch, isOn: this.switchEnabled })
+                .enabled(!this.toggleBusy)
+                .onChange((isOn: boolean) => {
+                  if (isOn === this.switchEnabled) {
+                    return;
+                  }
+                  void this.onToggleEnabled(isOn);
+                })
+            }
+          }
+          .width('100%')
+          Text('启用后才会生效，关闭则不生效')
+            .fontSize(13)
+            .lineHeight(20)
+            .fontColor(AppTheme.colors.textMuted)
+            .width('100%')
+        }
+        .width('100%')
+        .padding(20)
+        .alignItems(HorizontalAlign.Start)
+        .backgroundColor(AppTheme.colors.surface)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .borderRadius(AppTheme.radius.lg)
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

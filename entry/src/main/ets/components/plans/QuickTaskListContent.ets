@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { showToast } from '../../common/Toast';
 import { QuickTask, startWhenLabel } from '../../models/QuickTaskModel';
 import { minutesToHours } from '../../models/ActiveLockModel';
 import { AppTheme } from '../../constants/Theme';
@@ -21,6 +22,8 @@ export struct QuickTaskListContent {
   private listScroller: Scroller = new Scroller();
   @StorageLink(StoreKeys.QuickTaskDirty) @Watch('onListDirtyChanged') listDirty: boolean = true;
   @StorageLink(StoreKeys.QuickTaskList) @Watch('onTasksChanged') tasks: QuickTask[] = [];
+  @State instantTasks: QuickTask[] = [];
+  @State delayedTasks: QuickTask[] = [];
   @State statusMessage: string = '';
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
@@ -28,6 +31,7 @@ export struct QuickTaskListContent {
 
   aboutToAppear(): void {
     QuickTaskStore.hydrate();
+    this.syncSections();
     this.onScrollerReady?.(this.listScroller);
     if (this.isPageActive) {
       void this.syncOnVisible();
@@ -41,6 +45,22 @@ export struct QuickTaskListContent {
   }
 
   private onTasksChanged(): void {
+    this.syncSections();
+  }
+
+  private syncSections(): void {
+    const instant: QuickTask[] = [];
+    const delayed: QuickTask[] = [];
+    for (let i = 0; i < this.tasks.length; i++) {
+      const task = this.tasks[i];
+      if (task.delay_min <= 0) {
+        instant.push(task);
+      } else {
+        delayed.push(task);
+      }
+    }
+    this.instantTasks = instant;
+    this.delayedTasks = delayed;
   }
 
   private onListDirtyChanged(): void {
@@ -86,6 +106,10 @@ export struct QuickTaskListContent {
   }
 
   private async handleStart(task: QuickTask): Promise<void> {
+    if (!task.enabled) {
+      showToast('该任务未启用，请在详情中开启', this.getUIContext());
+      return;
+    }
     if (this.startingTaskId.length > 0) {
       return;
     }
@@ -105,30 +129,6 @@ export struct QuickTaskListContent {
     this.onCreateTask?.();
   }
 
-  private isInstantTask(task: QuickTask): boolean {
-    return task.delay_min <= 0;
-  }
-
-  private getInstantTasks(): QuickTask[] {
-    const result: QuickTask[] = [];
-    for (let i = 0; i < this.tasks.length; i++) {
-      if (this.isInstantTask(this.tasks[i])) {
-        result.push(this.tasks[i]);
-      }
-    }
-    return result;
-  }
-
-  private getDelayedTasks(): QuickTask[] {
-    const result: QuickTask[] = [];
-    for (let i = 0; i < this.tasks.length; i++) {
-      if (!this.isInstantTask(this.tasks[i])) {
-        result.push(this.tasks[i]);
-      }
-    }
-    return result;
-  }
-
   @Builder
   private buildSectionTitle(title: string): void {
     Text(title)
@@ -139,26 +139,28 @@ export struct QuickTaskListContent {
   }
 
   @Builder
-  private buildTaskSection(title: string, sectionTasks: QuickTask[], withTopGap: boolean): void {
-    if (sectionTasks.length === 0) {
-      Column()
-    } else {
-      Column({ space: 0 }) {
-        this.buildSectionTitle(title)
-        ForEach(sectionTasks, (task: QuickTask, index: number) => {
-          this.buildTaskCard(task, index, sectionTasks.length)
-        }, (task: QuickTask) => task.id)
-      }
-      .width('100%')
-      .margin({ top: withTopGap ? 20 : 0 })
-    }
-  }
-
-  @Builder
   private buildGroupedTaskList(): void {
     Column({ space: 0 }) {
-      this.buildTaskSection('即时任务', this.getInstantTasks(), false)
-      this.buildTaskSection('延时任务', this.getDelayedTasks(), this.getInstantTasks().length > 0)
+      if (this.instantTasks.length > 0) {
+        Column({ space: 0 }) {
+          this.buildSectionTitle('即时任务')
+          ForEach(this.instantTasks, (task: QuickTask, index: number) => {
+            this.buildTaskCard(task, index, this.instantTasks.length)
+          }, (task: QuickTask) => task.id)
+        }
+        .width('100%')
+      }
+
+      if (this.delayedTasks.length > 0) {
+        Column({ space: 0 }) {
+          this.buildSectionTitle('延时任务')
+          ForEach(this.delayedTasks, (task: QuickTask, index: number) => {
+            this.buildTaskCard(task, index, this.delayedTasks.length)
+          }, (task: QuickTask) => task.id)
+        }
+        .width('100%')
+        .margin({ top: this.instantTasks.length > 0 ? 20 : 0 })
+      }
     }
     .width('100%')
     .padding({ top: 16, bottom: 16 })
@@ -237,15 +239,15 @@ export struct QuickTaskListContent {
       .padding({ right: 12 })
       .alignItems(HorizontalAlign.Start)
 
-      Button('开始')
+      Button(task.enabled ? '开始' : '未启用')
         .height(28)
         .padding({ left: 14, right: 14 })
         .type(ButtonType.Normal)
         .buttonStyle(ButtonStyleMode.NORMAL)
         .borderRadius(999)
         .clip(true)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
+        .backgroundColor(task.enabled ? AppTheme.colors.primary : AppTheme.colors.surfaceSecondary)
+        .fontColor(task.enabled ? '#FFFFFF' : AppTheme.colors.textMuted)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .enabled(this.startingTaskId.length === 0)

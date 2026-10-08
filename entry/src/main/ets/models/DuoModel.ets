@@ -43,6 +43,8 @@ export interface DuoSessionView {
   schedule_start?: string;
   schedule_end?: string;
   schedule_repeat?: string;
+  /** 未下发时视为已启用 */
+  enabled: boolean;
 }
 
 export interface DuoStatsSummary {
@@ -144,6 +146,7 @@ export interface DuoScheduledUpdatePayload {
   mode?: string;
   initiator_apps?: string[];
   partner_apps?: string[];
+  enabled?: boolean;
 }
 
 export interface DuoScheduledListResult {
@@ -687,7 +690,9 @@ export function parseDuoSessionView(raw: Record<string, Object> | undefined): Du
     my_app_count: Number(raw['my_app_count'] ?? 0),
     schedule_start: String(raw['schedule_start'] ?? ''),
     schedule_end: String(raw['schedule_end'] ?? ''),
-    schedule_repeat: String(raw['schedule_repeat'] ?? '')
+    schedule_repeat: String(raw['schedule_repeat'] ?? ''),
+    enabled: raw['enabled'] !== false && raw['enabled'] !== 0 && String(raw['enabled'] ?? '') !== '0' &&
+      String(raw['enabled'] ?? '') !== 'false',
   };
 }
 

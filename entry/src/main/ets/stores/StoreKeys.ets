@@ -27,6 +27,7 @@ export class StoreKeys {
   static readonly BenefitCommunityHint: string = 'benefit.communityHint';
   static readonly BenefitFeatures: string = 'benefit.features';
   static readonly FeatureFlagsOff: string = 'feature.flagsOff';
+  static readonly AbVariants: string = 'ab.variants';
   static readonly AppForegroundAt: string = 'app.foregroundAt';
   static readonly AppIsForeground: string = 'app.isForeground';
   static readonly InAppMessage: string = 'app.inAppMessage';
@@ -80,6 +81,7 @@ export class StoreKeys {
   static readonly HomeSuccessRate: string = 'home.successRate';
   static readonly OnboardingViaOldUser: string = 'onboarding.via_old_user';
   static readonly OnboardingAfterRegister: string = 'onboarding.after_register';
+  static readonly OnboardingPermOnly: string = 'onboarding.perm_only';
   static readonly LoginFrom: string = 'login.from';
   static readonly BindEmailFrom: string = 'bindEmail.from';
   static readonly WxPendingInfo: string = 'user.wxPendingInfo';
@@ -91,6 +93,8 @@ export class StoreKeys {
   static readonly ProQuickPayVisible: string = 'pay.quick.visible';
   static readonly ProQuickPaySource: string = 'pay.quick.source';
   static readonly ProQuickPayReason: string = 'pay.quick.reason';
+  static readonly ProQuickPayTitle: string = 'pay.quick.title';
+  static readonly ProQuickPayLine2: string = 'pay.quick.line2';
   static readonly MembershipUrgencyTick: string = 'membership.urgencyTick';
   static readonly ShowGuestMembershipReclaim: string = 'membership.showGuestReclaim';
   static readonly ShowSignupTrialCelebration: string = 'membership.showCelebration';

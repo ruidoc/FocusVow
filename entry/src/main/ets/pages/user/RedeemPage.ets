@@ -337,14 +337,14 @@ struct RedeemPage {
             .fontSize(22)
             .fontColor([ACCENT])
             .offset({ top: -1 })
-          Text("输入兑换码")
+          Text("兑换会员")
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
         }
         .width("100%")
         .alignItems(VerticalAlign.Center)
-        Text("兑换后可解锁全部高级专注能力。")
+        Text("输入兑换码即可领取会员")
           .fontSize(13)
           .fontColor(AppTheme.colors.textSecondary)
           .width("100%")
@@ -385,12 +385,6 @@ struct RedeemPage {
       .backgroundColor(AppTheme.colors.surface)
       .border({ width: 1, color: AppTheme.colors.border })
       .borderRadius(AppTheme.radius.lg)
-      Column() {
-        this.buildWechatHint("没有兑换码？联系管理员免费获取")
-      }
-      .width("100%")
-      .padding({ left: 4, right: 4 })
-      .margin({ top: 24 })
     }.width("100%");
   }
 
@@ -573,6 +567,9 @@ struct RedeemPage {
         this.buildInviteHero();
       }
       this.buildInviteSection()
+      if (!this.showSuccess()) {
+        this.buildRedeemForm();
+      }
     }
     .width("100%")
     .padding({ left: 4, right: 4, top: 8, bottom: 8 })

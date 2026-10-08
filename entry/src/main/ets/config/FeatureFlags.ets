@@ -10,6 +10,8 @@ export class FeatureFlagKeys {
   static readonly SKIP_OVERLAY: string = 'skip_overlay';
   /** Onboarding 注册领会员页「放弃权益，去专注」；在 features_off 中则隐藏 */
   static readonly OB_LOGIN_SKIP: string = 'ob_login_skip';
+  /** 快付弹窗「邀请好友」入口；在 features_off 中则隐藏 */
+  static readonly QUICK_PAY_INVITE: string = 'quick_pay_invite';
 }
 
 /** Android / 鸿蒙微信支付会员商品（含年包，与 RN 微信渠道 catalog 一致） */

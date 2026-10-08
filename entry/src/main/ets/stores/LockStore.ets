@@ -8,6 +8,7 @@ import {
   createQuickFocusLockState,
   formatRemainingSeconds,
   getRemainingSeconds,
+  isCountupLock,
   isLocked,
   isTimedLockFinished
 } from '../models/ActiveLockModel';
@@ -20,6 +21,7 @@ import {
 } from '../services/ActiveLockPersistenceService';
 import { FocusStartedNotifyService } from '../services/FocusStartedNotifyService';
 import { getPlanWindow } from '../services/PlanWindowService';
+import { loadPersistedCycleGuardState } from '../services/CycleGuardPersistenceService';
 import { loadPersistedPlans } from '../services/PlanPersistenceService';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
@@ -61,9 +63,33 @@ export class LockStore {
   static hydrate(context: common.Context): void {
     bootstrapStores();
     const persistedState = loadPersistedActiveLockState(context);
-    const enrichedState = persistedState
+    let enrichedState = persistedState
       ? enrichCovenantLockFromPlans(context, persistedState)
       : createIdleLockState();
+    if (enrichedState.kind === 'cycle_guard' && enrichedState.minDurationMin <= 0) {
+      const guard = loadPersistedCycleGuardState(context);
+      const minutes = guard && guard.lockMinutes > 0 ? guard.lockMinutes : 25;
+      enrichedState = {
+        kind: enrichedState.kind,
+        strategyName: enrichedState.strategyName,
+        title: enrichedState.title,
+        planId: enrichedState.planId,
+        selectedTokens: enrichedState.selectedTokens,
+        selectedCount: enrichedState.selectedCount,
+        mode: enrichedState.mode,
+        startedAt: enrichedState.startedAt,
+        endAt: enrichedState.endAt,
+        updatedAt: enrichedState.updatedAt,
+        duoSessionId: enrichedState.duoSessionId,
+        recordId: enrichedState.recordId,
+        participationMode: enrichedState.participationMode,
+        partnerNickname: enrichedState.partnerNickname,
+        timerMode: 'countup',
+        minDurationMin: minutes,
+        isDelayedSolo: enrichedState.isDelayedSolo
+      };
+      savePersistedActiveLockState(context, enrichedState);
+    }
     if (
       persistedState &&
       enrichedState.kind === 'covenant' &&
@@ -117,8 +143,7 @@ export class LockStore {
       return formatRemainingSeconds(LockStore.getQuickFocusDurationMinutes() * 60);
     }
 
-    // 正计时展示已专注时长
-    if (state.timerMode === 'countup') {
+    if (isCountupLock(state)) {
       return formatRemainingSeconds(Math.max(0, Math.floor((nowAt - state.startedAt) / 1000)));
     }
 

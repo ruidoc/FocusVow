@@ -96,6 +96,7 @@ export class QuickTaskStore {
       if (task) {
         QuickTaskStore.setTasks([task, ...QuickTaskStore.getTasks()]);
       }
+      QuickTaskStore.markDirty();
     }
     return response;
   }

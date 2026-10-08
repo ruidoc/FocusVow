@@ -6,6 +6,7 @@ import { PageRoutes } from '../router/PageRoutes';
 import { HttpService } from '../services/HttpService';
 import { readStoredString, writeStoredString } from '../services/PreferencesService';
 import { openVipPurchase as navigateToVipPurchase, OpenVipPurchaseOptions } from '../utils/PaywallNavigationUtil';
+import { AbStore } from './AbStore';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
 
@@ -65,6 +66,7 @@ export class FeatureFlagStore {
     }
     const raw = readStoredString(context, CACHE_KEY, '');
     FeatureFlagStore.applyFeaturesOff(raw.length === 0 ? [] : parseCached(raw));
+    AbStore.hydrate(context);
   }
 
   static getFeaturesOff(): string[] {
@@ -145,5 +147,6 @@ export class FeatureFlagStore {
     } catch (error) {
       console.warn(`[FeatureFlag] sync failed: ${String(error)}`);
     }
+    await AbStore.sync(context);
   }
 }

@@ -29,11 +29,11 @@ export default class EntryAbility extends UIAbility {
       familySrc: $rawfile('LuoXiGangBiXingKai.ttf')
     });
     AppContextHolder.bind(this.context);
+    warmUpPreferencesStore(this.context);
     ThemeStore.hydrate(this.context);
     AnalyticsService.ensureInitialized(this.context);
     webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
-    warmUpPreferencesStore(this.context);
     ExtensionNetworkService.persistClientMeta(this.context);
     DuoBgSyncService.bindPoll((ctx) => {
       return DuoPushHandler.syncActiveDuoSessionIfNeeded(ctx, { isForeground: false });

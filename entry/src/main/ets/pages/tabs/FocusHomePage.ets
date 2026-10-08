@@ -646,12 +646,19 @@ export struct FocusHomePage {
     }
 
     // 正计时过最短：正常结束
-    if (this.activeLock.kind === "quick_focus" && this.isPastCountupMin()) {
+    if (
+      (this.activeLock.kind === "quick_focus" || this.activeLock.kind === "cycle_guard") &&
+      this.isPastCountupMin()
+    ) {
       this.confirmCompleteFocus();
       return;
     }
 
-    if (this.activeLock.kind === "quick_focus" || this.activeLock.kind === "covenant") {
+    if (
+      this.activeLock.kind === "quick_focus" ||
+      this.activeLock.kind === "covenant" ||
+      this.activeLock.kind === "cycle_guard"
+    ) {
       this.showTearConfirm = true;
       return;
     }
@@ -670,6 +677,10 @@ export struct FocusHomePage {
         value: "确认结束",
         fontColor: AppTheme.colors.danger,
         action: () => {
+          if (this.activeLock.kind === "cycle_guard") {
+            void this.performEndLock();
+            return;
+          }
           void this.performCompleteLock();
         },
       },
@@ -714,6 +725,10 @@ export struct FocusHomePage {
 
   private async performTearLock(): Promise<void> {
     if (this.isEndingLock) {
+      return;
+    }
+    if (this.activeLock.kind === "cycle_guard") {
+      await this.performEndLock();
       return;
     }
     const lockSnapshot = normalizeActiveLockState(this.activeLock);
@@ -911,7 +926,7 @@ export struct FocusHomePage {
       return "撕毁契约";
     }
     if (this.activeLock.kind === "cycle_guard") {
-      return "结束当前锁定";
+      return this.isPastCountupMin() ? "结束专注" : "撕毁契约";
     }
     return "结束";
   }

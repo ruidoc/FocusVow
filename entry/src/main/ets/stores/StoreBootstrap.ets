@@ -44,6 +44,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.BenefitCommunityHint, '');
   AppStorage.setOrCreate(StoreKeys.BenefitFeatures, '');
   AppStorage.setOrCreate(StoreKeys.FeatureFlagsOff, []);
+  AppStorage.setOrCreate(StoreKeys.AbVariants, '{}');
   AppStorage.setOrCreate(StoreKeys.InAppMessage, createHiddenInAppMessage());
   AppStorage.setOrCreate(StoreKeys.ScheduledListAll, []);
   AppStorage.setOrCreate(StoreKeys.ScheduledListFilter, 'all');
@@ -88,6 +89,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.HomeSuccessRate, 0);
   AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, false);
   AppStorage.setOrCreate(StoreKeys.OnboardingAfterRegister, false);
+  AppStorage.setOrCreate(StoreKeys.OnboardingPermOnly, false);
   AppStorage.setOrCreate(StoreKeys.LoginFrom, '');
   AppStorage.setOrCreate(StoreKeys.MembershipUrgencyTick, 0);
   AppStorage.setOrCreate(StoreKeys.ShowGuestMembershipReclaim, false);
@@ -96,6 +98,8 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.ProQuickPayVisible, false);
   AppStorage.setOrCreate(StoreKeys.ProQuickPaySource, '');
   AppStorage.setOrCreate(StoreKeys.ProQuickPayReason, '');
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayTitle, '');
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayLine2, '');
   AppStorage.setOrCreate(StoreKeys.PendingOnboardingActivationModal, false);
   AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, false);
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());

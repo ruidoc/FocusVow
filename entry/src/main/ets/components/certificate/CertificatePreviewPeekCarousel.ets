@@ -24,6 +24,51 @@ import { TraitorShameCertificateCard } from './TraitorShameCertificateCard';
 import { VictimShameCertificateCard } from './VictimShameCertificateCard';
 
 @Component
+struct CertificateCarouselSlot {
+  @Prop kind: string = 'honor';
+  @Prop honorData: HonorCertificateData = createEmptyHonorCertificateData();
+  @Prop shameData: ShameCertificateData = createEmptyShameCertificateData();
+  @Prop templateStyle: string = CERTIFICATE_TEMPLATES[0];
+  @Prop snapshotId: string = '';
+
+  build() {
+    if (this.kind === 'shame') {
+      if (this.shameData.shameVariant === 'victim') {
+        VictimShameCertificateCard({
+          data: this.shameData,
+          templateStyle: this.templateStyle,
+          snapshotId: this.snapshotId,
+        })
+      } else if (this.shameData.shameVariant === 'violator') {
+        TraitorShameCertificateCard({
+          data: this.shameData,
+          templateStyle: this.templateStyle,
+          snapshotId: this.snapshotId,
+        })
+      } else {
+        ShameCertificateCard({
+          data: this.shameData,
+          templateStyle: this.templateStyle,
+          snapshotId: this.snapshotId,
+        })
+      }
+    } else if (isDuoHonorCertificate(this.honorData)) {
+      DuoHonorCertificateCard({
+        data: this.honorData,
+        templateStyle: this.templateStyle,
+        snapshotId: this.snapshotId,
+      })
+    } else {
+      HonorCertificateCard({
+        data: this.honorData,
+        templateStyle: this.templateStyle,
+        snapshotId: this.snapshotId,
+      })
+    }
+  }
+}
+
+@Component
 export struct CertificatePreviewPeekCarousel {
   @Prop kind: string = 'honor';
   @Prop honorData: HonorCertificateData = createEmptyHonorCertificateData();
@@ -46,9 +91,12 @@ export struct CertificatePreviewPeekCarousel {
     }
   }
 
+  private layoutWidth(): number {
+    return this.viewportWidth > 0 ? this.viewportWidth : 390;
+  }
+
   private cardWidth(): number {
-    const base = this.viewportWidth > 0 ? this.viewportWidth : 390;
-    return peekCarouselCardWidth(base);
+    return peekCarouselCardWidth(this.layoutWidth());
   }
 
   private posterHeight(): number {
@@ -68,7 +116,7 @@ export struct CertificatePreviewPeekCarousel {
   }
 
   private onPanUpdate(offsetX: number): void {
-    const stride = peekCarouselPageStride(this.viewportWidth);
+    const stride = peekCarouselPageStride(this.layoutWidth());
     if (stride <= 0) {
       return;
     }
@@ -95,40 +143,14 @@ export struct CertificatePreviewPeekCarousel {
   }
 
   @Builder
-  private buildCertificateCard(style: string): void {
-    if (this.kind === 'shame') {
-      if (this.shameData.shameVariant === 'victim') {
-        VictimShameCertificateCard({
-          data: this.shameData,
-          templateStyle: style,
-          snapshotId: this.snapshotIdFor(style),
-        })
-      } else if (this.shameData.shameVariant === 'violator') {
-        TraitorShameCertificateCard({
-          data: this.shameData,
-          templateStyle: style,
-          snapshotId: this.snapshotIdFor(style),
-        })
-      } else {
-        ShameCertificateCard({
-          data: this.shameData,
-          templateStyle: style,
-          snapshotId: this.snapshotIdFor(style),
-        })
-      }
-    } else if (isDuoHonorCertificate(this.honorData)) {
-      DuoHonorCertificateCard({
-        data: this.honorData,
-        templateStyle: style,
-        snapshotId: this.snapshotIdFor(style),
-      })
-    } else {
-      HonorCertificateCard({
-        data: this.honorData,
-        templateStyle: style,
-        snapshotId: this.snapshotIdFor(style),
-      })
-    }
+  private buildCertificateSlot(style: string): void {
+    CertificateCarouselSlot({
+      kind: this.kind,
+      honorData: this.honorData,
+      shameData: this.shameData,
+      templateStyle: style,
+      snapshotId: this.snapshotIdFor(style),
+    })
   }
 
   build() {
@@ -137,7 +159,7 @@ export struct CertificatePreviewPeekCarousel {
         Row() {
           if (CERTIFICATE_TEMPLATES.length === 1) {
             Column() {
-              this.buildCertificateCard(CERTIFICATE_TEMPLATES[0])
+              this.buildCertificateSlot(CERTIFICATE_TEMPLATES[0])
             }
             .width(this.cardWidth())
             .height(this.posterHeight())
@@ -152,7 +174,7 @@ export struct CertificatePreviewPeekCarousel {
             ForEach(CERTIFICATE_TEMPLATES, (style: string, index: number) => {
               Row() {
                 Column() {
-                  this.buildCertificateCard(style)
+                  this.buildCertificateSlot(style)
                 }
                 .width(this.cardWidth())
                 .height(this.posterHeight())
@@ -164,16 +186,16 @@ export struct CertificatePreviewPeekCarousel {
                 })
                 .zIndex(peekCarouselZIndexFor(index, this.carouselProgress))
               }
-              .width(peekCarouselPageStride(this.viewportWidth))
+              .width(peekCarouselPageStride(this.layoutWidth()))
               .height(this.posterHeight())
               .justifyContent(FlexAlign.Start)
             }, (style: string) => style)
           }
           .padding({
-            left: peekCarouselPeekMargin(this.viewportWidth),
-            right: peekCarouselPeekMargin(this.viewportWidth),
+            left: peekCarouselPeekMargin(this.layoutWidth()),
+            right: peekCarouselPeekMargin(this.layoutWidth()),
           })
-          .translate({ x: peekCarouselTrackOffset(this.carouselProgress, this.viewportWidth) })
+          .translate({ x: peekCarouselTrackOffset(this.carouselProgress, this.layoutWidth()) })
         }
         .width('100%')
         .height(this.posterHeight())

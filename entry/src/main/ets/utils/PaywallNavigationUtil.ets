@@ -10,7 +10,12 @@ export const PRO_UNLOCK_DEFAULT_SUBTITLE: string =
 
 export interface OpenVipPurchaseOptions {
   proUnlock?: boolean;
+  /** 快付首行，同 RN subtitle */
   reason?: string;
+  /** 快付首行备选，同 RN title */
+  title?: string;
+  /** 快付次行整句，同 RN line2 */
+  line2?: string;
 }
 
 export function isMemberActive(): boolean {
@@ -33,6 +38,8 @@ export function openVipPurchase(entrySource: string, options?: OpenVipPurchaseOp
   if (options?.proUnlock === true) {
     AppStorage.setOrCreate(StoreKeys.ProQuickPaySource, entrySource);
     AppStorage.setOrCreate(StoreKeys.ProQuickPayReason, options.reason?.trim() ?? '');
+    AppStorage.setOrCreate(StoreKeys.ProQuickPayTitle, options.title?.trim() ?? '');
+    AppStorage.setOrCreate(StoreKeys.ProQuickPayLine2, options.line2?.trim() ?? '');
     AppStorage.setOrCreate(StoreKeys.ProQuickPayVisible, true);
     return;
   }

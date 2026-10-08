@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { pasteboard } from '@kit.BasicServicesKit';
 import { CustomContentDialog } from '@kit.ArkUI';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { showErrorToast, showToast } from '../../common/Toast';
@@ -77,6 +78,28 @@ struct ProfileEditPage {
 
   aboutToDisappear(): void {
     this.usernameDialogController.close();
+  }
+
+  private userIdSuffix(): string {
+    const id = this.userInfo.id;
+    if (id.length <= 8) {
+      return id;
+    }
+    return id.slice(id.length - 8);
+  }
+
+  private async copyUserId(): Promise<void> {
+    const suffix = this.userIdSuffix();
+    if (suffix.length === 0) {
+      return;
+    }
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, suffix);
+      pasteboard.getSystemPasteboard().setData(data);
+      showToast('用户 ID 已复制', this.getUIContext());
+    } catch (_error) {
+      showErrorToast('复制失败', this.getUIContext());
+    }
   }
 
   private getSexLabel(): string {
@@ -423,6 +446,44 @@ struct ProfileEditPage {
   }
 
   @Builder
+  private buildUserIdRow(): void {
+    Column({ space: 0 }) {
+      Row() {
+        Text('用户 ID')
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textPrimary)
+
+        Blank()
+
+        Text(this.userIdSuffix().length > 0 ? this.userIdSuffix() : '—')
+          .fontSize(15)
+          .fontColor(AppTheme.colors.textSecondary)
+          .fontFamily('HarmonyOS Sans')
+          .margin({ right: 8 })
+
+        SymbolGlyph($r('sys.symbol.doc_plaintext'))
+          .fontSize(18)
+          .fontColor([AppTheme.colors.primary])
+          .onClick(() => {
+            void this.copyUserId();
+          })
+      }
+      .width('100%')
+      .height(52)
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        void this.copyUserId();
+      })
+
+      Divider()
+        .color(AppTheme.colors.divider)
+        .strokeWidth(1)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16 })
+  }
+
+  @Builder
   private buildSexRow(): void {
     Column({ space: 0 }) {
       Row() {
@@ -464,6 +525,7 @@ struct ProfileEditPage {
         this.buildHuaweiRow()
         this.buildWechatRow()
         this.buildSexRow()
+        this.buildUserIdRow()
       }
       .width('100%')
       .backgroundColor(AppTheme.colors.surface)

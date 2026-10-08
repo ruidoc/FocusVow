@@ -128,7 +128,6 @@ struct CycleGuardDetailPage {
       await BenefitStore.refresh();
       if (!ensureProMembership('cycle_guard', {
         proUnlock: true,
-        reason: '短视频限额为 Pro 专属功能，开通后即可使用',
       })) {
         this.syncEnableSwitchValue(true);
         return;

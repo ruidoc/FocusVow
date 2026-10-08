@@ -2,8 +2,12 @@ import { common, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { ThemeMode } from '../constants/Theme';
+import { readStoredString, writeStoredString } from '../services/PreferencesService';
 import { bootstrapStores } from './StoreBootstrap';
 import { StoreKeys } from './StoreKeys';
+
+/** 与 RN `app_theme` 一致：有值表示用户手动选过主题，冷启动不再跟系统 */
+const THEME_PREF_KEY: string = 'app_theme';
 
 function normalizeThemeMode(raw: string): ThemeMode {
   return raw === 'dark' ? 'dark' : 'light';
@@ -18,11 +22,26 @@ export class ThemeStore {
   /** 手动 setColorMode 会触发 configuration 回调，需跳过避免递归/闪退 */
   private static suppressConfigSync: boolean = false;
 
+  private static readPersistedMode(context: common.Context): ThemeMode | null {
+    const raw = readStoredString(context, THEME_PREF_KEY, '');
+    if (raw === 'dark' || raw === 'light') {
+      return raw;
+    }
+    return null;
+  }
+
   static hydrate(context: common.UIAbilityContext): void {
     bootstrapStores();
     if (!ThemeStore.initialized) {
-      ThemeStore.ensureFollowSystemColorMode(context);
-      const mode = ThemeStore.resolveSystemThemeMode(context);
+      const persisted = ThemeStore.readPersistedMode(context);
+      let mode: ThemeMode;
+      if (persisted !== null) {
+        mode = persisted;
+        ThemeStore.applyNativeColorMode(context, mode);
+      } else {
+        ThemeStore.ensureFollowSystemColorMode(context);
+        mode = ThemeStore.resolveSystemThemeMode(context);
+      }
       AppStorage.setOrCreate(StoreKeys.ThemeMode, mode);
       ThemeStore.initialized = true;
     }
@@ -56,6 +75,9 @@ export class ThemeStore {
     if (ThemeStore.suppressConfigSync) {
       return;
     }
+    if (ThemeStore.readPersistedMode(context) !== null) {
+      return;
+    }
     bootstrapStores();
     const mode = colorModeToTheme(config?.colorMode ?? context.config.colorMode);
     if (ThemeStore.getMode() === mode) {
@@ -84,6 +106,7 @@ export class ThemeStore {
     ThemeStore.suppressConfigSync = true;
     try {
       ThemeStore.applyNativeColorMode(context, mode);
+      writeStoredString(context, THEME_PREF_KEY, mode);
       AppStorage.setOrCreate(StoreKeys.ThemeMode, mode);
       void ThemeStore.applySystemBarStyle(context, mode);
     } finally {

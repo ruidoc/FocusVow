@@ -5,6 +5,26 @@ const WAKE_END: number = 8 * 60 + 30;
 const SLEEP_START: number = 21 * 60;
 const SLEEP_END: number = 23 * 60 + 30;
 
+export interface CheckinFocusMinutesParts {
+  total: number;
+  hours: number;
+  remainMinutes: number;
+}
+
+export function normalizeCheckinFocusMinutes(minutes: number): number {
+  return Math.max(0, Math.floor(minutes));
+}
+
+export function splitCheckinFocusMinutes(minutes: number): CheckinFocusMinutesParts {
+  const total = normalizeCheckinFocusMinutes(minutes);
+  const parts: CheckinFocusMinutesParts = {
+    total: total,
+    hours: Math.floor(total / 60),
+    remainMinutes: total % 60,
+  };
+  return parts;
+}
+
 export function formatCheckinWindowRange(startMin: number, endMin: number): string {
   const fmt = (total: number): string => {
     const h = Math.floor(total / 60);

@@ -2,7 +2,7 @@ import { common } from "@kit.AbilityKit";
 import { ApiConfig } from "../config/ApiConfig";
 import { QuickTaskStore } from "../stores/QuickTaskStore";
 import { ScheduledListStore } from "../stores/ScheduledListStore";
-import { ensureProMembership, isMemberActive } from "../utils/PaywallNavigationUtil";
+import { ensureProMembership, isMemberActive, openVipPurchase } from "../utils/PaywallNavigationUtil";
 
 export const FREE_QUICK_TASK_LIMIT: number = 2;
 export const FREE_SCHEDULED_TASK_LIMIT: number = 1;
@@ -10,53 +10,86 @@ export const FREE_DELAYED_START_MINUTES: number = 5;
 export const FREE_DELAYED_START_MINUTES_LIST: number[] = [5, 10, 15];
 const DEV_FREE_DELAYED_START_MINUTES: number = 1;
 
-export function getQuickTaskCount(): number {
-  return QuickTaskStore.getTasks().length;
-}
-
-export function canCreateQuickTask(): boolean {
-  if (isMemberActive()) {
-    return true;
-  }
-  return getQuickTaskCount() < FREE_QUICK_TASK_LIMIT;
-}
-
-export function ensureQuickTaskQuota(): boolean {
-  if (canCreateQuickTask()) {
-    return true;
-  }
-  return ensureProMembership("quick_task_limit", {
-    proUnlock: true,
-    reason: `免费用户最多创建 ${FREE_QUICK_TASK_LIMIT} 个快捷任务`,
-  });
-}
-
-export function getInitiatedScheduledTaskCount(): number {
-  const sessions = ScheduledListStore.getAllSessions();
+export function countEnabledQuickTasks(excludeTaskId: string = ''): number {
+  const tasks = QuickTaskStore.getTasks();
   let count = 0;
-  for (let i = 0; i < sessions.length; i++) {
-    if (sessions[i].viewer_role === "initiator") {
-      count += 1;
+  for (let i = 0; i < tasks.length; i++) {
+    if (!tasks[i].enabled) {
+      continue;
     }
+    if (excludeTaskId.length > 0 && tasks[i].id === excludeTaskId) {
+      continue;
+    }
+    count += 1;
   }
   return count;
 }
 
-export function canCreateScheduledTask(): boolean {
+export function canEnableMoreQuickTasks(excludeTaskId: string = ''): boolean {
   if (isMemberActive()) {
     return true;
   }
-  return getInitiatedScheduledTaskCount() < FREE_SCHEDULED_TASK_LIMIT;
+  return countEnabledQuickTasks(excludeTaskId) < FREE_QUICK_TASK_LIMIT;
 }
 
-export function ensureScheduledTaskQuota(): boolean {
-  if (canCreateScheduledTask()) {
+/** @returns true 可启用；false 已弹出快付 */
+export function promptEnableQuickTaskSlot(excludeTaskId: string = ''): boolean {
+  if (canEnableMoreQuickTasks(excludeTaskId)) {
     return true;
   }
-  return ensureProMembership("scheduled_task_limit", {
-    proUnlock: true,
-    reason: `免费用户最多创建 ${FREE_SCHEDULED_TASK_LIMIT} 个定时契约`,
-  });
+  openVipPurchase('quick_task_slot', { proUnlock: true });
+  return false;
+}
+
+export function countEnabledScheduledAsInitiator(excludeSessionId: string = ''): number {
+  const sessions = ScheduledListStore.getAllSessions();
+  let count = 0;
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    if (session.viewer_role !== 'initiator' || !session.enabled) {
+      continue;
+    }
+    if (excludeSessionId.length > 0 && session.session_id === excludeSessionId) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+export function canEnableMoreScheduled(excludeSessionId: string = ''): boolean {
+  if (isMemberActive()) {
+    return true;
+  }
+  return countEnabledScheduledAsInitiator(excludeSessionId) < FREE_SCHEDULED_TASK_LIMIT;
+}
+
+/** @returns true 可启用；false 已弹出快付 */
+export function promptEnableScheduledSlot(excludeSessionId: string = ''): boolean {
+  if (canEnableMoreScheduled(excludeSessionId)) {
+    return true;
+  }
+  openVipPurchase('scheduled_task_slot', { proUnlock: true });
+  return false;
+}
+
+export function isProSlotQuotaMessage(message: string): boolean {
+  return message.includes('免费版仅可启用') || message.includes('请开通会员或先关闭');
+}
+
+/** @returns true 已弹出快付 */
+export function upsellIfProSlotQuota(message: string, kind: string): boolean {
+  if (!isProSlotQuotaMessage(message)) {
+    return false;
+  }
+  const source = kind === 'quick' ? 'quick_task_slot' : 'scheduled_task_slot';
+  openVipPurchase(source, { proUnlock: true });
+  return true;
+}
+
+export function openSlotUpsell(kind: string): void {
+  const source = kind === 'quick' ? 'quick_task_slot' : 'scheduled_task_slot';
+  openVipPurchase(source, { proUnlock: true });
 }
 
 function isFreeAllowedDelayMinutes(delayMinutes: number): boolean {
@@ -77,9 +110,9 @@ export function ensureDelayMinutesAllowed(delayMinutes: number): boolean {
     return true;
   }
   if (!isFreeAllowedDelayMinutes(delayMinutes)) {
-    return ensureProMembership("delayed_start_limit", {
+    return ensureProMembership('delayed_start_limit', {
       proUnlock: true,
-      reason: '免费用户可用 5、10、15 分钟延时',
+      reason: '自定义延时为 Pro 专属',
     });
   }
   return true;

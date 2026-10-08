@@ -173,6 +173,9 @@ export class DuoApiService {
     if (payload.partner_apps !== undefined) {
       body['partner_apps'] = payload.partner_apps;
     }
+    if (payload.enabled !== undefined) {
+      body['enabled'] = payload.enabled === true;
+    }
     return HttpService.post(`/duo/scheduled/${encodeURIComponent(sessionId)}/update`, body);
   }
 

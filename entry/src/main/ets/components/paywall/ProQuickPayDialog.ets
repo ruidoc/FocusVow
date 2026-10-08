@@ -1,67 +1,97 @@
-import { common } from '@kit.AbilityKit';
-import { showErrorToast, showToast } from '../../common/Toast';
-import { LegalUrls } from '../../constants/LegalUrls';
-import { AppTheme } from '../../constants/Theme';
-import { PageRoutes, pushRoute, pushWebView } from '../../router/PageRoutes';
-import { AnalyticsService } from '../../services/AnalyticsService';
-import { SubscriptionApiService, VipProduct, WeChatPayOrderData } from '../../services/SubscriptionApiService';
-import { WeChatOpenService, WeChatPayParams } from '../../services/WeChatOpenService';
-import { BenefitStore } from '../../stores/BenefitStore';
-import { StoreKeys } from '../../stores/StoreKeys';
+import { common } from "@kit.AbilityKit";
+import { router } from "@kit.ArkUI";
+import { showErrorToast, showToast } from "../../common/Toast";
+import { LegalUrls } from "../../constants/LegalUrls";
+import { PageRoutes, pushWebView } from "../../router/PageRoutes";
+import { AnalyticsService } from "../../services/AnalyticsService";
+import {
+  SubscriptionApiService,
+  VipProduct,
+  WeChatPayOrderData,
+} from "../../services/SubscriptionApiService";
+import { WeChatOpenService, WeChatPayParams } from "../../services/WeChatOpenService";
+import { BenefitStore } from "../../stores/BenefitStore";
+import { FeatureFlagKeys } from "../../config/FeatureFlags";
+import { FeatureFlagStore } from "../../stores/FeatureFlagStore";
+import { StoreKeys } from "../../stores/StoreKeys";
+import { mergeQuickPayDisplayCopy, QuickPayDisplayCopy } from "../../utils/ProQuickPayCopy";
 
-const GOLD: string = '#B8741A';
+/** 快付弹窗固定亮色壳，与 RN ConfirmationModal gold + Colors.light 一致，不跟随 App 暗黑 */
+const GOLD_LINE1: string = "#B8741A";
+const GOLD_ACCENT_DEEP: string = "#C45A00";
+const SHELL_BG: string = "#F5F7FB";
+const SHELL_TOP: string = "#FFF7EB";
+const LIGHT_TEXT: string = "#0F172A";
+const LIGHT_TEXT2: string = "#64748B";
+const LIGHT_TEXT3: string = "#94A3B8";
+const PRICE_FONT_SIZE: number = 60;
+const SUFFIX_FONT_SIZE: number = 24;
+const ARROW_SIZE: number = 35;
+const BADGE_FONT_SIZE: number = 13;
+const SHEET_CORNER_RADIUS: number = 24;
+const SHEET_SIDE_INSET: number = 8;
+/** 角标浮在「元升级」行上方，不参与底对齐 */
+const BADGE_FLOAT_ABOVE_SUFFIX: number = 20;
+/** 负值把字形沉到字框底边，消掉数字字框底部留白 */
+const PRICE_GLYPH_SINK: number = -14;
+const SUFFIX_GLYPH_SINK: number = -4;
 
 function yuanText(fen: number): string {
   const yuan = fen / 100;
   return Number.isInteger(yuan) ? `${yuan}` : yuan.toFixed(2);
 }
 
-function quickLines(source: string, reason: string): string[] {
-  if (reason.length > 0) {
-    return [reason, '现在升级 Pro 更划算'];
-  }
-  if (source === 'quick_task_slot' || source === 'quick_task_limit') {
-    return ['免费可用 2 个快捷任务', '现在升级 Pro 更划算'];
-  }
-  if (source === 'scheduled_task_slot' || source === 'scheduled_task_limit') {
-    return ['免费可用 1 条定时任务', '现在升级 Pro 更划算'];
-  }
-  if (source === 'cycle_guard') {
-    return ['短视频限额为 Pro 专属', '升级解锁防沉迷强锁'];
-  }
-  if (source === 'scheduled_duo') {
-    return ['定时互督为 Pro 专属', '升级立即发起定时搭子'];
-  }
-  if (source === 'delayed_start_limit') {
-    return ['免费延时今日已用完', '升级享无限延时专注'];
-  }
-  if (source === 'membership_expiring') {
-    return ['会员权益即将到期', '续费畅享无限专注'];
-  }
-  if (source === 'membership_last_day') {
-    return ['会员还剩最后 1 天', '现在续订特惠升级'];
-  }
-  if (source === 'membership_expired') {
-    return ['会员已到期任务已暂停', '立即续订恢复特权'];
-  }
-  return ['免费版额度已用完', '现在升级 Pro 更划算'];
-}
-
 function closeQuickPay(): void {
   AppStorage.setOrCreate(StoreKeys.ProQuickPayVisible, false);
+  AppStorage.setOrCreate(StoreKeys.ProQuickPaySource, "");
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayReason, "");
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayTitle, "");
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayLine2, "");
 }
-
-@CustomDialog
-export struct ProQuickPayDialog {
-  controller: CustomDialogController;
-  @StorageLink(StoreKeys.ProQuickPaySource) source: string = '';
-  @StorageLink(StoreKeys.ProQuickPayReason) reason: string = '';
-  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
-  @State product: VipProduct | null = null;
-  @State paying: boolean = false;
+@Component
+export struct ProQuickPayHost {
+  @StorageLink(StoreKeys.ProQuickPayVisible) @Watch("onVisibleChanged") visible: boolean = false;
+  @StorageLink(StoreKeys.ProQuickPaySource) source: string = "";
+  @StorageLink(StoreKeys.ProQuickPayReason) reason: string = "";
+  @StorageLink(StoreKeys.ProQuickPayTitle) title: string = "";
+  @StorageLink(StoreKeys.ProQuickPayLine2) line2Override: string = "";
+  @StorageLink(StoreKeys.FeatureFlagsOff) featuresOff: string[] = [];
+  @State private product: VipProduct | null = null;
+  @State private paying: boolean = false;
 
   aboutToAppear(): void {
+    if (this.visible) {
+      void this.onSheetOpen();
+    }
+  }
+
+  private async onSheetOpen(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void FeatureFlagStore.sync(hostContext);
     void this.loadProduct();
+  }
+
+  private onVisibleChanged(): void {
+    if (this.visible) {
+      void this.onSheetOpen();
+    } else {
+      this.paying = false;
+    }
+  }
+
+  private displayCopy(): QuickPayDisplayCopy {
+    return mergeQuickPayDisplayCopy(this.source, this.reason, this.title, this.line2Override);
+  }
+
+  private showInviteAlt(): boolean {
+    return !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.QUICK_PAY_INVITE);
+  }
+
+  private ctaLabel(): string {
+    if (!this.product) {
+      return "请选择套餐";
+    }
+    return "升级双月Pro";
   }
 
   private async loadProduct(): Promise<void> {
@@ -79,14 +109,23 @@ export struct ProQuickPayDialog {
     this.product = picked;
   }
 
-  private lineAt(index: number): string {
-    const lines = quickLines(this.source, this.reason);
-    return index === 0 ? lines[0] : lines[1];
-  }
-
   private dismiss(): void {
     closeQuickPay();
-    this.controller.close();
+    this.visible = false;
+  }
+
+  private openFullPaywall(): void {
+    const params: Record<string, Object> = {};
+    params["entry_source"] = this.source;
+    this.dismiss();
+    router.pushUrl({ url: PageRoutes.Membership, params }).catch(() => {});
+  }
+
+  private openInviteRedeem(): void {
+    const params: Record<string, Object> = {};
+    params["entry_source"] = `pro_quick_pay_${this.source}`;
+    this.dismiss();
+    router.pushUrl({ url: PageRoutes.Redeem, params }).catch(() => {});
   }
 
   private async pay(): Promise<void> {
@@ -96,20 +135,21 @@ export struct ProQuickPayDialog {
     }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const props: Record<string, Object> = {};
-    props['screen_name'] = 'pro_quick_pay';
-    props['entry_source'] = this.source;
-    props['product_id'] = product.product_id;
-    props['period'] = product.period;
-    props['price'] = product.price;
-    props['currency'] = 'CNY';
-    props['purchase_source'] = 'wechat';
-    AnalyticsService.trackEvent('paywall_purchase_clicked', props);
-    AnalyticsService.trackEvent('purchase_started', props);
+    props["screen_name"] = "pro_quick_pay";
+    props["entry_source"] = this.source;
+    props["product_id"] = product.product_id;
+    props["period"] = product.period;
+    props["price"] = product.price;
+    props["currency"] = "CNY";
+    props["purchase_source"] = "wechat";
+    AnalyticsService.trackEvent("paywall_purchase_clicked", props);
+    AnalyticsService.trackEvent("purchase_started", props);
     this.paying = true;
     try {
-      const order: WeChatPayOrderData | null = await SubscriptionApiService.createWechatSubscriptionOrder(product.product_id);
+      const order: WeChatPayOrderData | null =
+        await SubscriptionApiService.createWechatSubscriptionOrder(product.product_id);
       if (!order) {
-        throw new Error('下单失败');
+        throw new Error("下单失败");
       }
       const payParams: WeChatPayParams = {
         partnerId: order.partnerId,
@@ -121,132 +161,298 @@ export struct ProQuickPayDialog {
       const payResult = await WeChatOpenService.requestPayment(hostContext, payParams);
       if (payResult.cancelled) {
         this.paying = false;
-        AnalyticsService.trackEvent('purchase_cancelled', props);
+        AnalyticsService.trackEvent("purchase_cancelled", props);
         return;
       }
       if (!payResult.ok) {
-        throw new Error(payResult.message || '支付失败');
+        throw new Error(payResult.message || "支付失败");
       }
       await SubscriptionApiService.waitForEntitlement(order.out_trade_no);
       await BenefitStore.refresh();
-      props['is_entitled'] = BenefitStore.isMemberActive();
-      AnalyticsService.trackEvent('purchase_completed', props);
-      showToast('开通成功，权益已生效', this.getUIContext());
+      props["is_entitled"] = BenefitStore.isMemberActive();
+      AnalyticsService.trackEvent("purchase_completed", props);
+      showToast("开通成功，权益已生效", this.getUIContext());
       this.paying = false;
       this.dismiss();
     } catch (error) {
       this.paying = false;
-      props['error_message'] = String(error);
-      AnalyticsService.trackEvent('purchase_failed', props);
+      props["error_message"] = String(error);
+      AnalyticsService.trackEvent("purchase_failed", props);
       showErrorToast(String(error), this.getUIContext());
     }
   }
 
-  build() {
-    Column({ space: 12 }) {
+  private hasSceneLine2(): boolean {
+    return this.displayCopy().line2.length > 0;
+  }
+
+  private sceneLine2Text(): string {
+    return this.displayCopy().line2;
+  }
+
+  @Builder
+  private buildLine2(): void {
+    if (this.hasSceneLine2()) {
+      Text(this.sceneLine2Text())
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(LIGHT_TEXT)
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width("100%")
+        .margin({ top: 8 });
+    } else {
+      Flex({
+        direction: FlexDirection.Row,
+        alignItems: ItemAlign.Center,
+        justifyContent: FlexAlign.Center,
+      }) {
+        Text("现在升级 ")
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(LIGHT_TEXT)
+        Text("Pro")
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(LIGHT_TEXT)
+        Text(" 更划算")
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(LIGHT_TEXT)
+      }
+      .width("100%")
+      .margin({ top: 8 });
+    }
+  }
+
+  private loadedProductPrice(): number {
+    return this.product !== null ? this.product.price : 0;
+  }
+
+  @Builder
+  private buildPriceBlock(): void {
+    if (!this.product) {
       Row() {
-        Blank().layoutWeight(1)
-        Text('关闭')
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
+        LoadingProgress()
+          .width(28)
+          .height(28)
+          .color(LIGHT_TEXT)
+      }
+      .width("100%")
+      .justifyContent(FlexAlign.Center)
+      .margin({ top: 36 });
+    } else {
+      Row() {
+        Text(yuanText(this.loadedProductPrice()))
+          .fontSize(PRICE_FONT_SIZE)
+          .lineHeight(PRICE_FONT_SIZE)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(LIGHT_TEXT)
+          .letterSpacing(-3)
+          .baselineOffset(PRICE_GLYPH_SINK)
+        Stack({ alignContent: Alignment.BottomStart }) {
+          Row() {
+            Text("元升级")
+              .fontSize(SUFFIX_FONT_SIZE)
+              .lineHeight(SUFFIX_FONT_SIZE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(LIGHT_TEXT)
+              .baselineOffset(SUFFIX_GLYPH_SINK)
+            Image($r("app.media.upgrade"))
+              .width(ARROW_SIZE)
+              .height(ARROW_SIZE)
+              .objectFit(ImageFit.Contain)
+              .margin({ left: 2 })
+          }.alignItems(VerticalAlign.Bottom)
+          Row() {
+            Text("双月 Pro")
+              .fontSize(BADGE_FONT_SIZE)
+              .lineHeight(BADGE_FONT_SIZE)
+              .fontWeight(FontWeight.Bold)
+              .fontColor("#5C2D00")
+              .letterSpacing(0.3)
+          }
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .borderRadius(12)
+          .clip(true)
+          .linearGradient({
+            angle: 90,
+            colors: [
+              ["#FFC04A", 0],
+              ["#FF8F1A", 1],
+            ],
+          })
+          .position({
+            x: 0,
+            y: -BADGE_FLOAT_ABOVE_SUFFIX,
+          })
+        }
+        .margin({ left: 8, bottom: 8 })
+      }
+      .alignItems(VerticalAlign.Bottom)
+      .justifyContent(FlexAlign.Center)
+      .alignSelf(ItemAlign.Center)
+      .margin({ top: 36 });
+    }
+  }
+
+  @Builder
+  private buildContentSlot(): void {
+    Column() {
+      Text(this.displayCopy().line1)
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(GOLD_LINE1)
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width("100%")
+
+      this.buildLine2()
+      this.buildPriceBlock()
+      Row({ space: 12 }) {
+        Text("升级即同意《付费服务协议》")
+          .fontSize(12)
+          .fontColor(LIGHT_TEXT3)
           .onClick(() => {
-            this.dismiss();
+            pushWebView(LegalUrls.PAID_SERVICE, "付费服务协议");
+          })
+        Text("更多套餐")
+          .fontSize(12)
+          .fontColor(GOLD_ACCENT_DEEP)
+          .onClick(() => {
+            this.openFullPaywall();
           })
       }
-      .width('100%')
-
-      Text(this.lineAt(0))
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(GOLD)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-      Text(this.lineAt(1))
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .width('100%')
-        .textAlign(TextAlign.Center)
-
-      if (this.product) {
-        Text(`${yuanText(this.product.price)}元`)
-          .fontSize(40)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-        Text('双月 Pro · 微信一次性支付')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.textSecondary)
-      } else {
-        LoadingProgress().width(28).height(28)
-      }
-
-      Button(this.paying ? '处理中...' : '升级双月Pro')
-        .width('100%')
-        .height(48)
-        .enabled(!this.paying && this.product !== null)
-        .onClick(() => {
-          void this.pay();
-        })
-
-      Text('更多套餐')
-        .fontSize(14)
-        .fontColor(AppTheme.colors.primary)
-        .onClick(() => {
-          this.dismiss();
-          pushRoute(PageRoutes.Membership);
-        })
-
-      Text('升级即同意《付费服务协议》')
-        .fontSize(12)
-        .fontColor(AppTheme.colors.textMuted)
-        .onClick(() => {
-          pushWebView(LegalUrls.PAID_SERVICE, '付费服务协议');
-        })
+      .width("100%")
+      .justifyContent(FlexAlign.Start)
+      .margin({ top: 22 })
     }
-    .width(320)
-    .padding(20)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(20)
+    .width("100%")
+    .alignItems(HorizontalAlign.Center)
+    .padding({ top: 4 });
   }
-}
 
-let quickPayClaimed: boolean = false;
+  @Builder
+  private buildSheetCard(): void {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        this.buildContentSlot()
+        Row() {
+          if (this.paying) {
+            LoadingProgress().width(22).height(22).color("#FFF8EB");
+          } else {
+            Text(this.ctaLabel())
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor("#FFF8EB")
+              .letterSpacing(0.5);
+          }
+        }
+        .width("100%")
+        .height(56)
+        .margin({ top: 14 })
+        .justifyContent(FlexAlign.Center)
+        .borderRadius(28)
+        .clip(true)
+        .opacity(this.product && !this.paying ? 1 : 0.55)
+        .linearGradient({
+          angle: 135,
+          colors: [
+            ["#1F140C", 0],
+            ["#3D2A1A", 0.5],
+            ["#5C4530", 1],
+          ],
+        })
+        .shadow({
+          radius: 8,
+          color: "#2C1E1247",
+          offsetX: 0,
+          offsetY: 4,
+        })
+        .onClick(() => {
+          if (this.product && !this.paying) {
+            void this.pay();
+          }
+        })
 
-@Component
-export struct ProQuickPayHost {
-  @StorageLink(StoreKeys.ProQuickPayVisible) @Watch('onVisibleChanged') visible: boolean = false;
-  private opened: boolean = false;
-  private dialog: CustomDialogController = new CustomDialogController({
-    builder: ProQuickPayDialog({}),
-    customStyle: true,
-    autoCancel: true,
-    alignment: DialogAlignment.Center,
-    maskColor: 'rgba(0, 0, 0, 0.4)',
-    cancel: () => {
-      closeQuickPay();
-    },
-  });
-
-  private onVisibleChanged(): void {
-    if (this.visible) {
-      if (quickPayClaimed || this.opened) {
-        return;
+        if (this.showInviteAlt()) {
+          Text("邀请好友，免费领 Pro ›")
+            .fontSize(13)
+            .lineHeight(20)
+            .fontColor(LIGHT_TEXT2)
+            .textAlign(TextAlign.Center)
+            .width("100%")
+            .margin({ top: 14 })
+            .onClick(() => {
+              this.openInviteRedeem();
+            });
+        }
       }
-      quickPayClaimed = true;
-      this.opened = true;
-      this.dialog.open();
-      return;
+      .width("100%")
+      .padding({
+        left: 24,
+        right: 24,
+        top: 36,
+        bottom: 40,
+      })
+      .linearGradient({
+        angle: 180,
+        colors: [
+          [SHELL_TOP, 0],
+          [SHELL_BG, 1],
+        ],
+      })
+      .backgroundColor(SHELL_BG)
+      Button({ type: ButtonType.Normal }) {
+        SymbolGlyph($r("sys.symbol.xmark"))
+          .fontSize(20)
+          .fontColor([LIGHT_TEXT3])
+      }
+      .width(28)
+      .height(28)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .margin({ top: 12, right: 12 })
+      .onClick(() => {
+        this.dismiss();
+      })
     }
-    if (this.opened) {
-      this.opened = false;
-      quickPayClaimed = false;
-      this.dialog.close();
+    .width("100%")
+    .borderRadius({
+      topLeft: SHEET_CORNER_RADIUS,
+      topRight: SHEET_CORNER_RADIUS,
+      bottomLeft: 0,
+      bottomRight: 0,
+    })
+    .clip(true);
+  }
+
+  @Builder
+  private sheetContent(): void {
+    Column() {
+      this.buildSheetCard()
     }
+    .width("100%")
+    .padding({ left: SHEET_SIDE_INSET, right: SHEET_SIDE_INSET });
   }
 
   build() {
     Column()
       .width(0)
       .height(0)
+      .bindSheet($$this.visible, this.sheetContent(), {
+        height: SheetSize.FIT_CONTENT,
+        preferType: SheetType.BOTTOM,
+        showClose: false,
+        dragBar: false,
+        backgroundColor: Color.Transparent,
+        maskColor: "rgba(0, 0, 0, 0.5)",
+        onDisappear: () => {
+          closeQuickPay();
+          this.paying = false;
+        },
+      });
   }
 }

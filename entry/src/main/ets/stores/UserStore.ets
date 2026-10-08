@@ -19,6 +19,7 @@ import { HuaweiAccountService } from '../services/HuaweiAccountService';
 import { PlanStore } from './PlanStore';
 import { QuickTaskStore } from './QuickTaskStore';
 import { CycleGuardStore } from './CycleGuardStore';
+import { AbStore } from './AbStore';
 import { BenefitStore } from './BenefitStore';
 import { InboxStore } from './InboxStore';
 import { refreshStats } from './StatsStore';
@@ -508,6 +509,7 @@ export class UserStore {
     clearExitPlanIds(context);
     clearUserSession(context);
     BenefitStore.reset();
+    AbStore.clear(context);
     InboxStore.reset();
     QuickTaskStore.clearTasks();
     UserStore.setWxPendingInfo(null);
@@ -530,6 +532,7 @@ export class UserStore {
     UserStore.lastLoginIsNew = isNew;
     saveAccessToken(context, token);
     syncAppStorageValue(StoreKeys.UserAccessToken, token);
+    void AbStore.sync(context);
     syncAppStorageValue(StoreKeys.UserIsLoggedIn, true);
     setSignupTrialEligible(context, isNew);
     markAwaitingScheduledGuardSyncCheck(context);

@@ -11,6 +11,10 @@ import {
 import { SettingsStore } from '../stores/SettingsStore';
 import { UserStore } from '../stores/UserStore';
 import { markFirstFocusPromptDone } from './FirstFocusPromptService';
+import { checkScreenTimeAuthorized } from './ScreenTimeService';
+import { FeatureFlagKeys } from '../config/FeatureFlags';
+import { FeatureFlagStore } from '../stores/FeatureFlagStore';
+import { StoreKeys } from '../stores/StoreKeys';
 import deviceInfo from '@ohos.deviceInfo';
 
 const COMPLETED_KEY: string = 'onboarding.completed';
@@ -139,12 +143,22 @@ export async function routeAfterWelcomeOldUserLogin(
   if (userId.length === 0) {
     return false;
   }
+  const uiContext = context as common.UIAbilityContext;
+  FeatureFlagStore.hydrate(uiContext);
+  await FeatureFlagStore.sync(uiContext);
   const hasProfile = await fetchHasOnboardingProfileByUserId(context, userId);
   if (hasProfile) {
     markOnboardingCompleted(context);
     markFirstFocusPromptDone(context);
+    const needsScreenTime = !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.SKIP_OVERLAY);
+    if (needsScreenTime && !(await checkScreenTimeAuthorized())) {
+      AppStorage.setOrCreate(StoreKeys.OnboardingPermOnly, true);
+      AppStorage.setOrCreate(StoreKeys.OnboardingViaOldUser, true);
+      return false;
+    }
+    return true;
   }
-  return hasProfile;
+  return false;
 }
 
 /**
