@@ -21,6 +21,8 @@ import { QuickTaskStore } from './QuickTaskStore';
 import { CycleGuardStore } from './CycleGuardStore';
 import { AbStore } from './AbStore';
 import { BenefitStore } from './BenefitStore';
+import { SubscriptionApiService } from '../services/SubscriptionApiService';
+import { clearMembershipExpiryPrompt, maybePromptMembershipExpiry } from '../utils/MembershipExpiryUtil';
 import { InboxStore } from './InboxStore';
 import { refreshStats } from './StatsStore';
 import { AnalyticsService, LoginMethod } from '../services/AnalyticsService';
@@ -416,6 +418,12 @@ export class UserStore {
     } catch (error) {
       console.warn(`BenefitStore sync skipped: ${String(error)}`);
     }
+    try {
+      const subscription = await SubscriptionApiService.fetchSubscription();
+      maybePromptMembershipExpiry(context, subscription);
+    } catch (error) {
+      console.warn(`Membership expiry prompt skipped: ${String(error)}`);
+    }
   }
 
   /** 用接口返回或请求字段立刻合并本地 UserInfo（对齐 RN，避免等 refresh 才刷新 UI） */
@@ -508,6 +516,7 @@ export class UserStore {
     clearScheduledGuardSyncFlags(context);
     clearExitPlanIds(context);
     clearUserSession(context);
+    clearMembershipExpiryPrompt(context);
     BenefitStore.reset();
     AbStore.clear(context);
     InboxStore.reset();

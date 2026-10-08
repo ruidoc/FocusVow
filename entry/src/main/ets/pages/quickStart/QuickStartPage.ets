@@ -41,7 +41,9 @@ import {
   upsellIfProSlotQuota,
   ensureDelayStartAllowed,
   normalizeDelayMinutes,
+  promptSlotUpsellIfDisabled,
 } from "../../services/ProQuotaService";
+import { QuickTaskApiService } from "../../services/QuickTaskApiService";
 import {
   FIRST_FOCUS_MINUTES,
   FIRST_FOCUS_TITLE,
@@ -322,6 +324,10 @@ struct QuickStartPage {
             showErrorToast(errMsg, this.getUIContext());
           }
           return;
+        }
+        const created = QuickTaskApiService.parseTask(response);
+        if (created) {
+          promptSlotUpsellIfDisabled(created.enabled, "quick");
         }
         showToast("已保存到快捷任务", this.getUIContext());
         openQuickTaskTabOnce();

@@ -5,6 +5,7 @@ import {
   readStoredString,
   writeStoredString,
 } from './PreferencesService';
+import { StoreKeys } from '../stores/StoreKeys';
 
 const CACHE_KEY: string = 'app_update_policy_v1';
 const PROMPT_DAY_KEY: string = 'app_update_prompt_day';
@@ -109,7 +110,7 @@ function markUpdateDialogShown(context: common.Context, latest: string): void {
 
 async function fetchHarmonyPair(context: common.Context): Promise<AppUpdateVersionPair> {
   try {
-    const response = await HttpService.get('/config/static', false);
+    const response = await HttpService.get('/config/static', false, false, context);
     if (response.statusCode === 200 && response.data) {
       const data = response.data as Record<string, Object>;
       const raw = data['app_update'] as Record<string, Object> | undefined;
@@ -151,6 +152,12 @@ export async function isHarmonyUpdateAvailable(context: common.Context): Promise
   const pair = await fetchHarmonyPair(context);
   const current = await getAppVersion();
   return resolveUpdateLevel(current, pair) !== 'none';
+}
+
+/** 对齐 RN useFocusEffect：拉取策略并写入 AppStorage，供首页徽章订阅 */
+export async function syncHarmonyUpdateBadge(context: common.Context): Promise<void> {
+  const available = await isHarmonyUpdateAvailable(context);
+  AppStorage.setOrCreate(StoreKeys.HarmonyUpdateAvailable, available);
 }
 
 export async function openHarmonyUpdate(context: common.UIAbilityContext): Promise<void> {

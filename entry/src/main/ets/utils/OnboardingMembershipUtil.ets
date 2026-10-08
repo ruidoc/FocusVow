@@ -4,9 +4,11 @@ import { StoreKeys } from '../stores/StoreKeys';
 import { readStoredString, removeStoredKey, writeStoredString } from '../services/PreferencesService';
 import { getFocusCount, hasCompletedOnboarding, incrementFocusCount } from './UserActivationUtil';
 import { isSignupTrialEligible } from './SignupTrialUtil';
-import { FIRST_FOCUS_TITLE, markFirstFocusPromptDone } from '../services/FirstFocusPromptService';
+import { FIRST_FOCUS_MINUTES, FIRST_FOCUS_TITLE, markFirstFocusPromptDone } from '../services/FirstFocusPromptService';
+import { pushQuickStart, returnToMainTab } from '../router/PageRoutes';
 
 const SKIPPED_MEMBERSHIP_SIGNUP_KEY: string = 'onboarding_skipped_membership_signup';
+const POST_PAYWALL_ACTION_KEY: string = 'onboarding_post_paywall_action';
 const MEMBERSHIP_CLAIM_DEADLINE_KEY: string = 'onboarding_membership_claim_deadline_ms';
 const MEMBERSHIP_URGENCY_DEADLINE_KEY: string = 'onboarding_membership_urgency_deadline_ms';
 const PENDING_ACTIVATION_MODAL_KEY: string = 'onboarding_activation_modal_pending';
@@ -68,6 +70,35 @@ export function isMembershipReclaimEligible(context: common.Context): boolean {
     return false;
   }
   return isWithinMembershipClaimWindow(context);
+}
+
+export type OnboardingPostPaywallAction = 'solo' | 'activation' | 'home';
+
+export function setPendingOnboardingPostPaywall(
+  context: common.Context,
+  action: OnboardingPostPaywallAction,
+): void {
+  writeStoredString(context, POST_PAYWALL_ACTION_KEY, action);
+}
+
+/** Paywall 关闭后执行；已消费则返回 false */
+export function completeOnboardingAfterPaywall(context: common.Context): boolean {
+  const action = readStoredString(context, POST_PAYWALL_ACTION_KEY, '');
+  if (action.length === 0) {
+    return false;
+  }
+  removeStoredKey(context, POST_PAYWALL_ACTION_KEY);
+  returnToMainTab('focus');
+  if (action === 'solo') {
+    setTimeout(() => {
+      pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES, true);
+    }, 80);
+    return true;
+  }
+  if (action === 'activation') {
+    setPendingOnboardingActivationModal(context);
+  }
+  return true;
 }
 
 export function setPendingOnboardingActivationModal(context: common.Context): void {

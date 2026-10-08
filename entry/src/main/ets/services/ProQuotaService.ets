@@ -92,6 +92,18 @@ export function openSlotUpsell(kind: string): void {
   openVipPurchase(source, { proUnlock: true });
 }
 
+/** 与 RN isPlanSlotEnabled：undefined 视为已启用 */
+export function isPlanSlotEnabled(enabled?: boolean): boolean {
+  return enabled !== false;
+}
+
+export function promptSlotUpsellIfDisabled(enabled: boolean | undefined, kind: string): void {
+  if (isPlanSlotEnabled(enabled)) {
+    return;
+  }
+  openSlotUpsell(kind);
+}
+
 function isFreeAllowedDelayMinutes(delayMinutes: number): boolean {
   if (FREE_DELAYED_START_MINUTES_LIST.indexOf(delayMinutes) >= 0) {
     return true;

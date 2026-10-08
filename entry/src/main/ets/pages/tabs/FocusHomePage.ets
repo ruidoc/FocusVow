@@ -6,6 +6,7 @@ import { OnboardingMembershipOverlay } from "../../components/home/OnboardingMem
 import { HomeTodayCard } from "../../components/home/HomeTodayCard";
 import { HomeActionCard } from "../../components/home/HomeActionCard";
 import { HomeDuoWaitBanner } from "../../components/home/HomeDuoWaitBanner";
+import { HomeScheduledSyncBanner } from "../../components/home/HomeScheduledSyncBanner";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
@@ -104,6 +105,7 @@ import { InboxStore } from "../../stores/InboxStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { FLOATING_TAB_EXTRA_BOTTOM_VP } from "./MainTabUtil";
+import { syncHarmonyUpdateBadge } from "../../services/AppUpdateService";
 
 bootstrapStores();
 
@@ -193,6 +195,9 @@ export struct FocusHomePage {
       void this.loadHomeTodayStats(hostContext);
     } else if (!this.isActiveLocked()) {
       onCertificateGuideDismissed(this.getUIContext());
+    }
+    if (!this.isActiveLocked()) {
+      void syncHarmonyUpdateBadge(hostContext);
     }
   }
 
@@ -1323,6 +1328,7 @@ export struct FocusHomePage {
         failCount: this.homeStatis.fail_count,
         successRate: this.homeStatis.success_rate,
       })
+      HomeScheduledSyncBanner()
       HomeDuoWaitBanner()
 
       Column({ space: 12 }) {

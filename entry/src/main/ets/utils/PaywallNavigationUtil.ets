@@ -10,6 +10,8 @@ export const PRO_UNLOCK_DEFAULT_SUBTITLE: string =
 
 export interface OpenVipPurchaseOptions {
   proUnlock?: boolean;
+  /** onboarding 权限完成后展示，关闭后进首页 */
+  afterOnboarding?: boolean;
   /** 快付首行，同 RN subtitle */
   reason?: string;
   /** 快付首行备选，同 RN title */
@@ -46,6 +48,9 @@ export function openVipPurchase(entrySource: string, options?: OpenVipPurchaseOp
   const params: Record<string, Object> = {
     'entry_source': entrySource,
   };
+  if (options?.afterOnboarding === true) {
+    params['after_onboarding'] = '1';
+  }
   const reason = options?.reason?.trim() ?? '';
   if (reason.length > 0) {
     params['pro_unlock_reason'] = reason;

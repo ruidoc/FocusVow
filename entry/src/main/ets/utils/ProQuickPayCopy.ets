@@ -25,7 +25,7 @@ export function resolveQuickPaySceneLines(entrySource: string): QuickPayDisplayC
       };
     case 'delayed_start_limit':
       return {
-        line1: '免费延时今日已用完',
+        line1: '自定义延时为 Pro 专属',
         line2: '升级享无限延时专注',
       };
     case 'membership_expiring':

@@ -15,6 +15,7 @@ import { UserStore } from "../../stores/UserStore";
 import { backRoute, PageRoutes, pushRoute, pushWebView } from "../../router/PageRoutes";
 import { confirmPaidServiceAgreement } from "../../utils/PrivacyConsentUtil";
 import { PRO_UNLOCK_DEFAULT_SUBTITLE, PRO_UNLOCK_TITLE } from "../../utils/PaywallNavigationUtil";
+import { completeOnboardingAfterPaywall } from "../../utils/OnboardingMembershipUtil";
 
 bootstrapStores();
 
@@ -140,6 +141,7 @@ struct PaywallPage {
   private proUnlock: boolean = false;
   private membershipCenter: boolean = false;
   private proUnlockReason: string = "";
+  private afterOnboarding: boolean = false;
   private openedAtMs: number = 0;
   private paywallClosedTracked: boolean = false;
 
@@ -167,6 +169,7 @@ struct PaywallPage {
     this.entrySource = resolveEntrySource(routeParams);
     this.proUnlock = resolveProUnlock(routeParams);
     this.proUnlockReason = resolveProUnlockReason(routeParams);
+    this.afterOnboarding = String(routeParams?.["after_onboarding"] ?? "") === "1";
     const surfaceMembership = String(routeParams?.["surface"] ?? "") === "membership";
     this.membershipCenter = surfaceMembership;
     if (surfaceMembership) {
@@ -188,6 +191,20 @@ struct PaywallPage {
 
   aboutToDisappear(): void {
     this.trackPaywallClosed("navigate_away");
+    if (this.afterOnboarding) {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      completeOnboardingAfterPaywall(hostContext);
+    }
+  }
+
+  private exitPaywall(closeAction: string): void {
+    this.trackPaywallClosed(closeAction);
+    if (this.afterOnboarding) {
+      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      completeOnboardingAfterPaywall(hostContext);
+      return;
+    }
+    backRoute();
   }
 
   private buildPaywallContextProps(product?: VipProduct | null): Record<string, Object> {
@@ -342,14 +359,14 @@ struct PaywallPage {
         productProps["is_entitled"] = false;
         AnalyticsService.trackEvent("purchase_completed", productProps);
         showToast("支付已到账，会员权益同步稍慢，请稍后刷新查看", this.getUIContext(), 2500);
-        backRoute();
+        this.exitPaywall("purchase_success");
         return;
       }
       this.paymentStatus = "success";
       productProps["is_entitled"] = true;
       AnalyticsService.trackEvent("purchase_completed", productProps);
       showToast("开通成功，权益已生效", this.getUIContext());
-      backRoute();
+      this.exitPaywall("purchase_success");
     } catch (error) {
       this.paymentStatus = "failed";
       productProps["error_code"] = "PURCHASE_FAILED";
@@ -653,8 +670,7 @@ struct PaywallPage {
         horizontalPadding: 20,
         bottomSpacerHeight: 0,
         onBack: () => {
-          this.trackPaywallClosed("close_button");
-          backRoute();
+          this.exitPaywall("close_button");
         },
         useFloatingTabInset: false,
         content: (): void => {

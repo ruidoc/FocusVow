@@ -101,4 +101,5 @@ export class StoreKeys {
   static readonly PendingOnboardingActivationModal: string = 'onboarding.pendingActivationModal';
   static readonly OnboardingActivationModalVisible: string = 'onboarding.activationModalVisible';
   static readonly ThemeMode: string = 'app.themeMode';
+  static readonly HarmonyUpdateAvailable: string = 'app.harmonyUpdateAvailable';
 }

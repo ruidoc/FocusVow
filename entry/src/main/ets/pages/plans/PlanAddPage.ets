@@ -32,7 +32,7 @@ import { SettingsStore } from '../../stores/SettingsStore';
 import { UserStore } from '../../stores/UserStore';
 import { ensureProMembership } from '../../utils/PaywallNavigationUtil';
 import { ensureTaskPermission } from '../../utils/TaskPermissionUtil';
-import { upsellIfProSlotQuota } from '../../services/ProQuotaService';
+import { promptSlotUpsellIfDisabled, upsellIfProSlotQuota } from '../../services/ProQuotaService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -404,6 +404,7 @@ struct PlanAddPage {
       this.isSaving = false;
       return;
     }
+    promptSlotUpsellIfDisabled(session.enabled, 'scheduled');
 
     const guardResult = await syncGuardForSession(hostContext, session, this.selectedTokens);
     if (!guardResult.ok) {

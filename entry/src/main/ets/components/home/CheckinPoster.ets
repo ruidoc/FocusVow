@@ -313,12 +313,12 @@ export struct CheckinPoster {
       Column() {
         Text('专注契约APP')
           .fontSize(13)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .fontColor(this.card.dark ? '#FFFFFF' : '#0F172A')
         Text('与搭子立约，互督学习自律')
           .fontSize(11)
-          .fontColor(this.card.dark ? 'rgba(255,255,255,0.7)' : '#64748B')
-          .margin({ top: 1 })
+          .fontColor(this.card.dark ? 'rgba(255,255,255,0.7)' : '#475569')
+          .margin({ top: 3 })
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)

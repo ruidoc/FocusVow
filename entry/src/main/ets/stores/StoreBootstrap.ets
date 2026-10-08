@@ -104,5 +104,6 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, false);
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());
   AppStorage.setOrCreate(StoreKeys.ThemeMode, 'light');
+  AppStorage.setOrCreate(StoreKeys.HarmonyUpdateAvailable, false);
   bootstrapped = true;
 }

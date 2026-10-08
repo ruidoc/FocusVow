@@ -29,11 +29,12 @@ import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import {
   clearMembershipSignupSkipped,
+  completeOnboardingAfterPaywall,
   hasSkippedMembershipSignup,
-  isOnboardingMembershipBenefitActive,
   markMembershipSignupSkipped,
-  setPendingOnboardingActivationModal,
+  setPendingOnboardingPostPaywall,
 } from '../../utils/OnboardingMembershipUtil';
+import { isMemberActive, openVipPurchase } from '../../utils/PaywallNavigationUtil';
 import { SIGNUP_TRIAL_EXISTING_USER_TOAST } from '../../utils/SignupTrialUtil';
 import {
   clearPendingReferralCode,
@@ -740,17 +741,18 @@ struct OnboardingPage {
       returnToMainTab('focus');
       return;
     }
-    if (hasSkippedMembershipSignup(hostContext)) {
-      returnToMainTab('focus');
-      setTimeout(() => {
-        pushQuickStart(FIRST_FOCUS_TITLE, FIRST_FOCUS_MINUTES, true);
-      }, 80);
+    const loggedIn = UserStore.isLoggedIn();
+    const postPaywallAction = hasSkippedMembershipSignup(hostContext)
+      ? 'solo'
+      : (loggedIn ? 'activation' : 'home');
+    const shouldShowPaywall =
+      loggedIn && !hasSkippedMembershipSignup(hostContext) && !isMemberActive();
+    setPendingOnboardingPostPaywall(hostContext, postPaywallAction);
+    if (!shouldShowPaywall) {
+      completeOnboardingAfterPaywall(hostContext);
       return;
     }
-    if (isOnboardingMembershipBenefitActive(hostContext)) {
-      setPendingOnboardingActivationModal(hostContext);
-    }
-    returnToMainTab('focus');
+    openVipPurchase('onboarding_complete', { afterOnboarding: true });
   }
 
   private isPlanStep(): boolean {

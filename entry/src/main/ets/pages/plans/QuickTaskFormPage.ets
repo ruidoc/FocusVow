@@ -21,7 +21,8 @@ import { QuickTaskStore } from "../../stores/QuickTaskStore";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { UserStore } from "../../stores/UserStore";
 import { StoreKeys } from "../../stores/StoreKeys";
-import { upsellIfProSlotQuota } from "../../services/ProQuotaService";
+import { promptSlotUpsellIfDisabled, upsellIfProSlotQuota } from "../../services/ProQuotaService";
+import { QuickTaskApiService } from "../../services/QuickTaskApiService";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { TimerMode } from "../../utils/TimerMode";
 
@@ -213,6 +214,12 @@ struct QuickTaskFormPage {
         ? await QuickTaskStore.updateTask(this.editingId, payload)
         : await QuickTaskStore.createTask(payload);
       if (response.statusCode === 200) {
+        if (!this.isEditing()) {
+          const created = QuickTaskApiService.parseTask(response);
+          if (created) {
+            promptSlotUpsellIfDisabled(created.enabled, "quick");
+          }
+        }
         showToast(this.isEditing() ? "已保存" : "快捷任务已创建", this.getUIContext());
         backRoute();
         return;

@@ -7,7 +7,7 @@ import {
   getPlanSecondsUntilStart,
 } from "../../models/PlanModel";
 import { PageRoutes, openScheduledTaskTabOnce, pushLogin, pushRoute } from "../../router/PageRoutes";
-import { isHarmonyUpdateAvailable, openHarmonyUpdate } from "../../services/AppUpdateService";
+import { openHarmonyUpdate, syncHarmonyUpdateBadge } from "../../services/AppUpdateService";
 import { AnalyticsService } from "../../services/AnalyticsService";
 import { CheckinPickerDialog } from "./CheckinPickerDialog";
 import { homeTodayMetricsBg } from "../../constants/HomeCardStyle";
@@ -62,7 +62,7 @@ export struct HomeTodayCard {
   @State nextPlanName: string = "";
   @State nextPlanSecondsLeft: number = 0;
   @State showNextPlan: boolean = false;
-  @State updateAvailable: boolean = false;
+  @StorageLink(StoreKeys.HarmonyUpdateAvailable) updateAvailable: boolean = false;
   private timerId: number = -1;
   private cardTick: number = 0;
   private checkinDialog: CustomDialogController = new CustomDialogController({
@@ -85,9 +85,7 @@ export struct HomeTodayCard {
 
   private refreshAppUpdate(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    void isHarmonyUpdateAvailable(hostContext).then((available: boolean) => {
-      this.updateAvailable = available;
-    });
+    void syncHarmonyUpdateBadge(hostContext);
   }
 
   private trackHomeEntry(entryKey: string): void {
