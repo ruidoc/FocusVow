@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { CertificatePreviewPeekCarousel } from '../../components/certificate/CertificatePreviewPeekCarousel';
+import { GallerySaveButton } from '../../components/common/GallerySaveButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import {
@@ -170,23 +171,11 @@ struct CertificatePreviewPage {
   @Builder
   private buildBottomActions(): void {
     Row({ space: 12 }) {
-      Row() {
-        if (this.busy === 'save') {
-          LoadingProgress().width(22).height(22).color(AppTheme.colors.textPrimary)
-        } else {
-          Text('保存到相册')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.colors.textPrimary)
-        }
-      }
-      .layoutWeight(1)
-      .height(48)
-      .justifyContent(FlexAlign.Center)
-      .borderRadius(24)
-      .border({ width: 1, color: AppTheme.colors.text3 })
-      .onClick(() => {
-        void this.handleSave();
+      GallerySaveButton({
+        saving: this.busy === 'save',
+        onSave: () => {
+          void this.handleSave();
+        },
       })
 
       Row() {

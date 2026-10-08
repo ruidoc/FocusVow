@@ -2,6 +2,7 @@ import { common } from "@kit.AbilityKit";
 import { BusinessError } from "@kit.BasicServicesKit";
 import { showErrorToast, showToast } from "../../common/Toast";
 import { CheckinPeekCarousel } from "../../components/checkin/CheckinPeekCarousel";
+import { GallerySaveButton } from "../../components/common/GallerySaveButton";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { AppTheme } from "../../constants/Theme";
 import { createEmptyUserInfo, UserInfo } from "../../models/UserModel";
@@ -358,23 +359,11 @@ struct CheckinPage {
 
       if (this.phase === "done") {
         Row({ space: 12 }) {
-          Row() {
-            if (this.busy === "save") {
-              LoadingProgress().width(22).height(22).color(AppTheme.colors.textPrimary);
-            } else {
-              Text("保存图片")
-                .fontSize(15)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(AppTheme.colors.textPrimary);
-            }
-          }
-          .layoutWeight(1)
-          .height(48)
-          .justifyContent(FlexAlign.Center)
-          .borderRadius(24)
-          .border({ width: 1, color: AppTheme.colors.text3 })
-          .onClick(() => {
-            void this.savePoster();
+          GallerySaveButton({
+            saving: this.busy === "save",
+            onSave: () => {
+              void this.savePoster();
+            },
           })
           Row() {
             if (this.busy === "share") {
@@ -393,7 +382,7 @@ struct CheckinPage {
           })
         }
         .width("100%")
-        .padding({ left: 20, right: 20, bottom: 12 });
+        .padding({ left: 20, right: 20, bottom: 28 });
       }
     }
     .width("100%")

@@ -30,16 +30,15 @@ export function captureComponentSnapshot(
   });
 }
 
-export async function saveCertificateSnapshot(
-  uiContext: UIContext,
+/** 须在用户点击 SaveButton 授权成功后 1 分钟内调用 createAsset */
+export async function savePixelMapToGallery(
   context: common.UIAbilityContext,
-  componentId: string = CERTIFICATE_SNAPSHOT_ID
+  pixelMap: image.PixelMap,
 ): Promise<void> {
-  const pixelMap = await captureComponentSnapshot(uiContext, componentId);
   const packer = image.createImagePacker();
   const packOpts: image.PackingOption = {
     format: 'image/png',
-    quality: 100
+    quality: 100,
   };
   const buffer = await packer.packToData(pixelMap, packOpts);
   const helper = photoAccessHelper.getPhotoAccessHelper(context);
@@ -50,6 +49,18 @@ export async function saveCertificateSnapshot(
   } finally {
     await fileIo.close(file.fd);
   }
+}
+
+export async function saveCertificateSnapshot(
+  uiContext: UIContext,
+  context: common.UIAbilityContext,
+  componentId: string = CERTIFICATE_SNAPSHOT_ID
+): Promise<void> {
+  const pixelMap = await captureComponentSnapshot(uiContext, componentId, {
+    scale: 1,
+    waitUntilRenderFinished: true,
+  });
+  await savePixelMapToGallery(context, pixelMap);
 }
 
 export function formatSaveError(error: BusinessError): string {
