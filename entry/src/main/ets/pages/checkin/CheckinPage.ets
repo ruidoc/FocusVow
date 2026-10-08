@@ -309,12 +309,6 @@ struct CheckinPage {
                   ["#A78BFA", 1.0],
                 ],
           })
-          .shadow({
-            radius: this.canFocus() ? 18 : 0,
-            color: this.canFocus() ? "#7A5AF859" : "#00000000",
-            offsetX: 0,
-            offsetY: this.canFocus() ? 10 : 0,
-          })
           .onClick(() => {
             void this.submitCheckin();
           })
@@ -352,8 +346,7 @@ struct CheckinPage {
               username: this.displayName(),
               avatar: this.userInfo.avatar,
               activeIndex: $index,
-            })
-              .width("100%");
+            }).width("100%");
           }
         }
         .width("100%")

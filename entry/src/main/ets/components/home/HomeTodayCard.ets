@@ -83,6 +83,10 @@ export struct HomeTodayCard {
     this.refreshAppUpdate();
   }
 
+  private todayFocusMins(): number {
+    return Math.max(0, Math.floor(this.actualMins));
+  }
+
   private refreshAppUpdate(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     void isHarmonyUpdateAvailable(hostContext).then((available: boolean) => {
@@ -205,6 +209,19 @@ export struct HomeTodayCard {
     return this.themeMode === "dark" ? "#5C4AB8" : "#8B73ED";
   }
 
+  /** 对齐 RN：每个数字左右各 4；包一层避免 Flex 基线吃掉间距 */
+  @Builder
+  private buildFocusNumber(value: string): void {
+    Row() {
+      Text(value)
+        .fontSize(34)
+        .fontWeight(FontWeight.Medium)
+        .fontColor("#FFFFFF")
+        .padding(0)
+    }
+    .padding({ left: 4, right: 4 })
+  }
+
   @Builder
   private buildMetricsGlass(): void {
     HomeGlassSurface({
@@ -318,15 +335,26 @@ export struct HomeTodayCard {
               .fontWeight(FontWeight.Medium)
               .fontColor("rgba(255,255,255,0.96)")
               .margin({ right: 4 })
-            Text(`${Math.max(0, Math.floor(this.actualMins))}`)
-              .fontSize(34)
-              .fontWeight(FontWeight.Medium)
-              .fontColor("#FFFFFF")
-              .margin({ left: 4, right: 4 })
-            Text("分钟")
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor("rgba(255,255,255,0.96)")
+            if (this.todayFocusMins() < 60) {
+              this.buildFocusNumber(`${this.todayFocusMins()}`)
+              Text("分钟")
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor("rgba(255,255,255,0.96)")
+            } else {
+              this.buildFocusNumber(`${Math.floor(this.todayFocusMins() / 60)}`)
+              Text("小时")
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor("rgba(255,255,255,0.96)")
+              if (this.todayFocusMins() % 60 > 0) {
+                this.buildFocusNumber(`${this.todayFocusMins() % 60}`)
+                Text("分钟")
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor("rgba(255,255,255,0.96)")
+              }
+            }
           }
           .width("100%")
           .margin({ top: 12 })

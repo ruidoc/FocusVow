@@ -126,11 +126,9 @@ export struct ProfilePage {
 
   private getMemberDesc(): string {
     if (this.isMembershipActive()) {
-      return "邀请搭子加入，再领30天会员！";
+      return "升级年包，再送2个月会员";
     }
-    return this.isPromoVipEnabled()
-      ? "开通会员，解锁全部高级专注能力"
-      : "兑换会员，解锁全部高级专注能力";
+    return "开通后解锁全部高级专注能力";
   }
 
   @Builder
@@ -247,7 +245,20 @@ export struct ProfilePage {
                 this.openMembershipPage();
               });
           } else {
-            SymbolGlyph($r("sys.symbol.chevron_right")).fontSize(16).fontColor(["#C4A574"]);
+            Button("升级")
+              .height(32)
+              .padding({ left: 14, right: 14 })
+              .type(ButtonType.Normal)
+              .buttonStyle(ButtonStyleMode.NORMAL)
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor("#461702")
+              .backgroundColor("#D4A44A")
+              .borderRadius(16)
+              .clip(true)
+              .onClick(() => {
+                this.openMembershipPage();
+              });
           }
         }
         .width("100%")
@@ -322,7 +333,7 @@ export struct ProfilePage {
         this.buildMembershipCard();
       }
       Column({ space: 0 }) {
-        if (this.isLoggedIn && !this.isMembershipActive()) {
+        if (this.isLoggedIn) {
           this.buildMenuRow(
             "邀请得会员",
             $r("sys.symbol.person_2"),

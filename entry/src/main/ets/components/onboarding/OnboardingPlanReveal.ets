@@ -1,8 +1,65 @@
 import { AppTheme } from '../../constants/Theme';
+import { StoreKeys } from '../../stores/StoreKeys';
 import { getPlanTips, PlanTipContent } from '../../utils/OnboardingPlanTips';
 
 const GENERATING_DURATION_MS: number = 5000;
 const GENERATING_HOLD_MS: number = 500;
+
+@Component
+struct PlanTipCard {
+  @Prop title: string = '';
+  @Prop body: string = '';
+  @Prop tipId: string = '';
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
+
+  private tipSymbol(): Resource {
+    if (this.tipId === 'duo') {
+      return $r('sys.symbol.person_badge_plus');
+    }
+    if (this.tipId === 'schedule') {
+      return $r('sys.symbol.alarm');
+    }
+    return $r('sys.symbol.play');
+  }
+
+  private tipColor(): string {
+    if (this.tipId === 'duo') {
+      return AppTheme.colors.accentBlue;
+    }
+    if (this.tipId === 'schedule') {
+      return AppTheme.colors.primary;
+    }
+    return AppTheme.colors.fuchsia;
+  }
+
+  build() {
+    Column({ space: 0 }) {
+      SymbolGlyph(this.tipSymbol())
+        .fontSize(40)
+        .fontColor([this.tipColor()])
+        .margin({ bottom: 16 })
+      Text(this.title)
+        .fontSize(22)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.colors.textPrimary)
+        .textAlign(TextAlign.Center)
+        .lineHeight(30)
+        .width('100%')
+        .margin({ bottom: 10 })
+      Text(this.body)
+        .fontSize(16)
+        .fontColor(AppTheme.colors.textSecondary)
+        .lineHeight(24)
+        .textAlign(TextAlign.Center)
+        .width('100%')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+    .padding({ left: 24, right: 24, top: 24, bottom: 24 })
+    .backgroundColor(this.themeMode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)')
+    .borderRadius(24)
+  }
+}
 
 @Component
 export struct OnboardingPlanReveal {
@@ -13,12 +70,18 @@ export struct OnboardingPlanReveal {
   @State private generating: boolean = true;
   @State private generateProgress: number = 0;
   @State private tipIndex: number = 0;
-  private tips: PlanTipContent[] = [];
+  @State private tipTitle: string = '';
+  @State private tipBody: string = '';
+  @State private tipId: string = '';
+  @State private tipSlot: number = 0;
+  @State private tips: PlanTipContent[] = [];
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   private generateTimerId: number = -1;
   private generateStartedAt: number = 0;
 
   aboutToAppear(): void {
     this.tips = getPlanTips(this.identity, this.goal);
+    this.applyTip(0);
     this.generating = true;
     this.generateProgress = 0;
     this.generateStartedAt = Date.now();
@@ -51,15 +114,20 @@ export struct OnboardingPlanReveal {
     }
   }
 
-  private currentTip(): PlanTipContent | null {
-    if (this.tipIndex < 0 || this.tipIndex >= this.tips.length) {
-      return null;
+  private applyTip(index: number): void {
+    if (index < 0 || index >= this.tips.length) {
+      return;
     }
-    return this.tips[this.tipIndex];
+    const tip = this.tips[index];
+    this.tipIndex = index;
+    this.tipId = tip.id;
+    this.tipTitle = tip.title;
+    this.tipBody = tip.body;
+    this.tipSlot = this.tipSlot + 1;
   }
 
   private isLastTip(): boolean {
-    return this.tipIndex >= this.tips.length - 1;
+    return this.tips.length === 0 || this.tipIndex >= this.tips.length - 1;
   }
 
   private onPrimaryPress(): void {
@@ -67,7 +135,7 @@ export struct OnboardingPlanReveal {
       this.onComplete();
       return;
     }
-    this.tipIndex = this.tipIndex + 1;
+    this.applyTip(this.tipIndex + 1);
   }
 
   @Builder
@@ -100,29 +168,6 @@ export struct OnboardingPlanReveal {
   }
 
   @Builder
-  private buildTipCard(tip: PlanTipContent): void {
-    Column({ space: 0 }) {
-      Text(tip.title)
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.colors.textPrimary)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .margin({ bottom: 10 })
-      Text(tip.body)
-        .fontSize(16)
-        .fontColor(AppTheme.colors.textSecondary)
-        .lineHeight(24)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-    }
-    .width('100%')
-    .padding({ left: 24, right: 24, top: 24, bottom: 24 })
-    .backgroundColor('rgba(0,0,0,0.04)')
-    .borderRadius(24)
-  }
-
-  @Builder
   private buildReady(): void {
     Column() {
       Text('专属方案已生成')
@@ -139,28 +184,61 @@ export struct OnboardingPlanReveal {
         .width('100%')
         .margin({ top: 8, bottom: 32 })
 
-      if (this.currentTip() !== null) {
-        this.buildTipCard(this.currentTip() as PlanTipContent)
+      if (this.tipSlot % 2 === 0) {
+        PlanTipCard({
+          title: this.tipTitle,
+          body: this.tipBody,
+          tipId: this.tipId,
+        })
+      } else {
+        PlanTipCard({
+          title: this.tipTitle,
+          body: this.tipBody,
+          tipId: this.tipId,
+        })
       }
 
-      Button(this.isLastTip() ? '记住了' : '下一步')
-        .width('100%')
-        .height(52)
-        .type(ButtonType.Normal)
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .backgroundColor(AppTheme.colors.primary)
-        .borderRadius(AppTheme.radius.button)
-        .margin({ top: 32 })
-        .onClick(() => {
-          this.onPrimaryPress();
-        })
+      Row({ space: 8 }) {
+        Row()
+          .width(this.tipIndex === 0 ? 18 : 6)
+          .height(6)
+          .borderRadius(3)
+          .backgroundColor(this.tipIndex === 0 ? AppTheme.colors.primary : (this.themeMode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'))
+        Row()
+          .width(this.tipIndex === 1 ? 18 : 6)
+          .height(6)
+          .borderRadius(3)
+          .backgroundColor(this.tipIndex === 1 ? AppTheme.colors.primary : (this.themeMode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'))
+        Row()
+          .width(this.tipIndex === 2 ? 18 : 6)
+          .height(6)
+          .borderRadius(3)
+          .backgroundColor(this.tipIndex === 2 ? AppTheme.colors.primary : (this.themeMode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'))
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .margin({ top: 20 })
+
+      Button() {
+        Text(this.isLastTip() ? '下一步' : '记住了')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+      }
+      .width('100%')
+      .height(48)
+      .type(ButtonType.Normal)
+      .buttonStyle(ButtonStyleMode.NORMAL)
+      .backgroundColor(AppTheme.colors.primary)
+      .borderRadius(AppTheme.radius.button)
+      .margin({ top: 20 })
+      .onClick(() => {
+        this.onPrimaryPress();
+      })
     }
     .width('100%')
     .layoutWeight(1)
-    .padding({ left: 32, right: 32, top: 8 })
+    .padding({ left: 32, right: 32, top: 24 })
     .justifyContent(FlexAlign.Start)
   }
 

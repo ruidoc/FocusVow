@@ -194,7 +194,6 @@ export struct TaskDurationChart {
     .padding(20)
     .backgroundColor(AppTheme.colors.surface)
     .borderRadius(AppTheme.radius.lg)
-    .border({ width: 1, color: AppTheme.colors.border })
     .alignItems(HorizontalAlign.Start)
   }
 }

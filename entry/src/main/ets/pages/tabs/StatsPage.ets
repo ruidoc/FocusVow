@@ -401,18 +401,18 @@ export struct StatsPage {
     Column({ space: 18 }) {
       Row({ space: 12 }) {
         Column() {
-          this.buildLoadingCard(118, AppTheme.colors.surface, AppTheme.colors.border)
+          this.buildLoadingCard(118, AppTheme.colors.surface, '#00000000')
         }.layoutWeight(1)
         Column() {
-          this.buildLoadingCard(118, AppTheme.colors.surface, AppTheme.colors.border)
+          this.buildLoadingCard(118, AppTheme.colors.surface, '#00000000')
         }.layoutWeight(1)
         Column() {
-          this.buildLoadingCard(118, AppTheme.colors.surface, AppTheme.colors.border)
+          this.buildLoadingCard(118, AppTheme.colors.surface, '#00000000')
         }.layoutWeight(1)
       }.width("100%")
 
-      this.buildLoadingCard(160, AppTheme.colors.surface, AppTheme.colors.border)
-      this.buildLoadingCard(180, AppTheme.colors.surface, AppTheme.colors.border)
+      this.buildLoadingCard(160, AppTheme.colors.surface, '#00000000')
+      this.buildLoadingCard(180, AppTheme.colors.surface, '#00000000')
       this.buildLoadingCard(132, getStatsRecordSectionBgColor(), HONOR_SECTION_BORDER_COLOR)
       this.buildLoadingCard(132, getStatsRecordSectionBgColor(), getShameSectionBorderColor())
     }.width("100%");
@@ -443,7 +443,6 @@ export struct StatsPage {
     .padding(14)
     .backgroundColor(AppTheme.colors.surface)
     .borderRadius(AppTheme.radius.lg)
-    .border({ width: 1, color: AppTheme.colors.border })
     .alignItems(HorizontalAlign.Start)
     .width("100%");
   }
@@ -497,7 +496,7 @@ export struct StatsPage {
         }
       }
       .type(ButtonType.Normal)
-      .backgroundColor(Color.Transparent)
+      .backgroundColor('#00000000')
       .padding(0)
       .onClick(() => {
         onPress();

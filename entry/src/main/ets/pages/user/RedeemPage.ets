@@ -9,7 +9,6 @@ import { PageRoutes, backRoute, pushRoute } from "../../router/PageRoutes";
 import { AnalyticsService } from "../../services/AnalyticsService";
 import { HttpService } from "../../services/HttpService";
 import { parseReferralProgress, ReferralApiService } from "../../services/ReferralApiService";
-import { WeComCustomerService } from "../../services/WeComCustomerService";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { UserStore } from "../../stores/UserStore";
@@ -18,7 +17,6 @@ import { bootstrapStores } from "../../stores/StoreBootstrap";
 bootstrapStores();
 
 const ACCENT: string = "#D4A44A";
-const SUCCESS: string = "#16A34A";
 const INVITE_ACCENT: string = "#3B82F6";
 
 interface InviteStep {
@@ -42,7 +40,6 @@ struct RedeemPage {
   @StorageLink(StoreKeys.BenefitIsSubscribed) isSubscribed: boolean = false;
   @State codeInput: string = "";
   @State isSubmitting: boolean = false;
-  @State justRedeemed: boolean = false;
   @State expiresLabel: string = "";
   @State myInviteCode: string = "";
   @State inviteSuccessCount: number = 0;
@@ -139,14 +136,6 @@ struct RedeemPage {
     }
   }
 
-  private isActive(): boolean {
-    return this.isSubscribed || this.membershipStatus === "active";
-  }
-
-  private showSuccess(): boolean {
-    return this.isActive() || this.justRedeemed;
-  }
-
   private inviteFillRatio(): number {
     if (this.inviteSuccessCount <= 0) {
       return 0;
@@ -176,7 +165,6 @@ struct RedeemPage {
       return;
     }
     this.codeInput = "";
-    this.justRedeemed = true;
     const data = response.data as Record<string, Object> | undefined;
     if (data) {
       const redemption = data["redemption"] as Record<string, Object> | undefined;
@@ -191,14 +179,6 @@ struct RedeemPage {
     showToast("订阅成功", this.getUIContext());
   }
 
-  private async onContactSupport(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext, 'user_redeem');
-    if (errorMessage !== null) {
-      showErrorToast(errorMessage, this.getUIContext());
-    }
-  }
-
   private onCopyInvite(): void {
     if (this.myInviteCode.length === 0) {
       showToast("邀请码加载中，请稍后再试", this.getUIContext());
@@ -211,73 +191,6 @@ struct RedeemPage {
     } catch (_e) {
       showErrorToast("复制失败", this.getUIContext());
     }
-  }
-
-  @Builder
-  private buildWechatHint(hint: string): void {
-    Column({ space: 6 }) {
-      Text(hint)
-        .fontSize(13)
-        .fontColor(AppTheme.colors.textSecondary)
-        .width("100%")
-        .textAlign(TextAlign.Center)
-      Row({ space: 5 }) {
-        SymbolGlyph($r("sys.symbol.message"))
-          .fontSize(13)
-          .fontColor([ACCENT])
-        Text("联系客服")
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(ACCENT)
-      }
-      .onClick(() => {
-        void this.onContactSupport();
-      })
-    }
-    .width("100%")
-    .alignItems(HorizontalAlign.Center);
-  }
-
-  @Builder
-  private buildSuccessCards(): void {
-    Column({ space: 16 }) {
-      Column({ space: 14 }) {
-        Row({ space: 8 }) {
-          SymbolGlyph($r("sys.symbol.checkmark_circle_fill"))
-            .fontSize(22)
-            .fontColor([SUCCESS])
-          Text("会员已生效")
-            .fontSize(18)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(SUCCESS)
-        }
-        .width("100%")
-        .alignItems(VerticalAlign.Center)
-        Text("已解锁全部高级专注能力。")
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width("100%")
-        if (this.expiresLabel.length > 0) {
-          Text(`到期时间 ${this.expiresLabel}`)
-            .fontSize(13)
-            .fontColor("#A16207")
-            .width("100%")
-            .margin({ top: 2 });
-        }
-      }
-      .width("100%")
-      .padding(20)
-      .alignItems(HorizontalAlign.Start)
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: AppTheme.colors.border })
-      .borderRadius(AppTheme.radius.lg)
-      Column() {
-        this.buildWechatHint("加管理员好友进搭子匹配群，快速找搭子")
-      }
-      .width("100%")
-      .padding({ left: 4, right: 4 })
-      .margin({ top: 24 })
-    }.width("100%");
   }
 
   @Builder
@@ -419,7 +332,7 @@ struct RedeemPage {
   private buildInviteSection(): void {
     Column({ space: 14 }) {
       Column({ space: 16 }) {
-        Text(this.showSuccess() ? "邀请搭子，再得30天会员！" : "邀请搭子得30天会员！")
+        Text("邀请搭子得30天会员！")
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
@@ -554,22 +467,15 @@ struct RedeemPage {
       })
     }
     .width("100%")
-    .margin({ top: this.showSuccess() ? 32 : 0 })
     .alignItems(HorizontalAlign.Center);
   }
 
   @Builder
   private buildPageBody(): void {
     Column({ space: 20 }) {
-      if (this.showSuccess()) {
-        this.buildSuccessCards();
-      } else {
-        this.buildInviteHero();
-      }
+      this.buildInviteHero()
       this.buildInviteSection()
-      if (!this.showSuccess()) {
-        this.buildRedeemForm();
-      }
+      this.buildRedeemForm()
     }
     .width("100%")
     .padding({ left: 4, right: 4, top: 8, bottom: 8 })

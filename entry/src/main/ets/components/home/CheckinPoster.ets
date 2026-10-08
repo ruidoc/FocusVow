@@ -10,15 +10,20 @@ import { checkinPosterHeight } from '../../utils/CertificateTemplate';
 struct CheckinGoldText {
   @Prop value: string = '';
   @Prop fontSize: number = 48;
+  /** 单位后再跟数字时补左间距，对齐 RN MixedDuration groupGap */
+  @Prop groupPadLeft: number = 0;
 
   build() {
-    Text(this.value)
-      .fontSize(this.fontSize)
-      .lineHeight(this.fontSize)
-      .fontWeight(FontWeight.Medium)
-      .fontColor('#E8D48A')
-      .margin({ right: 3 })
-      .translate({ y: 1 })
+    Row() {
+      Text(this.value)
+        .fontSize(this.fontSize)
+        .lineHeight(this.fontSize)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#E8D48A')
+        .padding(0)
+        .translate({ y: 1 })
+    }
+    .padding({ left: this.groupPadLeft, right: 3 })
   }
 }
 
@@ -154,7 +159,11 @@ export struct CheckinPoster {
         CheckinGoldText({ value: `${this.focusHoursPart()}`, fontSize: this.s(48) })
         this.buildUnit('小时')
         if (this.focusRemainMinutesPart() > 0) {
-          CheckinGoldText({ value: `${this.focusRemainMinutesPart()}`, fontSize: this.s(48) })
+          CheckinGoldText({
+            value: `${this.focusRemainMinutesPart()}`,
+            fontSize: this.s(48),
+            groupPadLeft: this.s(4),
+          })
           this.buildUnit('分钟')
         }
         this.buildUnit('高效专注')

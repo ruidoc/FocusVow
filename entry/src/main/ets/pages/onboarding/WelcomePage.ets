@@ -13,9 +13,9 @@ import { bootstrapStores } from '../../stores/StoreBootstrap';
 bootstrapStores();
 
 const WELCOME_POINTS: string[] = [
-  '专注时会锁住短视频、游戏',
-  '搭子互立契约，违约有惩罚',
-  '支持在线匹配搭子',
+  '系统强制屏蔽，短视频真的打不开',
+  '定时/延时自动锁机，到点执行',
+  '搭子连坐互督，一人毁约双方失败',
 ];
 
 @Entry
@@ -72,7 +72,7 @@ struct WelcomePage {
           .borderRadius(18)
           .margin({ bottom: 40 })
 
-        Text('搭子结伴，一起上岸')
+        Text('真锁机，不靠意志力')
           .fontSize(28)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)

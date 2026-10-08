@@ -345,19 +345,6 @@ struct MembershipPage {
     });
   }
 
-  private openRedeem(): void {
-    router
-      .pushUrl({
-        url: PageRoutes.Redeem,
-        params: {
-          entry_source: "membership_center",
-        },
-      })
-      .catch((error: Error) => {
-        console.warn(`[Membership] open redeem failed: ${String(error)}`);
-      });
-  }
-
   @Builder
   private buildHero(): void {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -647,31 +634,6 @@ struct MembershipPage {
       }
       .width("100%")
       .padding({ left: 20, right: 20 })
-      Column() {
-        Text("邀请得会员")
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.colors.textPrimary)
-          .width("100%")
-          .margin({ bottom: 12 })
-        Row() {
-          Text("去邀请")
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(AppTheme.colors.textPrimary)
-        }
-        .width(138)
-        .justifyContent(FlexAlign.Center)
-        .padding({ top: 12, bottom: 12 })
-        .borderRadius(2)
-        .backgroundColor(isDarkThemeMode() ? AppTheme.colors.surfaceSecondary : "#F1F5F9")
-        .onClick(() => {
-          this.openRedeem();
-        })
-      }
-      .width("100%")
-      .alignItems(HorizontalAlign.Start)
-      .padding({ left: 20, right: 20, top: 28 })
     }
     .width("100%")
     .layoutWeight(1)

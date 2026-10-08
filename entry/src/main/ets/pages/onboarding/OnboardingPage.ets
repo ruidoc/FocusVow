@@ -110,6 +110,7 @@ struct OnboardingPage {
   @State partnerGuideTexts: string[] = [];
   @State private progressWidthPercent: number = 20;
   @StorageLink(StoreKeys.FeatureFlagsOff) @Watch('onFeaturesOffChanged') featuresOff: string[] = [];
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
 
   aboutToAppear(): void {
     void this.initOnboarding();
@@ -841,28 +842,25 @@ struct OnboardingPage {
         .width('100%')
         .margin({ bottom: 24 })
       ForEach(IDENTITY_OPTIONS, (option: OnboardingOption) => {
-        Button() {
-          Row() {
-            Text(option.title)
-              .layoutWeight(1)
-              .fontSize(16)
+        Row() {
+          Text(option.title)
+            .layoutWeight(1)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.identity === option.id ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
+          if (this.identity === option.id) {
+            Text('✓')
+              .fontSize(22)
               .fontWeight(FontWeight.Bold)
-              .fontColor(this.identity === option.id ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
-            if (this.identity === option.id) {
-              Text('✓')
-                .fontSize(22)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(AppTheme.colors.primary)
-            }
+              .fontColor(AppTheme.colors.primary)
           }
-          .width('100%')
-          .height(60)
-          .padding({ left: 20, right: 20 })
-          .alignItems(VerticalAlign.Center)
         }
         .width('100%')
-        .type(ButtonType.Normal)
-        .backgroundColor(this.identity === option.id ? 'rgba(122, 90, 248, 0.08)' : 'rgba(0,0,0,0.04)')
+        .height(60)
+        .padding({ left: 20, right: 20 })
+        .alignItems(VerticalAlign.Center)
+        .backgroundColor(this.identity === option.id ? AppTheme.colors.primarySoft : (this.themeMode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'))
+        .clip(true)
         .border({
           width: 1.5,
           color: this.identity === option.id ? AppTheme.colors.primary : Color.Transparent
@@ -888,28 +886,25 @@ struct OnboardingPage {
         .width('100%')
         .margin({ bottom: 24 })
       ForEach(this.goalOptions, (option: OnboardingOption) => {
-        Button() {
-          Row() {
-            Text(option.title)
-              .layoutWeight(1)
-              .fontSize(16)
+        Row() {
+          Text(option.title)
+            .layoutWeight(1)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.goal === option.id ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
+          if (this.goal === option.id) {
+            Text('✓')
+              .fontSize(22)
               .fontWeight(FontWeight.Bold)
-              .fontColor(this.goal === option.id ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
-            if (this.goal === option.id) {
-              Text('✓')
-                .fontSize(22)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(AppTheme.colors.primary)
-            }
+              .fontColor(AppTheme.colors.primary)
           }
-          .width('100%')
-          .height(60)
-          .padding({ left: 20, right: 20 })
-          .alignItems(VerticalAlign.Center)
         }
         .width('100%')
-        .type(ButtonType.Normal)
-        .backgroundColor(this.goal === option.id ? 'rgba(122, 90, 248, 0.08)' : 'rgba(0,0,0,0.04)')
+        .height(60)
+        .padding({ left: 20, right: 20 })
+        .alignItems(VerticalAlign.Center)
+        .backgroundColor(this.goal === option.id ? AppTheme.colors.primarySoft : (this.themeMode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'))
+        .clip(true)
         .border({
           width: 1.5,
           color: this.goal === option.id ? AppTheme.colors.primary : Color.Transparent
@@ -936,28 +931,25 @@ struct OnboardingPage {
           .width('100%')
           .margin({ bottom: 24 })
         ForEach(PARTNER_OPTIONS, (option: OnboardingOption) => {
-          Button() {
-            Row() {
-              Text(option.title)
-                .layoutWeight(1)
-                .fontSize(16)
+          Row() {
+            Text(option.title)
+              .layoutWeight(1)
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.hasBuddy === option.id ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
+            if (this.hasBuddy === option.id) {
+              Text('✓')
+                .fontSize(22)
                 .fontWeight(FontWeight.Bold)
-                .fontColor(this.hasBuddy === option.id ? AppTheme.colors.primary : AppTheme.colors.textPrimary)
-              if (this.hasBuddy === option.id) {
-                Text('✓')
-                  .fontSize(22)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(AppTheme.colors.primary)
-              }
+                .fontColor(AppTheme.colors.primary)
             }
-            .width('100%')
-            .height(60)
-            .padding({ left: 20, right: 20 })
-            .alignItems(VerticalAlign.Center)
           }
           .width('100%')
-          .type(ButtonType.Normal)
-          .backgroundColor(this.hasBuddy === option.id ? 'rgba(122, 90, 248, 0.08)' : 'rgba(0,0,0,0.04)')
+          .height(60)
+          .padding({ left: 20, right: 20 })
+          .alignItems(VerticalAlign.Center)
+          .backgroundColor(this.hasBuddy === option.id ? AppTheme.colors.primarySoft : (this.themeMode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'))
+          .clip(true)
           .border({
             width: 1.5,
             color: this.hasBuddy === option.id ? AppTheme.colors.primary : Color.Transparent
@@ -1090,7 +1082,7 @@ struct OnboardingPage {
             }, (line: string) => line)
           }
           .alignItems(HorizontalAlign.Start)
-          .margin({ bottom: 40 })
+          .margin({ bottom: 80 })
 
           Button() {
             Row({ space: 8 }) {
@@ -1177,7 +1169,7 @@ struct OnboardingPage {
           .margin({ top: 12 })
         }
         .width('100%')
-        .padding({ left: 32, right: 32, top: 8, bottom: 24 })
+        .padding({ left: 32, right: 32, top: 24, bottom: 24 })
         .alignItems(HorizontalAlign.Center)
       }
       .layoutWeight(1)
