@@ -1,9 +1,9 @@
 export type OnboardingIdentity =
-  | 'junior_high'
-  | 'high_school'
+  | 'secondary'
   | 'college'
-  | 'graduated'
-  | 'adult_parent'
+  | 'employed'
+  | 'freelance'
+  | 'parent'
   | 'other';
 
 export type OnboardingGoal =
@@ -24,25 +24,18 @@ export interface OnboardingOption {
 }
 
 export const IDENTITY_OPTIONS: OnboardingOption[] = [
-  { id: 'high_school', title: '高中生', desc: '备战高考或日常学习' },
-  { id: 'college', title: '大学生 / 研究生', desc: '考研、考公或提升专注' },
-  { id: 'junior_high', title: '初中生', desc: '日常学习或备考' },
-  { id: 'graduated', title: '上班 / 自由职业', desc: '工作专注或在职备考' },
-  { id: 'adult_parent', title: '成人/家长', desc: '自我提升或陪伴学习' },
+  { id: 'secondary', title: '中学生', desc: '初高中备考或日常学习' },
+  { id: 'college', title: '大学生', desc: '考研、考公或提升专注' },
+  { id: 'employed', title: '上班族', desc: '工作专注或在职备考' },
+  { id: 'freelance', title: '自由职业', desc: '自主安排时间，需要更强自律' },
+  { id: 'parent', title: '家长', desc: '自我提升或陪伴学习' },
   { id: 'other', title: '其他', desc: '不确定选哪个？点这里' }
 ];
 
 export function getGoalsForIdentity(identity: string): OnboardingOption[] {
-  if (identity === 'junior_high') {
+  if (identity === 'secondary') {
     return [
       { id: 'zhongkao', title: '中考', desc: '稳住复习节奏' },
-      { id: 'daily_study', title: '日常学习', desc: '写作业、背书时不被打断' },
-      { id: 'quit_phone', title: '自律/戒手机', desc: '减少刷短视频和无效滑动' },
-      { id: 'other', title: '其他', desc: '先体验强制专注' }
-    ];
-  }
-  if (identity === 'high_school') {
-    return [
       { id: 'gaokao', title: '高考', desc: '锁住分心，稳住复习节奏' },
       { id: 'daily_study', title: '日常学习', desc: '写作业、背书时不被打断' },
       { id: 'quit_phone', title: '自律/戒手机', desc: '减少刷短视频和无效滑动' },
@@ -58,7 +51,7 @@ export function getGoalsForIdentity(identity: string): OnboardingOption[] {
       { id: 'other', title: '其他', desc: '先体验强制专注' }
     ];
   }
-  if (identity === 'graduated') {
+  if (identity === 'employed') {
     return [
       { id: 'work_focus', title: '工作专注', desc: '深度工作不被手机带走' },
       { id: 'quit_phone', title: '自律/戒手机', desc: '减少碎片化刷机' },
@@ -68,7 +61,15 @@ export function getGoalsForIdentity(identity: string): OnboardingOption[] {
       { id: 'other', title: '其他', desc: '先体验强制专注' }
     ];
   }
-  if (identity === 'adult_parent') {
+  if (identity === 'freelance') {
+    return [
+      { id: 'work_focus', title: '工作专注', desc: '接单、创作时不被手机带走' },
+      { id: 'quit_phone', title: '自律/戒手机', desc: '减少碎片化刷机' },
+      { id: 'daily_study', title: '学习充电', desc: '考证、技能提升不被打断' },
+      { id: 'other', title: '其他', desc: '先体验强制专注' }
+    ];
+  }
+  if (identity === 'parent') {
     return [
       { id: 'child_phone', title: '让孩子少玩手机', desc: '帮孩子建立专注习惯' },
       { id: 'quit_phone', title: '自律/戒手机', desc: '家长先做好榜样' },

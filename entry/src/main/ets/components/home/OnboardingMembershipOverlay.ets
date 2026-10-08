@@ -16,7 +16,6 @@ import {
   expireMembershipUrgencyIfNeeded,
   formatMembershipUrgencyCountdown,
   getMembershipUrgencySecondsLeft,
-  MEMBERSHIP_URGENCY_WINDOW_MINUTES,
   shouldShowMembershipUrgencyCapsule,
   startMembershipUrgencyCountdown,
 } from '../../utils/OnboardingMembershipUtil';
@@ -302,8 +301,8 @@ export struct OnboardingMembershipOverlay {
           'check-large',
           '恭喜，准备工作已完成',
           this.activationGuestPath
-            ? `接下来开始 ${FIRST_FOCUS_MINUTES} 分钟专注。坚持完成后登录，仍可领取 7 天会员（${MEMBERSHIP_URGENCY_WINDOW_MINUTES} 分钟内有效）。`
-            : `接下来开始 ${FIRST_FOCUS_MINUTES} 分钟专注。坚持完成后 7 天会员立即到账（${MEMBERSHIP_URGENCY_WINDOW_MINUTES} 分钟内有效）。`,
+            ? `接下来开始 ${FIRST_FOCUS_MINUTES} 分钟专注。坚持完成后登录，即可同步本次记录。`
+            : `接下来开始 ${FIRST_FOCUS_MINUTES} 分钟专注，体验锁机效果。`,
           '开始 5 分钟专注',
           () => this.onActivationStart(),
           '稍后再说',
@@ -315,8 +314,8 @@ export struct OnboardingMembershipOverlay {
         this.buildCenterModal(
           'party',
           '恭喜完成首次专注',
-          '本次专注已保存在本地。现在登录，7 天会员立即到账（本次专注已计入）。',
-          '登录领取会员',
+          '本次专注已保存在本地。现在登录，即可同步记录。',
+          '去登录',
           () => this.onGuestReclaimConfirm(),
           '稍后再说',
           () => this.onGuestReclaimDismiss(),

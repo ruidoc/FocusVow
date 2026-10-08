@@ -4,7 +4,7 @@ import { StoreKeys } from '../stores/StoreKeys';
 import { readStoredString, removeStoredKey, writeStoredString } from '../services/PreferencesService';
 import { getFocusCount, hasCompletedOnboarding, incrementFocusCount } from './UserActivationUtil';
 import { isSignupTrialEligible } from './SignupTrialUtil';
-import { FIRST_FOCUS_TITLE } from '../services/FirstFocusPromptService';
+import { FIRST_FOCUS_TITLE, markFirstFocusPromptDone } from '../services/FirstFocusPromptService';
 
 const SKIPPED_MEMBERSHIP_SIGNUP_KEY: string = 'onboarding_skipped_membership_signup';
 const MEMBERSHIP_CLAIM_DEADLINE_KEY: string = 'onboarding_membership_claim_deadline_ms';
@@ -110,6 +110,12 @@ export function shouldShowOnboardingActivationBanner(context: common.Context): b
 
 export function dismissOnboardingActivationBanner(context: common.Context): void {
   removeStoredKey(context, ACTIVATION_BANNER_ACTIVE_KEY);
+}
+
+/** 离开首次专注页且未开始：下次再进立即专注不再预填「专注5分钟」 */
+export function consumeFirstFocusOnboardingGuide(context: common.Context): void {
+  markFirstFocusPromptDone(context);
+  dismissOnboardingActivationBanner(context);
 }
 
 export function clearOnboardingActivationUiState(context: common.Context): void {

@@ -25,13 +25,13 @@ export function resolvePlanTipTheme(identity: string, goal: string): PlanTipThem
   ) {
     return 'study';
   }
-  if (identity === 'adult_parent') {
+  if (identity === 'parent') {
     return 'screen';
   }
-  if (identity === 'graduated') {
+  if (identity === 'employed' || identity === 'freelance') {
     return 'work';
   }
-  if (identity === 'high_school' || identity === 'college' || identity === 'junior_high') {
+  if (identity === 'secondary' || identity === 'college') {
     return 'study';
   }
   return 'default';

@@ -1185,7 +1185,7 @@ struct OnboardingPage {
             void this.onContactSupport('onboarding_login');
           })
       } else {
-        Text('放弃权益，去专注')
+        Text('先体验专注')
           .fontSize(14)
           .fontColor(AppTheme.colors.textMuted)
           .padding({ top: 8, bottom: 8 })
@@ -1373,18 +1373,18 @@ struct OnboardingPage {
 
         Column() {
           Row() {
-            SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
-              .fontSize(26)
-              .fontColor([AppTheme.colors.warning])
+            SymbolGlyph($r('sys.symbol.timer'))
+              .fontSize(28)
+              .fontColor([AppTheme.colors.primary])
           }
           .width(56)
           .height(56)
           .justifyContent(FlexAlign.Center)
           .borderRadius(28)
-          .backgroundColor('#F5F7FB')
+          .backgroundColor(AppTheme.colors.surfaceSecondary)
           .margin({ bottom: 18 })
 
-          Text('暂不领取新用户权益？')
+          Text('先体验专注？')
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.colors.textPrimary)
@@ -1393,27 +1393,19 @@ struct OnboardingPage {
             .width('100%')
             .margin({ bottom: 10 })
 
-          Text('暂时不想登录的话，可以先体验 5 分钟专注锁机。完成后再登录，权益仍可领取。')
+          Text('暂时不想登录的话，可以先体验 5 分钟专注锁机。完成后再登录同步记录。')
             .fontSize(15)
             .fontColor(AppTheme.colors.textSecondary)
             .lineHeight(22)
             .textAlign(TextAlign.Center)
             .width('100%')
-
-          Text('中途撕毁契约即放弃新用户权益，不可再领。')
-            .fontSize(13)
-            .fontColor(AppTheme.colors.warning)
-            .lineHeight(19)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .margin({ top: 10 })
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
         .padding({ left: 4, right: 4, bottom: 32 })
 
         Row({ space: 12 }) {
-          Button('继续领取')
+          Button('继续注册')
             .layoutWeight(1)
             .height(50)
             .type(ButtonType.Normal)
@@ -1438,7 +1430,7 @@ struct OnboardingPage {
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
-            .backgroundColor('#F5F7FB')
+            .backgroundColor(AppTheme.colors.surfaceSecondary)
             .borderRadius(30)
             .onClick(() => {
               this.confirmSkipMembership();

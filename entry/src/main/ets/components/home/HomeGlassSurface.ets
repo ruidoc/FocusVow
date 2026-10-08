@@ -12,6 +12,8 @@ export struct HomeGlassSurface {
   @Prop blurStyle: BlurStyle = BlurStyle.Thin;
   /** 对齐 RN tint="light"：暗色模式下仍用浅色模糊（今日卡内层指标区） */
   @Prop useLightBlurTint: boolean = false;
+  /** 父级没有固定高度时不要 height 100%，否则会撑满屏幕 */
+  @Prop fitContent: boolean = false;
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @BuilderParam content: () => void = EmptyGlassBuilder;
 
@@ -42,15 +44,35 @@ export struct HomeGlassSurface {
   }
 
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      this.buildGlassBackground()
-      Column() {
-        this.content()
+    if (this.fitContent) {
+      if (this.enableBlur) {
+        Column() {
+          this.content()
+        }
+        .width('100%')
+        .backgroundColor(this.glassBackgroundColor)
+        .backgroundBlurStyle(this.blurStyle, {
+          colorMode: this.getBlurColorMode(),
+          adaptiveColor: AdaptiveColor.DEFAULT,
+        })
+      } else {
+        Column() {
+          this.content()
+        }
+        .width('100%')
+        .backgroundColor(this.glassBackgroundColor)
+      }
+    } else {
+      Stack({ alignContent: Alignment.TopStart }) {
+        this.buildGlassBackground()
+        Column() {
+          this.content()
+        }
+        .width('100%')
+        .height('100%')
       }
       .width('100%')
       .height('100%')
     }
-    .width('100%')
-    .height('100%')
   }
 }

@@ -120,6 +120,7 @@ export struct HomeMembershipUrgencyCapsule {
       Column() {
         HomeGlassSurface({
           glassBackgroundColor: homeGlassCardBg(),
+          fitContent: true,
           content: (): void => {
             this.buildCapsuleContent();
           },

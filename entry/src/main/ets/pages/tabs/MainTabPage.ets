@@ -26,6 +26,8 @@ import { warmUpPreferencesStore } from "../../services/PreferencesService";
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
 import { hydratePendingQuickStart } from "../../services/PendingQuickStartService";
 import { getAppVersion } from "../../common/AppInfo";
+import { showToast } from "../../common/Toast";
+import { FOCUS_TOO_SHORT_TIP } from "../../utils/FocusValidity";
 import { FeatureFlagStore } from "../../stores/FeatureFlagStore";
 import { CycleGuardStore } from "../../stores/CycleGuardStore";
 import { LockStore } from "../../stores/LockStore";
@@ -194,6 +196,9 @@ struct MainTabPage {
       "契约已履行",
       "专注已结束，但解除限制失败",
     );
+    if (endResult.ok && endResult.tooShort) {
+      showToast(FOCUS_TOO_SHORT_TIP, this.getUIContext());
+    }
     if (endResult.ok && !endResult.tooShort) {
       await handleSoloQuickFocusSuccess(
         this.getUIContext(),

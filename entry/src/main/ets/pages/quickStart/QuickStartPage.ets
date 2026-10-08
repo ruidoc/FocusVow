@@ -30,6 +30,7 @@ import { TimerMode } from "../../utils/TimerMode";
 import { getFocusCount } from "../../utils/UserActivationUtil";
 import {
   clearMembershipUrgencyCountdown,
+  consumeFirstFocusOnboardingGuide,
   expireMembershipUrgencyIfNeeded,
   hasSkippedMembershipSignup,
   isOnboardingMembershipBenefitActive,
@@ -41,7 +42,11 @@ import {
   ensureDelayStartAllowed,
   normalizeDelayMinutes,
 } from "../../services/ProQuotaService";
-import { FIRST_FOCUS_TITLE } from "../../services/FirstFocusPromptService";
+import {
+  FIRST_FOCUS_MINUTES,
+  FIRST_FOCUS_TITLE,
+  shouldShowFirstFocusPrompt,
+} from "../../services/FirstFocusPromptService";
 
 bootstrapStores();
 
@@ -68,6 +73,8 @@ struct QuickStartPage {
   private isDelayedEntry: boolean = false;
   private fromOnboarding: boolean = false;
   private focusStarted: boolean = false;
+  private appliedFirstFocusPreset: boolean = false;
+  private durationEdited: boolean = false;
   private membershipTimerId: number = -1;
 
   private readonly durationMin: number = 5;
@@ -80,27 +87,12 @@ struct QuickStartPage {
     UserStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
     const params = router.getParams() as QuickStartRouteParams;
+    let presetTitle = '';
+    let presetMinutes = 0;
     if (params) {
       this.fromOnboarding = params.from_onboarding === "1" || params.from_onboarding === "true";
-      const presetTitle = String(params.title ?? "").trim();
-      if (presetTitle.length > 0) {
-        this.title = presetTitle;
-      } else if (this.shouldShowMembershipTip()) {
-        this.title = FIRST_FOCUS_TITLE;
-      }
-      const presetMinutes = Number(params.minute ?? 0);
-      if (presetMinutes >= this.durationMin) {
-        const normalizedPreset = this.normalizeDurationMinutes(presetMinutes);
-        this.durationMinutes = normalizedPreset;
-        LockStore.setQuickFocusDurationMinutes(hostContext, normalizedPreset);
-      } else {
-        const rawDuration = LockStore.getQuickFocusDurationMinutes();
-        const normalized = this.normalizeDurationMinutes(rawDuration);
-        this.durationMinutes = normalized;
-        if (normalized !== rawDuration) {
-          LockStore.setQuickFocusDurationMinutes(hostContext, normalized);
-        }
-      }
+      presetTitle = String(params.title ?? "").trim();
+      presetMinutes = Number(params.minute ?? 0);
       const presetDelayRaw = Number(params.delay ?? 0);
       if (presetDelayRaw > 0) {
         this.isDelayedEntry = true;
@@ -112,10 +104,23 @@ struct QuickStartPage {
           this.startDelayMinutes = options[0];
         }
       }
-    } else {
-      if (this.shouldShowMembershipTip()) {
-        this.title = FIRST_FOCUS_TITLE;
+    }
+    const firstFill = this.shouldApplyFirstFocusPreset(hostContext, presetTitle, presetMinutes);
+    this.appliedFirstFocusPreset = firstFill;
+    if (presetTitle.length > 0) {
+      this.title = presetTitle;
+    } else if (firstFill) {
+      this.title = FIRST_FOCUS_TITLE;
+    }
+    if (firstFill && presetMinutes < this.durationMin) {
+      this.durationMinutes = FIRST_FOCUS_MINUTES;
+    } else if (presetMinutes >= this.durationMin) {
+      const normalizedPreset = this.normalizeDurationMinutes(presetMinutes);
+      this.durationMinutes = normalizedPreset;
+      if (!firstFill) {
+        LockStore.setQuickFocusDurationMinutes(hostContext, normalizedPreset);
       }
+    } else {
       const rawDuration = LockStore.getQuickFocusDurationMinutes();
       const normalized = this.normalizeDurationMinutes(rawDuration);
       this.durationMinutes = normalized;
@@ -139,20 +144,53 @@ struct QuickStartPage {
 
   onPageHide(): void {
     this.clearMembershipUiTimer();
-    if (!this.fromOnboarding || this.focusStarted) {
+    if (this.focusStarted) {
       return;
     }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (hasPendingQuickStart(hostContext) || LockStore.isLocked()) {
+      return;
+    }
+    if (this.appliedFirstFocusPreset) {
+      if (!this.durationEdited && LockStore.getQuickFocusDurationMinutes() === FIRST_FOCUS_MINUTES) {
+        LockStore.setQuickFocusDurationMinutes(hostContext, 25);
+      }
+      consumeFirstFocusOnboardingGuide(hostContext);
+    }
+    if (!this.fromOnboarding) {
+      return;
+    }
     if (!isOnboardingMembershipBenefitActive(hostContext)) {
       return;
     }
     if (getFocusCount(hostContext) > 0) {
       return;
     }
-    if (hasPendingQuickStart(hostContext) || LockStore.isLocked()) {
-      return;
-    }
     startMembershipUrgencyCountdown(hostContext);
+  }
+
+  /** 仅第一次进入立即专注预填「专注5分钟」，返回后不再预填 */
+  private shouldApplyFirstFocusPreset(
+    hostContext: common.UIAbilityContext,
+    presetTitle: string,
+    presetMinutes: number,
+  ): boolean {
+    if (this.isDelayedEntry || getFocusCount(hostContext) > 0) {
+      return false;
+    }
+    const routePreset =
+      (this.fromOnboarding || presetTitle === FIRST_FOCUS_TITLE) &&
+      (presetMinutes === 0 || presetMinutes === FIRST_FOCUS_MINUTES);
+    if (routePreset) {
+      return true;
+    }
+    if (!isOnboardingMembershipBenefitActive(hostContext)) {
+      return false;
+    }
+    return (
+      shouldShowOnboardingActivationBanner(hostContext) ||
+      shouldShowFirstFocusPrompt(hostContext)
+    );
   }
 
   private startMembershipUiTimer(): void {
@@ -372,6 +410,7 @@ struct QuickStartPage {
   }
 
   private onDurationSliderChange(value: number): void {
+    this.durationEdited = true;
     const next = this.normalizeDurationMinutes(value);
     this.durationMinutes = next;
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -542,8 +581,8 @@ struct QuickStartPage {
     Column({ space: 6 }) {
       Text(
         this.isGuestMembershipPath()
-          ? "完成本次专注后登录，领取 7 天会员"
-          : "完成本次专注，7 天会员立即到账！",
+          ? "完成本次专注后登录同步"
+          : "完成你的第一次专注",
       )
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
@@ -551,7 +590,7 @@ struct QuickStartPage {
         .width("100%")
       Text(
         this.isGuestMembershipPath()
-          ? "坚持完成锁机专注，登录后本次计入会员"
+          ? "坚持完成锁机专注，登录后同步本次记录"
           : "开始专注后，大部分APP会被暂时禁用，请坚持完成。",
       )
         .fontSize(13)

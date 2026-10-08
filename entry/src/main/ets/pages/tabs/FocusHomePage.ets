@@ -5,7 +5,6 @@ import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { OnboardingMembershipOverlay } from "../../components/home/OnboardingMembershipOverlay";
 import { HomeTodayCard } from "../../components/home/HomeTodayCard";
 import { HomeActionCard } from "../../components/home/HomeActionCard";
-import { HomeMembershipUrgencyCapsule } from "../../components/home/HomeMembershipUrgencyCapsule";
 import { HomeDuoWaitBanner } from "../../components/home/HomeDuoWaitBanner";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
@@ -81,6 +80,7 @@ import {
 } from "../../services/FirstFocusPromptService";
 import { getPendingReferralCode } from "../../utils/ReferralUtil";
 import { SIGNUP_TRIAL_TEAR_WARNING } from "../../utils/SignupTrialUtil";
+import { FOCUS_TOO_SHORT_TIP } from "../../utils/FocusValidity";
 import {
   abandonOnboardingMembershipOnTear,
   consumePendingOnboardingActivationModal,
@@ -267,8 +267,8 @@ export struct FocusHomePage {
     let message = '时长 5 分钟，可选放行应用，即刻开始';
     if (loggedIn) {
       message = hasInvite
-        ? '完成首次专注后领取 7 天会员，邀请码再 +15 天。时长 5 分钟。'
-        : '完成首次专注后领取 7 天会员。时长 5 分钟，可选放行应用。';
+        ? '和搭子完成一次互督，即可领取 7 天会员奖励。'
+        : '开启你的第一次专注，时长 5 分钟，可选放行应用。';
     }
     this.getUIContext().showAlertDialog({
       title: '开启你的第一次专注',
@@ -708,6 +708,9 @@ export struct FocusHomePage {
       "专注已结束，但解除限制失败",
       true,
     );
+    if (endResult.ok && endResult.tooShort) {
+      showToast(FOCUS_TOO_SHORT_TIP, this.getUIContext());
+    }
     if (endResult.ok && !endResult.tooShort) {
       await handleSoloQuickFocusSuccess(
         this.getUIContext(),
@@ -738,6 +741,9 @@ export struct FocusHomePage {
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const endResult = await tearQuickFocus(hostContext, lockSnapshot);
+      if (endResult.ok && endResult.tooShort) {
+        showToast(FOCUS_TOO_SHORT_TIP, this.getUIContext());
+      }
       if (endResult.ok && !endResult.tooShort) {
         abandonOnboardingMembershipOnTear(hostContext);
       }
@@ -758,6 +764,9 @@ export struct FocusHomePage {
       this.clearTimer();
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const endResult = await tearCovenantWindow(hostContext, lockSnapshot);
+      if (endResult.ok && endResult.tooShort) {
+        showToast(FOCUS_TOO_SHORT_TIP, this.getUIContext());
+      }
       if (endResult.ok && !endResult.tooShort) {
         queueShameCertificate(lockSnapshot, endedAt, "violator", "tear");
         tryPresentCertificateGuide(this.getUIContext());
@@ -1145,7 +1154,7 @@ export struct FocusHomePage {
       showToast("已有预约中的专注，请等待开始或先取消", this.getUIContext());
       return;
     }
-    pushRoute(PageRoutes.QuickStart);
+    pushQuickStart('', 0, false);
   }
 
   private openSoloImmediateEntry(): void {
@@ -1313,10 +1322,6 @@ export struct FocusHomePage {
         taskCount: this.homeStatis.task_count,
         failCount: this.homeStatis.fail_count,
         successRate: this.homeStatis.success_rate,
-      })
-      HomeMembershipUrgencyCapsule({
-        hasActiveLock: this.isActiveLocked(),
-        hasPendingQuickStart: this.hasPendingQuickStart(),
       })
       HomeDuoWaitBanner()
 
