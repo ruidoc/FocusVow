@@ -65,7 +65,7 @@ function scheduleBody(theme: PlanTipTheme): string {
 
 function limitBody(theme: PlanTipTheme): string {
   if (theme === 'study') {
-    return '给短视频、游戏设每日限额，学习时间不被娱乐 App 打断。';
+    return '给短视频、游戏设每日限额，额度用完就锁，把整块时间留给复习。';
   }
   if (theme === 'screen') {
     return '娱乐 App 每日限时，超了自动锁死，从根上控制刷手机时长。';

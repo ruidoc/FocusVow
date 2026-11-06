@@ -64,7 +64,7 @@ export struct MainTabLegacyLayout {
           .height('100%')
           .visibility(this.currentTab === 'stats' ? Visibility.Visible : Visibility.Hidden)
 
-        ProfilePage()
+        ProfilePage({ isPageActive: this.currentTab === 'profile' })
           .width('100%')
           .height('100%')
           .visibility(this.currentTab === 'profile' ? Visibility.Visible : Visibility.Hidden)

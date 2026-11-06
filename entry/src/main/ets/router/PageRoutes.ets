@@ -3,6 +3,11 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { LegalUrls } from '../constants/LegalUrls';
 import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
+import {
+  SLEEP_DEFAULT_END_CLOCK,
+  SLEEP_DEFAULT_START_CLOCK,
+  SLEEP_WEEKLY_REPEAT,
+} from '../utils/ScheduledClockUtil';
 
 bootstrapStores();
 
@@ -15,11 +20,14 @@ export class PageRoutes {
   static readonly DuoWait: string = 'pages/focus/DuoWaitPage';
   static readonly DuoJoin: string = 'pages/focus/DuoJoinPage';
   static readonly DuoMatch: string = 'pages/focus/DuoMatchPage';
+  static readonly DuoPickFriend: string = 'pages/focus/DuoPickFriendPage';
   static readonly FocusResult: string = 'pages/focus/FocusResultPage';
   static readonly Welcome: string = 'pages/onboarding/WelcomePage';
   static readonly Onboarding: string = 'pages/onboarding/OnboardingPage';
   static readonly PlanList: string = 'pages/plans/PlanListPage';
   static readonly PlanAdd: string = 'pages/plans/PlanAddPage';
+  static readonly SleepPlan: string = 'pages/plans/SleepPlanPage';
+  static readonly SleepRecords: string = 'pages/plans/SleepRecordsPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
   static readonly QuickTaskForm: string = 'pages/plans/QuickTaskFormPage';
   static readonly QuickTaskDetail: string = 'pages/plans/QuickTaskDetailPage';
@@ -35,6 +43,7 @@ export class PageRoutes {
   static readonly WebView: string = 'pages/settings/WebViewPage';
   static readonly About: string = 'pages/settings/AboutPage';
   static readonly Feedback: string = 'pages/settings/FeedbackPage';
+  static readonly Contact: string = 'pages/settings/ContactPage';
   static readonly Login: string = 'pages/login/LoginPage';
   static readonly EmailLogin: string = 'pages/login/EmailLoginPage';
   static readonly Register: string = 'pages/login/RegisterPage';
@@ -57,6 +66,9 @@ export class PageRoutes {
   static readonly InboxDetail: string = 'pages/inbox/InboxDetailPage';
   static readonly GlobalRank: string = 'pages/rank/GlobalRankPage';
   static readonly Checkin: string = 'pages/checkin/CheckinPage';
+  static readonly UserProfile: string = 'pages/user/UserProfilePage';
+  static readonly UserFollows: string = 'pages/user/UserFollowsPage';
+  static readonly PointLogs: string = 'pages/user/PointLogsPage';
 }
 
 function logRouteError(actionName: string, error: BusinessError): void {
@@ -66,6 +78,83 @@ function logRouteError(actionName: string, error: BusinessError): void {
 export function pushRoute(url: string): void {
   router.pushUrl({ url }).catch((error: BusinessError) => {
     logRouteError('pushRoute', error);
+  });
+}
+
+export function pushUserProfile(userId: string): void {
+  const params: Record<string, string> = {};
+  params['userId'] = userId;
+  router.pushUrl({
+    url: PageRoutes.UserProfile,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushUserProfile', error);
+  });
+}
+
+export function pushUserFollows(userId: string, tab: string = 'mutual'): void {
+  const params: Record<string, string> = {};
+  params['userId'] = userId;
+  params['tab'] = tab;
+  router.pushUrl({
+    url: PageRoutes.UserFollows,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushUserFollows', error);
+  });
+}
+
+export function pushPointLogs(): void {
+  pushRoute(PageRoutes.PointLogs);
+}
+
+export function pushContact(entrySource: string = 'contact_page'): void {
+  const params: Record<string, string> = {};
+  params['entrySource'] = entrySource;
+  router.pushUrl({
+    url: PageRoutes.Contact,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushContact', error);
+  });
+}
+
+export function pushDuoPickFriend(selectedTarget: string = ''): void {
+  const params: Record<string, string> = {};
+  if (selectedTarget.length > 0) {
+    params['target'] = selectedTarget;
+  }
+  router.pushUrl({
+    url: PageRoutes.DuoPickFriend,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushDuoPickFriend', error);
+  });
+}
+
+export function pushPlanAddSleep(): void {
+  const params: Record<string, string> = {};
+  params['kind'] = 'sleep';
+  params['presetName'] = '早睡契约';
+  params['presetStart'] = SLEEP_DEFAULT_START_CLOCK;
+  params['presetEnd'] = SLEEP_DEFAULT_END_CLOCK;
+  params['presetRepeat'] = JSON.stringify(SLEEP_WEEKLY_REPEAT);
+  router.pushUrl({
+    url: PageRoutes.PlanAdd,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushPlanAddSleep', error);
+  });
+}
+
+export function pushSleepRecords(sessionId: string): void {
+  const params: Record<string, string> = {};
+  params['sessionId'] = sessionId;
+  router.pushUrl({
+    url: PageRoutes.SleepRecords,
+    params: params,
+  }).catch((error: BusinessError) => {
+    logRouteError('pushSleepRecords', error);
   });
 }
 
@@ -234,15 +323,21 @@ export function navigateToMainTab(tab: MainTabKey = 'plans'): void {
   returnToMainTab(tab);
 }
 
+/** 定时任务是独立页，不再占任务 Tab */
 export function openScheduledTaskTabOnce(): void {
-  AppStorage.setOrCreate(StoreKeys.OpenScheduledTaskTabOnce, true);
-  AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 1);
-  returnToMainTab('plans');
+  pushRoute(PageRoutes.PlanList);
 }
 
 /** 保存快捷任务后跳任务 Tab 并定位快捷子 Tab */
 export function openQuickTaskTabOnce(): void {
   AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, true);
   AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 0);
+  returnToMainTab('plans');
+}
+
+/** 保存互督任务后跳任务 Tab 并定位互督子 Tab */
+export function openDuoTaskTabOnce(): void {
+  AppStorage.setOrCreate(StoreKeys.OpenDuoTaskTabOnce, true);
+  AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 1);
   returnToMainTab('plans');
 }

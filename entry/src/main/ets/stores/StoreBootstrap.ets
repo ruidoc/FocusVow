@@ -56,6 +56,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
   AppStorage.setOrCreate(StoreKeys.TasksSubTabIndex, 0);
   AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
+  AppStorage.setOrCreate(StoreKeys.OpenDuoTaskTabOnce, false);
   AppStorage.setOrCreate(StoreKeys.OpenScheduledTaskTabOnce, false);
   AppStorage.setOrCreate(StoreKeys.NeedsScheduledGuardSync, false);
   AppStorage.setOrCreate(StoreKeys.AwaitingScheduledGuardSyncCheck, false);
@@ -100,6 +101,7 @@ export function bootstrapStores(): void {
   AppStorage.setOrCreate(StoreKeys.ProQuickPayReason, '');
   AppStorage.setOrCreate(StoreKeys.ProQuickPayTitle, '');
   AppStorage.setOrCreate(StoreKeys.ProQuickPayLine2, '');
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayForegroundHost, 'main');
   AppStorage.setOrCreate(StoreKeys.PendingOnboardingActivationModal, false);
   AppStorage.setOrCreate(StoreKeys.OnboardingActivationModalVisible, false);
   AppStorage.setOrCreate(StoreKeys.WxPendingInfo, createEmptyWxPendingInfo());

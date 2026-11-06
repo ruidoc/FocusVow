@@ -1,11 +1,13 @@
 import { common } from '@kit.AbilityKit';
-import { ActiveLockState, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
+import { ActiveLockState, isTimedLockFinished, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
 import {
   DuoSessionView,
   applyTornTodayToRepeatDays,
   getScheduleRepeatDays,
   getScheduledSessionEndMin,
   getScheduledSessionStartMin,
+  isScheduledSessionInWindow,
+  isScheduledTornToday,
   resolveDuoCounterpartName,
   getSessionApps,
   mergeSessionAppsForHarmony,
@@ -43,6 +45,8 @@ import { StoreKeys } from '../stores/StoreKeys';
 
 const NEEDS_SCHEDULED_GUARD_SYNC_KEY: string = 'needs_scheduled_guard_sync';
 const AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY: string = 'awaiting_scheduled_guard_sync_check';
+const autoSyncedScheduleWindows: Set<string> = new Set<string>();
+let recoverScheduledLockInFlight: boolean = false;
 
 function readBoolPref(context: common.Context, key: string): boolean {
   return readStoredString(context, key, '') === 'true';
@@ -88,6 +92,14 @@ export function consumeOpenQuickTaskTabOnce(): boolean {
     return false;
   }
   AppStorage.setOrCreate(StoreKeys.OpenQuickTaskTabOnce, false);
+  return true;
+}
+
+export function consumeOpenDuoTaskTabOnce(): boolean {
+  if (AppStorage.get<boolean>(StoreKeys.OpenDuoTaskTabOnce) !== true) {
+    return false;
+  }
+  AppStorage.setOrCreate(StoreKeys.OpenDuoTaskTabOnce, false);
   return true;
 }
 
@@ -280,6 +292,7 @@ export async function clearAllScheduledGuardOnLogout(context: common.Context): P
   const osResult = await removeAllGuardStrategies();
   ScheduledListStore.setAllSessions([]);
   ScheduledListStore.markDirty();
+  autoSyncedScheduleWindows.clear();
   clearAllScheduledActivationTracking();
   return osResult;
 }
@@ -289,14 +302,18 @@ export async function syncAllScheduledGuardStrategies(
   sessions: DuoSessionView[]
 ): Promise<GuardResult<boolean>> {
   const activeSessionIds = new Set<string>();
+  let failedMessage = '';
 
   for (const session of sessions) {
     if (session.session_id.length === 0) {
       continue;
     }
-    if (isScheduledGuardEligible(session)) {
+    if (isScheduledGuardEligible(session) && session.enabled !== false) {
       activeSessionIds.add(session.session_id);
-      await syncGuardForSession(context, session);
+      const guardResult = await syncGuardForSession(context, session);
+      if (!guardResult.ok && failedMessage.length === 0) {
+        failedMessage = guardResult.message;
+      }
       continue;
     }
     await removeGuardForSession(context, session.session_id);
@@ -305,6 +322,9 @@ export async function syncAllScheduledGuardStrategies(
   const pruneResult = await pruneSessionGuardStrategies(activeSessionIds);
   if (!pruneResult.ok) {
     return pruneResult;
+  }
+  if (failedMessage.length > 0) {
+    return { ok: false, data: false, message: failedMessage };
   }
   return { ok: true, data: true, message: '定时契约屏时策略已同步' };
 }
@@ -368,6 +388,95 @@ export async function loadScheduledListOnLogin(context: common.Context): Promise
   ScheduledListStore.setAllSessions(reconciled);
   ScheduledListStore.clearDirty();
   applyScheduledGuardSyncCheckAfterListLoad(context, reconciled.length);
+}
+
+function formatDayKey(now: number): string {
+  const date = new Date(now);
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const monthText = month < 10 ? `0${month}` : `${month}`;
+  const dayText = day < 10 ? `0${day}` : `${day}`;
+  return `${date.getFullYear()}-${monthText}-${dayText}`;
+}
+
+/**
+ * 对齐 iOS：打开 App 时已落在启用的定时区间、本机却没锁，才自动同步一次。
+ * 没列表先拉；已有列表直接判断。不在任何区间内不自动跑。
+ */
+export async function recoverScheduledLockIfInWindow(context: common.Context): Promise<void> {
+  if (recoverScheduledLockInFlight) {
+    return;
+  }
+  if (AppStorage.get<boolean>(StoreKeys.UserIsLoggedIn) !== true) {
+    return;
+  }
+
+  const now = Date.now();
+  const lock = LockStore.getState();
+  if ((lock.kind === 'covenant' || lock.kind === 'quick_focus') && !isTimedLockFinished(lock, now)) {
+    return;
+  }
+
+  let sessions = ScheduledListStore.getAllSessions();
+  if (sessions.length === 0) {
+    const response = await DuoApiService.getScheduledList();
+    if (response.statusCode !== 200) {
+      return;
+    }
+    const reconciled = await reconcileStaleScheduledWindows(
+      DuoApiService.parseScheduledList(response).items,
+      context
+    );
+    ScheduledListStore.setAllSessions(reconciled);
+    ScheduledListStore.clearDirty();
+    sessions = reconciled;
+  }
+
+  const exitIds = loadExitPlanIds(context);
+  const dueIds: string[] = [];
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    if (!isScheduledGuardEligible(session) || session.enabled === false) {
+      continue;
+    }
+    if (session.session_id.length === 0) {
+      continue;
+    }
+    if (isScheduledTornToday(session.session_id, exitIds, now)) {
+      continue;
+    }
+    if (!isScheduledSessionInWindow(session, now)) {
+      continue;
+    }
+    dueIds.push(session.session_id);
+  }
+  if (dueIds.length === 0) {
+    return;
+  }
+
+  dueIds.sort((left: string, right: string): number => {
+    if (left < right) {
+      return -1;
+    }
+    if (left > right) {
+      return 1;
+    }
+    return 0;
+  });
+  const key = `${formatDayKey(now)}:${dueIds.join(',')}`;
+  if (autoSyncedScheduleWindows.has(key)) {
+    return;
+  }
+
+  recoverScheduledLockInFlight = true;
+  try {
+    const result = await syncScheduledGuardsManually(context);
+    if (result.ok) {
+      autoSyncedScheduleWindows.add(key);
+    }
+  } finally {
+    recoverScheduledLockInFlight = false;
+  }
 }
 
 /** 对齐 RN syncScheduledGuardsManually：用户点击「同步定时任务」 */

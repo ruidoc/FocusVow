@@ -12,7 +12,7 @@ import { compressAvatarForUpload } from '../services/AvatarCompressService';
 import { ExtendApiService } from '../services/ExtendApiService';
 import { FocusSyncService } from '../services/FocusSyncService';
 import { syncAllPlanGuardStrategies } from '../services/ScreenTimeService';
-import { clearAllScheduledGuardOnLogout, clearScheduledGuardSyncFlags, loadScheduledListOnLogin, markAwaitingScheduledGuardSyncCheck } from '../services/ScheduledCovenantService';
+import { clearAllScheduledGuardOnLogout, clearScheduledGuardSyncFlags, loadScheduledListOnLogin, markAwaitingScheduledGuardSyncCheck, recoverScheduledLockIfInWindow } from '../services/ScheduledCovenantService';
 import { clearExitPlanIds } from '../services/ExitPlanIdsService';
 import { WeChatOpenService } from '../services/WeChatOpenService';
 import { HuaweiAccountService } from '../services/HuaweiAccountService';
@@ -582,6 +582,7 @@ export class UserStore {
   static async syncGuardsOnLogin(context: common.UIAbilityContext): Promise<void> {
     PlanStore.hydrate(context);
     await loadScheduledListOnLogin(context);
+    await recoverScheduledLockIfInWindow(context);
     const planResult = await syncAllPlanGuardStrategies(PlanStore.getPlans());
     if (!planResult.ok) {
       console.warn(`Plan guard sync on login skipped: ${planResult.message}`);

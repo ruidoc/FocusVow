@@ -11,18 +11,28 @@ import {
 } from "../../services/SubscriptionApiService";
 import { WeChatOpenService, WeChatPayParams } from "../../services/WeChatOpenService";
 import { BenefitStore } from "../../stores/BenefitStore";
-import { FeatureFlagKeys } from "../../config/FeatureFlags";
 import { FeatureFlagStore } from "../../stores/FeatureFlagStore";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { mergeQuickPayDisplayCopy, QuickPayDisplayCopy } from "../../utils/ProQuickPayCopy";
+import {
+  isProductCouponDeal,
+  isWechatCouponActive,
+  planPromoEndsAt,
+  quickPayBadgeLabel,
+  quickPayCtaLabel,
+  resolveQuickPayProduct,
+} from "../../utils/PaywallUtil";
 
 /** 快付弹窗固定亮色壳，与 RN ConfirmationModal gold + Colors.light 一致，不跟随 App 暗黑 */
 const GOLD_LINE1: string = "#B8741A";
+const GOLD_HIGHLIGHT: string = "#FFE08A";
 const GOLD_ACCENT_DEEP: string = "#C45A00";
+const TRIAL_GREEN: string = "#16A34A";
+const LIMITED_OFFER_GIFT: string = "#FFF0D4";
+const RESTORE_PRICE: string = "#F59E0B";
 const SHELL_BG: string = "#F5F7FB";
 const SHELL_TOP: string = "#FFF7EB";
 const LIGHT_TEXT: string = "#0F172A";
-const LIGHT_TEXT2: string = "#64748B";
 const LIGHT_TEXT3: string = "#94A3B8";
 const PRICE_FONT_SIZE: number = 60;
 const SUFFIX_FONT_SIZE: number = 24;
@@ -37,8 +47,12 @@ const PRICE_GLYPH_SINK: number = -14;
 const SUFFIX_GLYPH_SINK: number = -4;
 
 function yuanText(fen: number): string {
-  const yuan = fen / 100;
-  return Number.isInteger(yuan) ? `${yuan}` : yuan.toFixed(2);
+  const yuan = Math.round(fen) / 100;
+  const rounded = Math.round(yuan * 100) / 100;
+  if (Number.isInteger(rounded)) {
+    return `${rounded}`;
+  }
+  return rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 function closeQuickPay(): void {
@@ -50,19 +64,57 @@ function closeQuickPay(): void {
 }
 @Component
 export struct ProQuickPayHost {
-  @StorageLink(StoreKeys.ProQuickPayVisible) @Watch("onVisibleChanged") visible: boolean = false;
+  @Prop hostId: string = "main";
+  @StorageLink(StoreKeys.ProQuickPayVisible) @Watch("syncSheet") visible: boolean = false;
+  @StorageLink(StoreKeys.ProQuickPayForegroundHost) @Watch("syncSheet") foregroundHost: string = "main";
   @StorageLink(StoreKeys.ProQuickPaySource) source: string = "";
   @StorageLink(StoreKeys.ProQuickPayReason) reason: string = "";
   @StorageLink(StoreKeys.ProQuickPayTitle) title: string = "";
   @StorageLink(StoreKeys.ProQuickPayLine2) line2Override: string = "";
-  @StorageLink(StoreKeys.FeatureFlagsOff) featuresOff: string[] = [];
+  @State private sheetOpen: boolean = false;
+  private presenting: boolean = false;
   @State private product: VipProduct | null = null;
   @State private paying: boolean = false;
+  @State private promoEndsAt: number = 0;
+  @State private promoTick: number = 0;
+  @State private catalog: VipProduct[] = [];
+  private quickPayOpenedAtMs: number = 0;
+  private quickPayClosedTracked: boolean = false;
+  private promoTimerId: number = -1;
 
   aboutToAppear(): void {
-    if (this.visible) {
-      void this.onSheetOpen();
+    this.syncSheet();
+  }
+
+  aboutToDisappear(): void {
+    this.clearPromoTimer();
+  }
+
+  private clearPromoTimer(): void {
+    if (this.promoTimerId >= 0) {
+      clearInterval(this.promoTimerId);
+      this.promoTimerId = -1;
     }
+  }
+
+  private refreshPromoState(): void {
+    const product = this.product;
+    if (!product) {
+      this.promoEndsAt = 0;
+      return;
+    }
+    const endsAt = planPromoEndsAt(product, this.catalog);
+    this.promoEndsAt = endsAt ?? 0;
+  }
+
+  private startPromoTimer(): void {
+    this.clearPromoTimer();
+    this.promoTimerId = setInterval(() => {
+      this.promoTick++;
+      if (this.promoEndsAt > 0 && this.promoEndsAt <= Date.now()) {
+        void this.loadProduct();
+      }
+    }, 1000);
   }
 
   private async onSheetOpen(): Promise<void> {
@@ -71,42 +123,77 @@ export struct ProQuickPayHost {
     void this.loadProduct();
   }
 
-  private onVisibleChanged(): void {
-    if (this.visible) {
-      void this.onSheetOpen();
-    } else {
-      this.paying = false;
+  private syncSheet(): void {
+    const show = this.visible && this.foregroundHost === this.hostId;
+    if (show) {
+      if (!this.presenting) {
+        this.presenting = true;
+        this.quickPayClosedTracked = false;
+        this.quickPayOpenedAtMs = Date.now();
+        AnalyticsService.trackEvent("paywall_opened", this.buildQuickPayTrackProps());
+        void this.onSheetOpen();
+      }
+      if (!this.sheetOpen) {
+        this.sheetOpen = true;
+      }
+      return;
     }
+    if (this.sheetOpen) {
+      this.sheetOpen = false;
+    }
+    if (!this.presenting) {
+      return;
+    }
+    this.presenting = false;
+    this.paying = false;
+    if (!this.visible) {
+      this.trackQuickPayClosed("dismiss");
+    }
+  }
+
+  private buildQuickPayTrackProps(): Record<string, Object> {
+    const props: Record<string, Object> = {};
+    props["paywall_name"] = "paywall_quick";
+    props["entry_source"] = this.source;
+    props["purchase_intent"] = "subscribe";
+    const product = this.product;
+    if (product) {
+      props["product_id"] = product.product_id;
+      props["period"] = product.period;
+      props["price"] = product.price;
+      props["currency"] = "CNY";
+    }
+    return props;
+  }
+
+  private trackQuickPayClosed(closeAction: string): void {
+    if (this.quickPayClosedTracked) {
+      return;
+    }
+    this.quickPayClosedTracked = true;
+    const props = this.buildQuickPayTrackProps();
+    props["close_action"] = closeAction;
+    props["dwell_ms"] = Date.now() - this.quickPayOpenedAtMs;
+    AnalyticsService.trackEvent("paywall_closed", props);
   }
 
   private displayCopy(): QuickPayDisplayCopy {
     return mergeQuickPayDisplayCopy(this.source, this.reason, this.title, this.line2Override);
   }
 
-  private showInviteAlt(): boolean {
-    return !FeatureFlagStore.isFeatureOff(FeatureFlagKeys.QUICK_PAY_INVITE);
-  }
-
   private ctaLabel(): string {
     if (!this.product) {
       return "请选择套餐";
     }
-    return "升级双月Pro";
+    return quickPayCtaLabel(this.product.period);
   }
 
   private async loadProduct(): Promise<void> {
     const list = await SubscriptionApiService.listVipProducts();
-    let picked: VipProduct | null = null;
-    for (let i = 0; i < list.length; i++) {
-      if (list[i].period === 2) {
-        picked = list[i];
-        break;
-      }
-    }
-    if (!picked && list.length > 0) {
-      picked = list[0];
-    }
-    this.product = picked;
+    this.catalog = list;
+    this.product = resolveQuickPayProduct(list);
+    this.refreshPromoState();
+    this.startPromoTimer();
   }
 
   private dismiss(): void {
@@ -115,17 +202,15 @@ export struct ProQuickPayHost {
   }
 
   private openFullPaywall(): void {
+    AnalyticsService.trackEvent(
+      "paywall_more_plans_clicked",
+      this.buildQuickPayTrackProps(),
+    );
+    this.trackQuickPayClosed("more_plans");
     const params: Record<string, Object> = {};
     params["entry_source"] = this.source;
     this.dismiss();
     router.pushUrl({ url: PageRoutes.Membership, params }).catch(() => {});
-  }
-
-  private openInviteRedeem(): void {
-    const params: Record<string, Object> = {};
-    params["entry_source"] = `pro_quick_pay_${this.source}`;
-    this.dismiss();
-    router.pushUrl({ url: PageRoutes.Redeem, params }).catch(() => {});
   }
 
   private async pay(): Promise<void> {
@@ -134,13 +219,7 @@ export struct ProQuickPayHost {
       return;
     }
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const props: Record<string, Object> = {};
-    props["screen_name"] = "pro_quick_pay";
-    props["entry_source"] = this.source;
-    props["product_id"] = product.product_id;
-    props["period"] = product.period;
-    props["price"] = product.price;
-    props["currency"] = "CNY";
+    const props = this.buildQuickPayTrackProps();
     props["purchase_source"] = "wechat";
     AnalyticsService.trackEvent("paywall_purchase_clicked", props);
     AnalyticsService.trackEvent("purchase_started", props);
@@ -173,6 +252,7 @@ export struct ProQuickPayHost {
       AnalyticsService.trackEvent("purchase_completed", props);
       showToast("开通成功，权益已生效", this.getUIContext());
       this.paying = false;
+      this.trackQuickPayClosed("purchase_success");
       this.dismiss();
     } catch (error) {
       this.paying = false;
@@ -212,10 +292,19 @@ export struct ProQuickPayHost {
           .fontSize(20)
           .fontWeight(FontWeight.Medium)
           .fontColor(LIGHT_TEXT)
-        Text("Pro")
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(LIGHT_TEXT)
+        Stack({ alignContent: Alignment.Bottom }) {
+          Row()
+            .width(42)
+            .height(12)
+            .borderRadius(6)
+            .backgroundColor(GOLD_HIGHLIGHT)
+            .opacity(0.85)
+            .margin({ bottom: 4 })
+          Text("Pro")
+            .fontSize(20)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(LIGHT_TEXT)
+        }
         Text(" 更划算")
           .fontSize(20)
           .fontWeight(FontWeight.Medium)
@@ -227,7 +316,58 @@ export struct ProQuickPayHost {
   }
 
   private loadedProductPrice(): number {
-    return this.product !== null ? this.product.price : 0;
+    const product = this.product;
+    if (!product) {
+      return 0;
+    }
+    const endsAt = product.coupon_ends_at;
+    if (typeof endsAt === "number" && !isWechatCouponActive(endsAt)) {
+      const delta = product.coupon_delta_fen ?? 0;
+      if (delta > 0) {
+        return product.price + delta;
+      }
+      if (product.original_price > 0) {
+        return product.original_price;
+      }
+    }
+    return product.price;
+  }
+
+  private showCouponPromoLine(): boolean {
+    if (this.promoEndsAt > 0) {
+      return true;
+    }
+    return this.product !== null && this.product.period === 2;
+  }
+
+  private promoRemainText(): string {
+    const now = Date.now() + (this.promoTick >= 0 ? 0 : 0);
+    const totalSec = Math.max(0, Math.ceil((this.promoEndsAt - now) / 1000));
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const pad = (value: number): string => (value < 10 ? `0${value}` : `${value}`);
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+
+  private showRestorePrice(): boolean {
+    const product = this.product;
+    if (!product || (product.coupon_delta_fen ?? 0) <= 0) {
+      return false;
+    }
+    if (!isProductCouponDeal(product)) {
+      return false;
+    }
+    return typeof product.coupon_ends_at === "number";
+  }
+
+  private restorePriceText(): string {
+    const product = this.product;
+    if (!product) {
+      return "";
+    }
+    const fen = this.loadedProductPrice() + (product.coupon_delta_fen ?? 0);
+    return `结束恢复 ¥${yuanText(fen)}`;
   }
 
   @Builder
@@ -266,7 +406,7 @@ export struct ProQuickPayHost {
               .margin({ left: 2 })
           }.alignItems(VerticalAlign.Bottom)
           Row() {
-            Text("双月 Pro")
+            Text(this.product ? quickPayBadgeLabel(this.product.period) : "双月 Pro")
               .fontSize(BADGE_FONT_SIZE)
               .lineHeight(BADGE_FONT_SIZE)
               .fontWeight(FontWeight.Bold)
@@ -293,8 +433,37 @@ export struct ProQuickPayHost {
       .alignItems(VerticalAlign.Bottom)
       .justifyContent(FlexAlign.Center)
       .alignSelf(ItemAlign.Center)
-      .margin({ top: 36 });
+      .margin({ top: this.showCouponPromoLine() ? 24 : 36 });
     }
+  }
+
+  @Builder
+  private buildCouponPromoLine(): void {
+    Row({ space: 8 }) {
+      Row({ space: 4 }) {
+        SymbolGlyph($r("sys.symbol.gift"))
+          .fontSize(13)
+          .fontColor([LIMITED_OFFER_GIFT])
+        Text(this.promoEndsAt > 0 ? "特惠仅剩" : "限时特惠")
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor("#FFFFFF")
+      }
+      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+      .borderRadius(8)
+      .backgroundColor(TRIAL_GREEN)
+      .alignItems(VerticalAlign.Center)
+
+      if (this.promoEndsAt > 0) {
+        Text(this.promoRemainText())
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(TRIAL_GREEN)
+          .letterSpacing(0.5)
+      }
+    }
+    .justifyContent(FlexAlign.Center)
+    .margin({ top: 10 })
   }
 
   @Builder
@@ -309,8 +478,20 @@ export struct ProQuickPayHost {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width("100%")
 
-      this.buildLine2()
+      if (this.showCouponPromoLine()) {
+        this.buildCouponPromoLine()
+      } else {
+        this.buildLine2()
+      }
       this.buildPriceBlock()
+      if (this.showRestorePrice()) {
+        Text(this.restorePriceText())
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(RESTORE_PRICE)
+          .textAlign(TextAlign.Center)
+          .margin({ top: 10 })
+      }
       Row({ space: 12 }) {
         Text("升级即同意《付费服务协议》")
           .fontSize(12)
@@ -376,19 +557,6 @@ export struct ProQuickPayHost {
             void this.pay();
           }
         })
-
-        if (this.showInviteAlt()) {
-          Text("邀请好友，免费领 Pro ›")
-            .fontSize(13)
-            .lineHeight(20)
-            .fontColor(LIGHT_TEXT2)
-            .textAlign(TextAlign.Center)
-            .width("100%")
-            .margin({ top: 14 })
-            .onClick(() => {
-              this.openInviteRedeem();
-            });
-        }
       }
       .width("100%")
       .padding({
@@ -442,7 +610,7 @@ export struct ProQuickPayHost {
     Column()
       .width(0)
       .height(0)
-      .bindSheet($$this.visible, this.sheetContent(), {
+      .bindSheet($$this.sheetOpen, this.sheetContent(), {
         height: SheetSize.FIT_CONTENT,
         preferType: SheetType.BOTTOM,
         showClose: false,
@@ -450,7 +618,9 @@ export struct ProQuickPayHost {
         backgroundColor: Color.Transparent,
         maskColor: "rgba(0, 0, 0, 0.5)",
         onDisappear: () => {
-          closeQuickPay();
+          if (this.foregroundHost === this.hostId) {
+            closeQuickPay();
+          }
           this.paying = false;
         },
       });

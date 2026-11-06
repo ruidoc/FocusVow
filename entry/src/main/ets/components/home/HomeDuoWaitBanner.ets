@@ -9,6 +9,7 @@ import { StoreKeys } from '../../stores/StoreKeys';
 
 @Component
 export struct HomeDuoWaitBanner {
+  @Prop embedInNoticeHub: boolean = false;
   @StorageLink(StoreKeys.DuoWaitSessionId) duoWaitSessionId: string = '';
   @StorageLink(StoreKeys.DuoWaitTitle) duoWaitTitle: string = '';
   @StorageLink(StoreKeys.DuoWaitIsScheduled) duoWaitIsScheduled: boolean = false;
@@ -79,7 +80,7 @@ export struct HomeDuoWaitBanner {
         })
       }
       .width('100%')
-      .margin({ top: 16 })
+      .margin({ top: this.embedInNoticeHub ? 0 : 16 })
       .borderRadius(28)
       .clip(true)
       .onClick(() => {

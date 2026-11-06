@@ -24,7 +24,7 @@ function readVariant(raw: string, key: string): string {
       return '';
     }
     const text = String(value);
-    if (text === 'experiment' || text === 'control') {
+    if (/^[a-z][a-z0-9_]{0,15}$/.test(text)) {
       return text;
     }
   } catch (_e) {
@@ -52,7 +52,7 @@ export class AbStore {
   }
 
   static isExperiment(key: string): boolean {
-    return AbStore.getVariant(key) === 'experiment';
+    return AbStore.getVariant(key) === 'exper';
   }
 
   static clear(context?: common.Context): void {

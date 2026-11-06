@@ -1,11 +1,9 @@
 import { SystemNavPage } from "../../components/common/SystemNavPage";
-import { showErrorToast } from "../../common/Toast";
 import { AppTheme } from "../../constants/Theme";
 import { common } from "@kit.AbilityKit";
 import { createEmptyUserInfo, UserInfo } from "../../models/UserModel";
 import { router } from "@kit.ArkUI";
-import { PageRoutes, pushLogin, pushRoute } from "../../router/PageRoutes";
-import { WeComCustomerService } from "../../services/WeComCustomerService";
+import { PageRoutes, pushLogin, pushRoute, pushUserProfile, pushContact } from "../../router/PageRoutes";
 import { BenefitStore } from "../../stores/BenefitStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { SettingsStore } from "../../stores/SettingsStore";
@@ -13,6 +11,7 @@ import { FeatureFlagKeys } from "../../config/FeatureFlags";
 import { FeatureFlagStore } from "../../stores/FeatureFlagStore";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { UserStore } from "../../stores/UserStore";
+import { SubscriptionApiService } from "../../services/SubscriptionApiService";
 
 bootstrapStores();
 
@@ -21,6 +20,7 @@ const SHOW_MEMBERSHIP_CARD: boolean = true;
 
 @Component
 export struct ProfilePage {
+  @Prop @Watch("onIsPageActiveChanged") isPageActive: boolean = true;
   @StorageLink(StoreKeys.SettingsHasAuthorized) hasAuthorized: boolean = false;
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
@@ -28,6 +28,8 @@ export struct ProfilePage {
   @StorageLink(StoreKeys.BenefitMembershipStatus) membershipStatus: string = "none";
   @StorageLink(StoreKeys.FeatureFlagsOff) featuresOff: string[] = [];
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = "light";
+  @State membershipKind: string = "";
+  @State membershipPeriod: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -39,7 +41,40 @@ export struct ProfilePage {
     void UserStore.syncRemoteIfLoggedIn(hostContext);
     if (UserStore.isLoggedIn()) {
       void BenefitStore.refresh();
+      void this.loadMembershipCard();
     }
+  }
+
+  private onIsPageActiveChanged(): void {
+    if (!this.isPageActive || !this.isLoggedIn) {
+      return;
+    }
+    void BenefitStore.refresh();
+    void this.loadMembershipCard();
+  }
+
+  private async loadMembershipCard(): Promise<void> {
+    if (!UserStore.isLoggedIn()) {
+      this.membershipKind = "";
+      this.membershipPeriod = 0;
+      return;
+    }
+    const snapshot = await SubscriptionApiService.fetchSubscription();
+    if (!snapshot) {
+      return;
+    }
+    this.membershipKind = snapshot.membership_kind ?? "";
+    this.membershipPeriod = snapshot.period ?? 0;
+  }
+
+  private showYearlyCardCopy(): boolean {
+    if (!this.isMembershipActive()) {
+      return false;
+    }
+    if (this.membershipKind === "free_trial") {
+      return true;
+    }
+    return this.membershipKind === "paid" && this.membershipPeriod >= 12;
   }
 
   private getDisplayName(): string {
@@ -70,7 +105,7 @@ export struct ProfilePage {
       pushLogin();
       return;
     }
-    pushRoute(PageRoutes.ProfileEdit);
+    pushUserProfile(this.userInfo.id);
   }
 
   private openMembershipPage(): void {
@@ -96,12 +131,8 @@ export struct ProfilePage {
     });
   }
 
-  private async openContactSupport(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext, 'user_tab');
-    if (errorMessage !== null) {
-      showErrorToast(errorMessage, this.getUIContext());
-    }
+  private openContactPage(): void {
+    pushContact("user_tab");
   }
 
   private isPromoVipEnabled(): boolean {
@@ -125,10 +156,17 @@ export struct ProfilePage {
   }
 
   private getMemberDesc(): string {
-    if (this.isMembershipActive()) {
-      return "升级年包，再送2个月会员";
+    if (!this.isMembershipActive()) {
+      return "开通后解锁全部高级专注能力";
     }
-    return "开通后解锁全部高级专注能力";
+    if (this.showYearlyCardCopy()) {
+      return "全部能力已解锁，尽情蜕变吧～";
+    }
+    return "升级年包，再送2个月会员";
+  }
+
+  private getActiveMemberCta(): string {
+    return this.showYearlyCardCopy() ? "详情" : "升级";
   }
 
   @Builder
@@ -245,7 +283,7 @@ export struct ProfilePage {
                 this.openMembershipPage();
               });
           } else {
-            Button("升级")
+            Button(this.getActiveMemberCta())
               .height(32)
               .padding({ left: 14, right: 14 })
               .type(ButtonType.Normal)
@@ -382,7 +420,7 @@ export struct ProfilePage {
       .width("100%")
       .padding({ top: 8, bottom: 8 })
       .onClick(() => {
-        void this.openContactSupport();
+        this.openContactPage();
       })
     }
     .width("100%")

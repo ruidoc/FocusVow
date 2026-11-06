@@ -7,6 +7,7 @@ import { ScheduledScenePreset } from '../../models/ScheduledScenePreset';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { DuoSessionView, sortScheduledSessions } from '../../models/DuoModel';
 import { PageRoutes, pushPlanAddFromPreset, pushRoute } from '../../router/PageRoutes';
+import { isSleepSchedule } from '../../utils/ScheduledClockUtil';
 import { DuoApiService } from '../../services/DuoApiService';
 import {
   hydrateScheduledGuardSyncFlags,
@@ -42,6 +43,7 @@ export struct PlanListContent {
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
   @State syncingGuards: boolean = false;
+  @State syncHelpOpen: boolean = false;
   @StorageLink(StoreKeys.NeedsScheduledGuardSync) needsScheduledGuardSync: boolean = false;
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
 
@@ -64,7 +66,7 @@ export struct PlanListContent {
   private refreshDisplaySessions(): void {
     const filter = this.getCurrentFilter();
     const filtered = this.allSessions.filter((session: DuoSessionView) =>
-      this.matchesFilter(session, filter));
+      !isSleepSchedule(session.schedule_json) && this.matchesFilter(session, filter));
     this.displaySessions = sortScheduledSessions(filtered);
   }
 
@@ -192,6 +194,7 @@ export struct PlanListContent {
 
       const result = await syncScheduledGuardsManually(hostContext);
       if (result.ok) {
+        this.syncHelpOpen = false;
         showToast('已同步到本机', this.getUIContext());
       } else if (result.message.length > 0) {
         showErrorToast(result.message, this.getUIContext());
@@ -375,8 +378,78 @@ export struct PlanListContent {
     .alignItems(HorizontalAlign.Center)
   }
 
+  @Builder
+  private buildNotWorkingEntry(): void {
+    Row({ space: 6 }) {
+      SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
+        .fontSize(16)
+        .fontColor([AppTheme.colors.warning])
+      Text('定时任务未生效？')
+        .fontSize(14)
+        .fontColor(AppTheme.colors.warning)
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+    .padding({ top: 4, bottom: 4 })
+    .onClick(() => {
+      this.syncHelpOpen = true;
+    })
+  }
+
+  @Builder
+  private buildSyncHelpSheet(): void {
+    Column({ space: 0 }) {
+      Row() {
+        Text('定时任务未生效')
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .height(56)
+      .padding({ left: 40, right: 40 })
+      .justifyContent(FlexAlign.Center)
+
+      Text('仅仅在定时未生效时，尝试重置定时任务，请不要频繁重置。重置不会删除当前定时任务，只是刷新，解决偶尔不生效的问题。')
+        .fontSize(14)
+        .lineHeight(22)
+        .fontColor(AppTheme.colors.textSecondary)
+        .width('100%')
+        .margin({ top: 4, bottom: 16 })
+      Row({ space: 6 }) {
+        if (!this.syncingGuards) {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(18)
+            .fontColor([AppTheme.colors.primary])
+        }
+        Text(this.syncingGuards ? '重置中...' : '重置定时任务')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.primary)
+      }
+      .width('100%')
+      .height(44)
+      .margin({ top: 4 })
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(AppTheme.colors.surface)
+      .borderRadius(AppTheme.radius.button)
+      .opacity(this.syncingGuards ? 0.6 : 1)
+      .onClick(() => {
+        if (!this.syncingGuards) {
+          void this.syncLocalGuards();
+        }
+      })
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, bottom: 24 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
   build() {
-    Refresh({ refreshing: $$this.isRefreshing }) {
+    Column() {
+      Refresh({ refreshing: $$this.isRefreshing }) {
       List({ space: 0, scroller: this.listScroller }) {
         if (SHOW_SCHEDULED_ROLE_FILTER) {
           ListItem() {
@@ -451,13 +524,30 @@ export struct PlanListContent {
     .onRefreshing(() => {
       void this.loadAll(true);
     })
+    .layoutWeight(1)
     .width('100%')
-    .height('100%')
     .align(Alignment.TopStart)
     .padding({ left: 20, right: 20 })
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean) => {
       if (isVisible && this.isPageActive) {
         void this.syncOnVisible();
+      }
+    })
+
+      if (this.allSessions.length > 0) {
+        this.buildNotWorkingEntry()
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .bindSheet($$this.syncHelpOpen, this.buildSyncHelpSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      preferType: SheetType.BOTTOM,
+      showClose: true,
+      dragBar: false,
+      backgroundColor: AppTheme.colors.surface,
+      onDisappear: () => {
+        this.syncHelpOpen = false;
       }
     })
   }

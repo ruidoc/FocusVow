@@ -5,6 +5,8 @@ import { FocusPlan, normalizePlanRepeatDays, normalizeTimeText } from '../models
 import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
 import { resolveInstantLockMinutes } from '../utils/TimerMode';
 import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
+import { SettingsStore } from '../stores/SettingsStore';
+import { StoreKeys } from '../stores/StoreKeys';
 
 export interface GuardResult<T> {
   ok: boolean;
@@ -26,6 +28,10 @@ interface ScheduledTimeSpec {
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'ScreenTimeGuard';
+
+let screenTimePromptOpen: boolean = false;
+let screenTimePromptedForegroundAt: number = -1;
+let screenTimePromptStartedAt: number = 0;
 
 function toBusinessMessage(fallback: string): string {
   return fallback;
@@ -252,22 +258,24 @@ async function startPlanGuardStrategy(planId: string): Promise<void> {
   }
 }
 
-/** 定时契约未到窗口时 start 可能失败，add/update 成功即可由系统到点拉起 */
-async function startScheduledGuardStrategy(strategyName: string): Promise<void> {
+/** 未 start 的策略不会到点生效。已在执行视为成功；其他失败必须往上抛 */
+async function startScheduledGuardStrategy(strategyName: string): Promise<boolean> {
   try {
     await guardService.startGuardStrategy(strategyName);
+    return true;
   } catch (error) {
     const guardError = getGuardErrorLike(error as Object);
     if (shouldIgnoreStartError(guardError)) {
-      return;
+      return true;
     }
     hilog.warn(
       DOMAIN,
       TAG,
-      'startScheduledGuardStrategy lenient %{public}s: %{public}s',
+      'startScheduledGuardStrategy %{public}s: %{public}s',
       strategyName,
       formatGuardError(`startGuardStrategy(${strategyName})`, error as Object)
     );
+    return false;
   }
 }
 
@@ -364,6 +372,35 @@ export async function ensureScreenTimeAuthorization(
   }
 
   return requestScreenTimeAuthorization(context);
+}
+
+/**
+ * 打开 App：和立即开始同一套判断。未授权就直接拉起系统申请。
+ * 同一次前台只查一次。
+ */
+export async function promptScreenTimeIfRevoked(context: common.UIAbilityContext): Promise<boolean> {
+  if (isHarmonyPcOr2in1()) {
+    return true;
+  }
+  if (screenTimePromptOpen) {
+    return false;
+  }
+  const foregroundAt = AppStorage.get<number>(StoreKeys.AppForegroundAt) ?? 0;
+  const nowMs = Date.now();
+  if (screenTimePromptedForegroundAt === foregroundAt || nowMs - screenTimePromptStartedAt < 1500) {
+    return checkScreenTimeAuthorized();
+  }
+  screenTimePromptOpen = true;
+  screenTimePromptStartedAt = nowMs;
+  screenTimePromptedForegroundAt = foregroundAt;
+  try {
+    const result = await ensureScreenTimeAuthorization(context);
+    SettingsStore.updateAuthorization(context, result.ok, result.message);
+    return result.ok;
+  } finally {
+    screenTimePromptOpen = false;
+    screenTimePromptedForegroundAt = AppStorage.get<number>(StoreKeys.AppForegroundAt) ?? screenTimePromptedForegroundAt;
+  }
 }
 
 export async function chooseRestrictedApps(
@@ -660,10 +697,20 @@ export async function syncScheduledSessionGuardStrategy(
     const specs = buildScheduledTimeSpecs(effectiveSnapshot);
     const wanted = new Set<string>(specs.map((item: ScheduledTimeSpec) => item.name));
     await cleanupStaleScheduledGuardNames(effectiveSnapshot.sessionId, wanted);
+    let started = true;
     for (let i = 0; i < specs.length; i++) {
       await upsertGuardStrategy(createScheduledGuardStrategy(effectiveSnapshot, specs[i]));
-      // 未到窗口时 start 可能失败；add/update 成功即可由系统到点拉起，勿抛错中断后续 P2 注册
-      await startScheduledGuardStrategy(specs[i].name);
+      const startOk = await startScheduledGuardStrategy(specs[i].name);
+      if (!startOk) {
+        started = false;
+      }
+    }
+    if (!started) {
+      return {
+        ok: false,
+        data: false,
+        message: '屏时策略已保存，但没有启动，到点不会锁机'
+      };
     }
     return {
       ok: true,

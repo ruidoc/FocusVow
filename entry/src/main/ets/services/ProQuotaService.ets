@@ -1,14 +1,17 @@
 import { common } from "@kit.AbilityKit";
 import { ApiConfig } from "../config/ApiConfig";
+import { readStoredString, writeStoredString } from "./PreferencesService";
 import { QuickTaskStore } from "../stores/QuickTaskStore";
 import { ScheduledListStore } from "../stores/ScheduledListStore";
+import { isSleepSchedule } from "../utils/ScheduledClockUtil";
 import { ensureProMembership, isMemberActive, openVipPurchase } from "../utils/PaywallNavigationUtil";
 
 export const FREE_QUICK_TASK_LIMIT: number = 2;
 export const FREE_SCHEDULED_TASK_LIMIT: number = 1;
 export const FREE_DELAYED_START_MINUTES: number = 5;
-export const FREE_DELAYED_START_MINUTES_LIST: number[] = [5, 10, 15];
-const DEV_FREE_DELAYED_START_MINUTES: number = 1;
+/** 免费版每日可预约延时专注次数（会员不限） */
+export const FREE_DELAYED_START_DAILY_LIMIT: number = 1;
+const DELAYED_START_USAGE_KEY: string = "delayed_start_usage";
 
 export function countEnabledQuickTasks(excludeTaskId: string = ''): number {
   const tasks = QuickTaskStore.getTasks();
@@ -49,6 +52,9 @@ export function countEnabledScheduledAsInitiator(excludeSessionId: string = ''):
     if (session.viewer_role !== 'initiator' || !session.enabled) {
       continue;
     }
+    if (isSleepSchedule(session.schedule_json)) {
+      continue;
+    }
     if (excludeSessionId.length > 0 && session.session_id === excludeSessionId) {
       continue;
     }
@@ -66,6 +72,14 @@ export function canEnableMoreScheduled(excludeSessionId: string = ''): boolean {
 
 /** @returns true 可启用；false 已弹出快付 */
 export function promptEnableScheduledSlot(excludeSessionId: string = ''): boolean {
+  if (excludeSessionId.length > 0) {
+    const sessions = ScheduledListStore.getAllSessions();
+    for (let i = 0; i < sessions.length; i++) {
+      if (sessions[i].session_id === excludeSessionId && isSleepSchedule(sessions[i].schedule_json)) {
+        return true;
+      }
+    }
+  }
   if (canEnableMoreScheduled(excludeSessionId)) {
     return true;
   }
@@ -104,40 +118,48 @@ export function promptSlotUpsellIfDisabled(enabled: boolean | undefined, kind: s
   openSlotUpsell(kind);
 }
 
-function isFreeAllowedDelayMinutes(delayMinutes: number): boolean {
-  if (FREE_DELAYED_START_MINUTES_LIST.indexOf(delayMinutes) >= 0) {
-    return true;
-  }
-  if (ApiConfig.isDevEnvironment() && delayMinutes === DEV_FREE_DELAYED_START_MINUTES) {
-    return true;
-  }
-  return false;
+function todayKey(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  const monthText = month < 10 ? `0${month}` : `${month}`;
+  const dayText = day < 10 ? `0${day}` : `${day}`;
+  return `${now.getFullYear()}-${monthText}-${dayText}`;
 }
 
-export function ensureDelayMinutesAllowed(delayMinutes: number): boolean {
+function getDelayedStartUsageToday(context: common.Context): number {
+  const raw = readStoredString(context, DELAYED_START_USAGE_KEY, "");
+  const parts = raw.split("|");
+  if (parts.length !== 2 || parts[0] !== todayKey()) {
+    return 0;
+  }
+  const count = Number(parts[1]);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+export function recordDelayedStartUsage(context: common.Context): void {
+  if (isMemberActive()) {
+    return;
+  }
+  const count = getDelayedStartUsageToday(context) + 1;
+  writeStoredString(context, DELAYED_START_USAGE_KEY, `${todayKey()}|${count}`);
+}
+
+export function ensureDelayMinutesAllowed(context: common.Context, delayMinutes: number): boolean {
   if (delayMinutes <= 0) {
     return true;
   }
   if (isMemberActive()) {
     return true;
   }
-  if (!isFreeAllowedDelayMinutes(delayMinutes)) {
-    return ensureProMembership('delayed_start_limit', {
-      proUnlock: true,
-      reason: '自定义延时为 Pro 专属',
-    });
+  if (getDelayedStartUsageToday(context) < FREE_DELAYED_START_DAILY_LIMIT) {
+    return true;
   }
-  return true;
+  return ensureProMembership("delayed_start_limit", { proUnlock: true });
 }
 
 export function ensureDelayStartAllowed(context: common.Context, delayMinutes: number): boolean {
-  if (delayMinutes <= 0) {
-    return true;
-  }
-  if (!ensureDelayMinutesAllowed(delayMinutes)) {
-    return false;
-  }
-  return true;
+  return ensureDelayMinutesAllowed(context, delayMinutes);
 }
 
 function allDelayPickerOptions(): number[] {

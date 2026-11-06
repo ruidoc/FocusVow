@@ -15,6 +15,11 @@ function buildUpsertBody(payload: QuickTaskUpsertPayload): Record<string, Object
   if (payload.enabled !== undefined) {
     body['enabled'] = payload.enabled === true;
   }
+  const partnerId = (payload.partner_user_id ?? '').trim();
+  if (partnerId.length > 0) {
+    body['partner_user_id'] = partnerId;
+    body['partner_nickname'] = (payload.partner_nickname ?? '').trim();
+  }
   return body;
 }
 

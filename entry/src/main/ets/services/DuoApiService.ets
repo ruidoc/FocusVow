@@ -19,6 +19,12 @@ import { ApiEnvelope } from '../models/UserModel';
 import { ExtensionNetworkService } from './ExtensionNetworkService';
 import { HttpService } from './HttpService';
 
+export interface PendingFriendInvite {
+  token: string;
+  durationMin: number;
+  initiatorName: string;
+}
+
 export class DuoApiService {
   static async instantStart(
     title: string,
@@ -31,6 +37,25 @@ export class DuoApiService {
       'timer_mode': timerMode === 'countup' ? 'countup' : 'countdown'
     };
     return HttpService.post('/duo/instant/start', body);
+  }
+
+  static async inviteFriend(
+    targetUserId: string,
+    title: string,
+    durationMin: number,
+    timerMode: string = 'countdown'
+  ): Promise<ApiEnvelope> {
+    const body: Record<string, Object> = {
+      'target_user_id': targetUserId,
+      'title': title,
+      'duration_min': durationMin,
+      'timer_mode': timerMode === 'countup' ? 'countup' : 'countdown'
+    };
+    return HttpService.post('/duo/instant/invite-friend', body);
+  }
+
+  static async getPendingFriendInvite(): Promise<ApiEnvelope> {
+    return HttpService.get('/duo/friend-invite/pending');
   }
 
   static async instantCreate(
@@ -112,6 +137,12 @@ export class DuoApiService {
     if (payload.mode && payload.mode.length > 0) {
       body['mode'] = payload.mode;
     }
+    if (payload.friend_invite_user_id && payload.friend_invite_user_id.length > 0) {
+      body['friend_invite_user_id'] = payload.friend_invite_user_id;
+    }
+    if (payload.kind && payload.kind.length > 0) {
+      body['kind'] = payload.kind;
+    }
     return HttpService.post('/duo/scheduled/create', body);
   }
 
@@ -189,9 +220,29 @@ export class DuoApiService {
     return HttpService.post(`/duo/scheduled/${encodeURIComponent(sessionId)}/cancel`, body);
   }
 
+  static async getScheduledStats(sessionId: string): Promise<ApiEnvelope> {
+    return HttpService.get(`/duo/scheduled/${encodeURIComponent(sessionId)}/stats`, true);
+  }
+
+  static async getScheduledRecords(
+    sessionId: string,
+    page: number,
+    limit: number,
+  ): Promise<ApiEnvelope> {
+    const query: Record<string, string> = {};
+    query['page'] = String(page);
+    query['limit'] = String(limit);
+    return HttpService.getWithQuery(
+      `/duo/scheduled/${encodeURIComponent(sessionId)}/records`,
+      query,
+      true,
+    );
+  }
+
   static parseScheduledList(envelope: ApiEnvelope): DuoScheduledListResult {
     if (envelope.statusCode !== 200 || !envelope.data) {
-      return { items: [] };
+      const empty: DuoScheduledListResult = { items: [] };
+      return empty;
     }
     return parseDuoScheduledList(envelope.data as Record<string, Object>);
   }
@@ -262,6 +313,28 @@ export class DuoApiService {
       'period': period
     };
     return HttpService.getWithQuery('/checkins/stats/by-day', query);
+  }
+
+  static parsePendingFriendInvite(envelope: ApiEnvelope): PendingFriendInvite | null {
+    if (envelope.statusCode !== 200 || !envelope.data || typeof envelope.data !== 'object') {
+      return null;
+    }
+    const data = envelope.data as Record<string, Object>;
+    const token = String(data['token'] ?? '').trim();
+    if (token.length === 0) {
+      return null;
+    }
+    const initiatorRaw = data['initiator'];
+    let name = '';
+    if (initiatorRaw && typeof initiatorRaw === 'object') {
+      name = String((initiatorRaw as Record<string, Object>)['nickname'] ?? '').trim();
+    }
+    const invite: PendingFriendInvite = {
+      token: token,
+      durationMin: Number(data['duration_min']) || 0,
+      initiatorName: name.length > 0 ? name : '搭子',
+    };
+    return invite;
   }
 
   static parseSession(envelope: ApiEnvelope): DuoSessionView | null {

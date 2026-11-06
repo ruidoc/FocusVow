@@ -13,17 +13,3 @@ export class FeatureFlagKeys {
   /** 快付弹窗「邀请好友」入口；在 features_off 中则隐藏 */
   static readonly QUICK_PAY_INVITE: string = 'quick_pay_invite';
 }
-
-/** Android / 鸿蒙微信支付会员商品（含年包，与 RN 微信渠道 catalog 一致） */
-export const PROMO_VIP_PRODUCT_IDS: string[] = [
-  'com.focusone.vip_month',
-  'com.focusone.vip_2month',
-  'com.focusone.vip_12',
-];
-
-export function isPromoVipProductId(productId: string): boolean {
-  if (PROMO_VIP_PRODUCT_IDS.includes(productId)) {
-    return true;
-  }
-  return /^com\.focusone\.vip_/.test(productId);
-}

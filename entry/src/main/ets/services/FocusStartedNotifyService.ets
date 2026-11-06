@@ -6,7 +6,7 @@ import { readStoredString, writeStoredString } from './PreferencesService';
 const LOG_TAG: string = 'FocusStartedNotify';
 const DEVICE_ID_KEY: string = 'analytics.device_id';
 
-export type FocusStartScene = 'solo_start' | 'delayed_solo_start' | 'duo_initiate_start' | 'duo_join_start';
+export type FocusStartScene = 'solo_start' | 'delayed_solo_start' | 'duo_initiate_start' | 'duo_join_start' | 'cycle_guard_start';
 export type FocusSessionType = 'instant' | 'scheduled' | 'solo_once';
 
 export interface FocusStartedReportParams {

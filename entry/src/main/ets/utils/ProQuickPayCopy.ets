@@ -9,10 +9,9 @@ export function resolveQuickPaySceneLines(entrySource: string): QuickPayDisplayC
   switch (entrySource) {
     case 'quick_task_slot':
     case 'quick_task_limit':
-      return { line1: '免费可用 2 个快捷任务', line2: '' };
     case 'scheduled_task_slot':
     case 'scheduled_task_limit':
-      return { line1: '免费可用 1 条定时任务', line2: '' };
+      return { line1: '解锁 Pro 后继续', line2: '' };
     case 'cycle_guard':
       return {
         line1: '短视频限额为 Pro 专属',
@@ -25,7 +24,7 @@ export function resolveQuickPaySceneLines(entrySource: string): QuickPayDisplayC
       };
     case 'delayed_start_limit':
       return {
-        line1: '自定义延时为 Pro 专属',
+        line1: '免费版每日可预约 1 次',
         line2: '升级享无限延时专注',
       };
     case 'membership_expiring':

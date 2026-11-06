@@ -132,6 +132,8 @@ export interface DuoScheduledCreatePayload {
   end_min: number;
   repeat: string;
   participation_mode?: DuoParticipationMode;
+  friend_invite_user_id?: string;
+  kind?: string;
   initiator_apps?: string[];
   mode?: string;
 }
@@ -537,6 +539,12 @@ export function getScheduledListStatusLabel(
     if (isTodayScheduledWindowEnded(session)) {
       return '今日已完成';
     }
+  }
+  if (session.status === 'active' && !isScheduledSessionActivationOpen(session)) {
+    if (isTodayScheduledWindowEnded(session)) {
+      return '今日已完成';
+    }
+    return '待开始';
   }
   return getScheduledSessionStatusLabel(session);
 }

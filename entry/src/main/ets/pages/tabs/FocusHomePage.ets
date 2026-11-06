@@ -4,12 +4,15 @@ import { showToast } from "../../common/Toast";
 import { InputConfirmSheet } from "../../components/common/InputConfirmSheet";
 import { OnboardingMembershipOverlay } from "../../components/home/OnboardingMembershipOverlay";
 import { HomeTodayCard } from "../../components/home/HomeTodayCard";
+import { CheckinPickerDialog } from "../../components/home/CheckinPickerDialog";
 import { HomeActionCard } from "../../components/home/HomeActionCard";
-import { HomeDuoWaitBanner } from "../../components/home/HomeDuoWaitBanner";
-import { HomeScheduledSyncBanner } from "../../components/home/HomeScheduledSyncBanner";
+import { HomeToolChip } from "../../components/home/HomeToolChip";
+import { HomeNoticePrimaryBanner } from "../../components/home/HomeNoticePrimaryBanner";
 import { DuoFocusHeader } from "../../components/focus/DuoFocusHeader";
 import { FocusTimeRing } from "../../components/focus/FocusTimeRing";
 import { AppTheme } from "../../constants/Theme";
+import { LegalUrls } from "../../constants/LegalUrls";
+import { HomeCopy } from "../../constants/HomeCopy";
 import { ApiConfig } from "../../config/ApiConfig";
 import { TEAR_CONFIRM_REQUIRED_TEXT, TEAR_CONFIRM_REQUIRED_TEXT_DUO } from "../../constants/TearConfirm";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
@@ -26,10 +29,9 @@ import {
   resolveDuoSessionIdFromLock,
 } from "../../models/ActiveLockModel";
 import { isPastCountupMinimum } from "../../utils/TimerMode";
-import { inboxBadgeLabel } from "../../models/InboxModel";
 import { FocusPlan } from "../../models/PlanModel";
 import { isDuoWaitPartnerJoined, resolveDuoCounterpartName } from "../../models/DuoModel";
-import { PageRoutes, pushLogin, pushQuickStart, pushRoute, openScheduledTaskTabOnce } from "../../router/PageRoutes";
+import { PageRoutes, pushLogin, pushQuickStart, pushRoute, openScheduledTaskTabOnce, pushWebView } from "../../router/PageRoutes";
 import { FREE_DELAYED_START_MINUTES } from "../../services/ProQuotaService";
 import {
   endCycleGuardLock,
@@ -104,8 +106,18 @@ import { UserStore } from "../../stores/UserStore";
 import { InboxStore } from "../../stores/InboxStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
+import { ThemeStore } from "../../stores/ThemeStore";
+import { AbStore } from "../../stores/AbStore";
 import { FLOATING_TAB_EXTRA_BOTTOM_VP } from "./MainTabUtil";
 import { syncHarmonyUpdateBadge } from "../../services/AppUpdateService";
+import {
+  CheckinKind,
+  isSleepCheckinOpen,
+  isWakeCheckinOpen,
+  sleepWindowLabel,
+  wakeWindowLabel,
+} from "../../utils/CheckinUtil";
+import { HomeChallengeSignalsUtil } from "../../utils/HomeChallengeSignals";
 
 bootstrapStores();
 
@@ -123,8 +135,7 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.PendingQuickStartTitle) pendingQuickStartTitle: string = "";
   @StorageLink(StoreKeys.PendingQuickStartDelayMin) pendingQuickStartDelayMin: number = 0;
   @StorageLink(StoreKeys.PendingQuickStartStartAtMs) pendingQuickStartStartAtMs: number = 0;
-  @StorageLink(StoreKeys.InboxUnread) inboxUnread: number = 0;
-  @StorageLink(StoreKeys.InboxImportantUnread) inboxImportant: number = 0;
+  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @State homeStatis: RecordStatisSnapshot = {
     actual_mins: 0,
     task_count: 0,
@@ -142,15 +153,37 @@ export struct FocusHomePage {
   @State showActivationModal: boolean = false;
   @State activationGuestPath: boolean = false;
   @StorageLink(StoreKeys.MainTabFloatingBar) floatingTabBar: boolean = false;
+  /** 对齐 RN useAbStore f_home_table === 'exper' */
+  @State showWeekTableHome: boolean = false;
+  @State showChallengeEntry: boolean = false;
+  @State challengeDot: boolean = false;
+  @State soloChallengeId: string = "";
+  @State challengeActiveCount: number = 0;
 
   private timerId: number = -1;
   private postOnboardingFlowStarted: boolean = false;
   private isEndingLock: boolean = false;
   private duoWaitPollTick: number = 0;
   private duoPartnerSyncSessionId: string = "";
+  private checkinHeaderDialog: CustomDialogController = new CustomDialogController({
+    builder: CheckinPickerDialog({
+      onSelect: (kind: string): void => {
+        this.onCheckinKindFromHeader(kind);
+      }
+    }),
+    customStyle: true,
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: 'rgba(0, 0, 0, 0.4)'
+  });
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AbStore.hydrate(hostContext);
+    this.showWeekTableHome = AbStore.isExperiment('f_home_table');
+    void AbStore.sync(hostContext).then(() => {
+      this.showWeekTableHome = AbStore.isExperiment('f_home_table');
+    });
     SettingsStore.hydrate(hostContext);
     PlanStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
@@ -330,6 +363,7 @@ export struct FocusHomePage {
   aboutToDisappear(): void {
     unregisterHomeStatsReload();
     this.clearTimer();
+    this.checkinHeaderDialog.close();
   }
 
   private clearTimer(): void {
@@ -412,13 +446,107 @@ export struct FocusHomePage {
     pushRoute(PageRoutes.GlobalRank);
   }
 
-  private onInboxPress(): void {
+  private async refreshChallengeHomeSignals(hostContext: common.UIAbilityContext): Promise<void> {
+    try {
+      const todayMin = Math.max(0, Math.round(this.homeStatis.actual_mins));
+      const signals = await HomeChallengeSignalsUtil.refresh(hostContext, todayMin);
+      this.showChallengeEntry = signals.showEntry;
+      this.challengeDot = signals.dot;
+      this.soloChallengeId = signals.soloId;
+      this.challengeActiveCount = signals.activeCount;
+    } catch (_e) {
+      this.showChallengeEntry = false;
+      this.challengeDot = false;
+      this.soloChallengeId = "";
+      this.challengeActiveCount = 0;
+    }
+  }
+
+  private openCheckinHeaderPicker(): void {
+    this.trackHomeEntry('checkin');
+    this.checkinHeaderDialog.open();
+  }
+
+  private onCheckinKindFromHeader(kind: string): void {
+    if (kind === 'wake') {
+      this.openCheckinKindFromHeader('wake', isWakeCheckinOpen());
+      return;
+    }
+    if (kind === 'sleep') {
+      this.openCheckinKindFromHeader('sleep', isSleepCheckinOpen());
+      return;
+    }
+    if (kind === 'focus') {
+      this.openCheckinKindFromHeader('focus', true);
+    }
+  }
+
+  private openCheckinKindFromHeader(kind: CheckinKind, open: boolean): void {
+    if (!open) {
+      const windowLabel = kind === 'wake' ? wakeWindowLabel() : sleepWindowLabel();
+      showToast(`开放时段 ${windowLabel}`, this.getUIContext());
+      return;
+    }
     if (!UserStore.isLoggedIn()) {
       showToast("请先登录", this.getUIContext());
       pushLogin();
       return;
     }
-    pushRoute(PageRoutes.InboxList);
+    AppStorage.setOrCreate(StoreKeys.CheckinKind, kind);
+    pushRoute(PageRoutes.Checkin);
+  }
+
+  private openChallengeListWeb(): void {
+    pushWebView(LegalUrls.CHALLENGE_WEB_BASE, '挑战');
+  }
+
+  private onChallengePress(): void {
+    void this.handleChallengePress();
+  }
+
+  private async handleChallengePress(): Promise<void> {
+    this.trackHomeEntry('challenge');
+    if (!UserStore.isLoggedIn()) {
+      showToast("请先登录", this.getUIContext());
+      pushLogin();
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const soloId = this.soloChallengeId.trim();
+    const activeCount = this.challengeActiveCount;
+    if (soloId.length > 0 && activeCount === 1) {
+      pushWebView(`${LegalUrls.CHALLENGE_WEB_BASE}/detail?id=${encodeURIComponent(soloId)}`, '挑战');
+      return;
+    }
+    if (this.challengeDot) {
+      const todayMin = Math.max(0, Math.round(this.homeStatis.actual_mins));
+      const shareUrl = await HomeChallengeSignalsUtil.resolveCheckinShareWebUrl(
+        hostContext,
+        todayMin,
+        LegalUrls.CHALLENGE_WEB_BASE,
+      );
+      if (shareUrl !== null && shareUrl.length > 0) {
+        pushWebView(shareUrl, '挑战打卡');
+        return;
+      }
+      if (soloId.length > 0) {
+        pushWebView(`${LegalUrls.CHALLENGE_WEB_BASE}/detail?id=${encodeURIComponent(soloId)}`, '挑战');
+        return;
+      }
+      this.openChallengeListWeb();
+      return;
+    }
+    if (soloId.length > 0) {
+      pushWebView(`${LegalUrls.CHALLENGE_WEB_BASE}/detail?id=${encodeURIComponent(soloId)}`, '挑战');
+      return;
+    }
+    this.openChallengeListWeb();
+  }
+
+  private onToggleTheme(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const nextMode = this.themeMode === 'dark' ? 'light' : 'dark';
+    ThemeStore.setMode(hostContext, nextMode);
   }
 
   private async reconcileDuoWait(): Promise<void> {
@@ -552,6 +680,7 @@ export struct FocusHomePage {
         await BenefitStore.refresh();
         await InboxStore.fetchUnread();
         await this.loadHomeTodayStats(hostContext);
+        void syncHarmonyUpdateBadge(hostContext);
       }
     } finally {
       this.isRefreshing = false;
@@ -1195,7 +1324,7 @@ export struct FocusHomePage {
     Row({ space: 8 }) {
       Text(title)
         .fontSize(18)
-        .fontWeight(FontWeight.Medium)
+        .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.colors.textPrimary)
       Text(hint)
         .fontSize(12)
@@ -1221,7 +1350,7 @@ export struct FocusHomePage {
           },
         })
         HomeActionCard({
-          label: '放松后开始',
+          label: '预约开始',
           symbol: $r('sys.symbol.hourglass'),
           iconColor: AppTheme.colors.warning,
           onPress: () => {
@@ -1236,32 +1365,47 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildPhoneDisciplineEntries(): void {
-    Column({ space: 12 }) {
-      this.buildHomeSectionHeading('帮我戒手机', '到点自动锁，自控力差用它')
-      Row({ space: 12 }) {
-        HomeActionCard({
-          label: '定时锁机',
-          symbol: $r('sys.symbol.alarm'),
-          iconColor: AppTheme.colors.primary,
-          onPress: () => {
-            this.trackHomeEntry('scheduled_lock');
-            this.openScheduledLockEntry();
-          },
-        })
-        HomeActionCard({
-          label: '短视频限额',
-          symbol: $r('sys.symbol.play'),
-          iconColor: AppTheme.colors.fuchsia,
-          onPress: () => {
-            this.trackHomeEntry('cycle_guard');
-            this.openCycleGuardEntry();
-          },
-        })
-      }.width('100%')
+  private buildHomeShortcutRow(): void {
+    Row({ space: 10 }) {
+      HomeToolChip({
+        label: '早睡',
+        symbol: $r('sys.symbol.moon'),
+        iconColor: '#06B6D4',
+        onPress: () => {
+          this.trackHomeEntry('sleep_plan');
+          this.openSleepPlanEntry();
+        },
+      })
+      HomeToolChip({
+        label: '定时锁机',
+        symbol: $r('sys.symbol.alarm'),
+        iconColor: AppTheme.colors.primary,
+        onPress: () => {
+          this.trackHomeEntry('scheduled_lock');
+          this.openScheduledLockEntry();
+        },
+      })
+      HomeToolChip({
+        label: '戒短视频',
+        symbol: $r('sys.symbol.play'),
+        iconColor: AppTheme.colors.fuchsia,
+        onPress: () => {
+          this.trackHomeEntry('cycle_guard');
+          this.openCycleGuardEntry();
+        },
+      })
     }
     .width('100%')
-    .margin({ top: 20 })
+    .margin({ top: 12 })
+    .alignItems(VerticalAlign.Top)
+  }
+
+  private openSleepPlanEntry(): void {
+    if (!UserStore.isLoggedIn()) {
+      pushLogin();
+      return;
+    }
+    pushRoute(PageRoutes.SleepPlan);
   }
 
   @Builder
@@ -1315,6 +1459,35 @@ export struct FocusHomePage {
     .alignItems(HorizontalAlign.Center)
   }
 
+  @Builder
+  private buildDuoSection(): void {
+    Column({ space: 12 }) {
+      this.buildHomeSectionHeading('搭子互督', '双人战，一人退出，双方失败')
+      Row({ space: 12 }) {
+        HomeActionCard({
+          label: '发起互督',
+          symbol: $r('sys.symbol.person_badge_plus'),
+          iconColor: AppTheme.colors.accentBlue,
+          onPress: () => {
+            this.trackHomeEntry('duo_create');
+            this.ensureLoginThen(PageRoutes.DuoCreate);
+          },
+        })
+        HomeActionCard({
+          label: '加入互督',
+          symbol: $r('sys.symbol.key'),
+          iconColor: AppTheme.colors.accentOrange,
+          onPress: () => {
+            this.trackHomeEntry('duo_join');
+            this.ensureLoginThen(PageRoutes.DuoJoin);
+          },
+        })
+      }.width('100%')
+    }
+    .width('100%')
+    .margin({ top: 24 })
+  }
+
   private getHomeScrollBottomPadding(): number {
     return 16 + (this.floatingTabBar ? FLOATING_TAB_EXTRA_BOTTOM_VP : 0);
   }
@@ -1327,38 +1500,12 @@ export struct FocusHomePage {
         taskCount: this.homeStatis.task_count,
         failCount: this.homeStatis.fail_count,
         successRate: this.homeStatis.success_rate,
+        showHeaderCheckinButton: !this.showWeekTableHome,
       })
-      HomeScheduledSyncBanner()
-      HomeDuoWaitBanner()
-
-      Column({ space: 12 }) {
-        this.buildHomeSectionHeading('搭子互督', '双人战，一人退出，双方失败')
-        Row({ space: 12 }) {
-          HomeActionCard({
-            label: '发起互督',
-            symbol: $r('sys.symbol.person_badge_plus'),
-            iconColor: AppTheme.colors.accentBlue,
-            onPress: () => {
-              this.trackHomeEntry('duo_create');
-              this.ensureLoginThen(PageRoutes.DuoCreate);
-            },
-          })
-          HomeActionCard({
-            label: '加入互督',
-            symbol: $r('sys.symbol.link'),
-            iconColor: AppTheme.colors.accentOrange,
-            onPress: () => {
-              this.trackHomeEntry('duo_join');
-              this.ensureLoginThen(PageRoutes.DuoJoin);
-            },
-          })
-        }.width('100%')
-      }
-      .width('100%')
-      .margin({ top: 24 })
-
+      this.buildHomeShortcutRow()
+      HomeNoticePrimaryBanner()
+      this.buildDuoSection()
       this.buildSoloQuickEntries()
-      this.buildPhoneDisciplineEntries()
     }
     .width('100%')
     .padding({
@@ -1370,16 +1517,33 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildOrgEntryButton(): void {
+  private buildHomeHeader(): void {
     Row() {
-      Text('专注契约')
+      Text(HomeCopy.APP_TITLE)
         .fontSize(22)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .letterSpacing(1)
         .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
 
       Row({ space: 4 }) {
+        if (this.showWeekTableHome) {
+          Button({ type: ButtonType.Normal }) {
+            Image($r('app.media.check_in'))
+              .width(24)
+              .height(24)
+              .objectFit(ImageFit.Contain)
+          }
+          .width(36)
+          .height(36)
+          .backgroundColor(Color.Transparent)
+          .onClick(() => {
+            this.openCheckinHeaderPicker();
+          })
+        }
+
         Button({ type: ButtonType.Normal }) {
           Image($r('app.media.ranking'))
             .width(26)
@@ -1393,42 +1557,17 @@ export struct FocusHomePage {
           this.onRankPress();
         })
 
-        Stack() {
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.bell'))
-              .fontSize(22)
-              .fontColor([AppTheme.colors.textPrimary])
-          }
-          .width(36)
-          .height(36)
-          .backgroundColor(Color.Transparent)
-          .onClick(() => {
-            this.onInboxPress();
-          })
-
-          if (this.inboxImportant > 0) {
-            Row() {
-              Text(inboxBadgeLabel(this.inboxImportant))
-                .fontSize(10)
-                .fontWeight(FontWeight.Bold)
-                .fontColor('#FFFFFF')
-            }
-            .height(16)
-            .padding({ left: 4, right: 4 })
-            .borderRadius(8)
-            .backgroundColor(AppTheme.colors.danger)
-            .justifyContent(FlexAlign.Center)
-            .position({ x: 20, y: 2 })
-          } else if (this.inboxUnread > 0) {
-            Circle()
-              .width(8)
-              .height(8)
-              .fill(AppTheme.colors.danger)
-              .position({ x: 24, y: 6 })
-          }
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph(this.themeMode === 'dark' ? $r('sys.symbol.sun_max') : $r('sys.symbol.moon'))
+            .fontSize(22)
+            .fontColor([AppTheme.colors.textPrimary])
         }
         .width(36)
         .height(36)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          this.onToggleTheme();
+        })
       }
     }
     .width('100%')
@@ -1455,7 +1594,7 @@ export struct FocusHomePage {
     } else {
       Column() {
         if (this.shouldShowOrgEntry()) {
-          this.buildOrgEntryButton()
+          this.buildHomeHeader()
         }
         Refresh({ refreshing: $$this.isRefreshing }) {
           Scroll() {

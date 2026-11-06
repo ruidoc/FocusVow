@@ -10,7 +10,8 @@ import {
   clearScheduledActivationTracking,
   markScheduledListStale,
   reconcileScheduledCovenantActivation,
-  reconcileStaleScheduledWindows
+  reconcileStaleScheduledWindows,
+  recoverScheduledLockIfInWindow
 } from './ScheduledCovenantService';
 import { restartCycleGuardIfEnabled } from './CycleGuardService';
 import { queueHonorCertificate } from './CertificatePendingService';
@@ -22,6 +23,11 @@ import { SettingsStore } from '../stores/SettingsStore';
 import { UserStore } from '../stores/UserStore';
 
 let covenantCompletionInFlight: boolean = false;
+
+/** 打开 App：定时窗口已到、本机还没锁，则走公共同步定时任务 */
+async function reconcileMissedScheduledLock(context: common.UIAbilityContext): Promise<void> {
+  await recoverScheduledLockIfInWindow(context);
+}
 
 async function releaseCovenantGuard(state: ActiveLockState): Promise<boolean> {
   const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
@@ -67,6 +73,7 @@ export async function reconcileCovenantNaturalCompletion(
 export async function reconcileLockLifecycle(context: common.UIAbilityContext): Promise<void> {
   await reconcileScheduledCovenantActivation(context);
   await reconcileCovenantNaturalCompletion(context);
+  await reconcileMissedScheduledLock(context);
   if (UserStore.isLoggedIn()) {
     await FocusSyncService.flushPending(context);
     const cached = ScheduledListStore.getAllSessions();

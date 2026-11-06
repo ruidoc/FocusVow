@@ -11,7 +11,7 @@ import {
   RankMember,
   RankRow,
 } from '../../models/GlobalRankModel';
-import { backRoute, pushLogin } from '../../router/PageRoutes';
+import { backRoute, pushLogin, pushUserProfile } from '../../router/PageRoutes';
 import { GlobalRankService } from '../../services/GlobalRankService';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
@@ -178,9 +178,16 @@ struct GlobalRankPage {
     return member.isPro && member.userId !== DUO_AI_PARTNER_ID;
   }
 
+  private openMemberProfile(member: RankMember): void {
+    if (member.userId.length === 0 || member.userId === DUO_AI_PARTNER_ID) {
+      return;
+    }
+    pushUserProfile(member.userId);
+  }
+
   @Builder
   private buildMemberFace(member: RankMember, size: number): void {
-    if (member.userId === DUO_AI_PARTNER_ID) {
+    if (member.userId === DUO_AI_PARTNER_ID && member.avatar.length === 0) {
       Image($r('app.media.ai_bot'))
         .width(Math.round(size * 0.6))
         .height(Math.round(size * 0.6))
@@ -232,6 +239,9 @@ struct GlobalRankPage {
     }
     .width(size)
     .height(size)
+    .onClick(() => {
+      this.openMemberProfile(member);
+    })
   }
 
   @Builder

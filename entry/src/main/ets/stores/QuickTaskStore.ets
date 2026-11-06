@@ -1,4 +1,4 @@
-import { QuickTask, QuickTaskUpsertPayload } from '../models/QuickTaskModel';
+import { isDuoQuickTask, QuickTask, QuickTaskUpsertPayload } from '../models/QuickTaskModel';
 import { ApiEnvelope } from '../models/UserModel';
 import { QuickTaskApiService } from '../services/QuickTaskApiService';
 import { bootstrapStores } from './StoreBootstrap';
@@ -59,7 +59,13 @@ export class QuickTaskStore {
   static titleExists(title: string, excludeId: string = ''): boolean {
     const name = title.trim();
     return QuickTaskStore.getTasks().some((item: QuickTask) =>
-      item.title.trim() === name && item.id !== excludeId);
+      !isDuoQuickTask(item) && item.title.trim() === name && item.id !== excludeId);
+  }
+
+  static duoTitleExists(title: string, excludeId: string = ''): boolean {
+    const name = title.trim();
+    return QuickTaskStore.getTasks().some((item: QuickTask) =>
+      isDuoQuickTask(item) && item.title.trim() === name && item.id !== excludeId);
   }
 
   static async loadAll(): Promise<ApiEnvelope> {

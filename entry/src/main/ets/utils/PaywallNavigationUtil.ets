@@ -20,6 +20,10 @@ export interface OpenVipPurchaseOptions {
   line2?: string;
 }
 
+export function markQuickPayForeground(hostId: string): void {
+  AppStorage.setOrCreate(StoreKeys.ProQuickPayForegroundHost, hostId);
+}
+
 export function isMemberActive(): boolean {
   return BenefitStore.isMemberActive();
 }

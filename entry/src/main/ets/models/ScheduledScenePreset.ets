@@ -10,17 +10,17 @@ export interface ScheduledScenePreset {
 
 export const SCHEDULED_SCENE_PRESETS: ScheduledScenePreset[] = [
   {
-    id: 'early_sleep',
-    name: '早睡',
-    description: '睡前锁定，杜绝熬夜刷手机',
+    id: 'morning_reading',
+    name: '晨读',
+    description: '清晨专注，开启高效一天',
     background: $r('app.media.scene_sleep'),
-    startTime: '22:30',
-    endTime: '5:00',
+    startTime: '06:30',
+    endTime: '08:00',
     repeat: [1, 2, 3, 4, 5, 6, 7],
   },
   {
     id: 'study',
-    name: '学习',
+    name: '写作业',
     description: '晚间专注，阻断娱乐干扰',
     background: $r('app.media.scene_study'),
     startTime: '19:30',
@@ -29,8 +29,8 @@ export const SCHEDULED_SCENE_PRESETS: ScheduledScenePreset[] = [
   },
   {
     id: 'breath',
-    name: '透透气',
-    description: '刷手机太久，出门透透气',
+    name: '学习充电',
+    description: '放下手机，专注学习充电',
     background: $r('app.media.scene_breath'),
     startTime: '16:00',
     endTime: '17:00',

@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { showToast } from '../../common/Toast';
-import { QuickTask, startWhenLabel } from '../../models/QuickTaskModel';
+import { isDuoQuickTask, QuickTask, startWhenLabel } from '../../models/QuickTaskModel';
 import { minutesToHours } from '../../models/ActiveLockModel';
 import { AppTheme } from '../../constants/Theme';
 import { PageRoutes, pushRoute, returnToMainTab } from '../../router/PageRoutes';
@@ -15,6 +15,8 @@ bootstrapStores();
 @Component
 export struct QuickTaskListContent {
   @Prop @Watch('onIsPageActiveChanged') isPageActive: boolean = true;
+  /** solo：快捷任务；duo：互督任务 */
+  @Prop listMode: string = 'solo';
 
   onCreateTask?: () => void;
   onScrollerReady?: (scroller: Scroller) => void;
@@ -24,6 +26,7 @@ export struct QuickTaskListContent {
   @StorageLink(StoreKeys.QuickTaskList) @Watch('onTasksChanged') tasks: QuickTask[] = [];
   @State instantTasks: QuickTask[] = [];
   @State delayedTasks: QuickTask[] = [];
+  @State duoTasks: QuickTask[] = [];
   @State statusMessage: string = '';
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
@@ -51,9 +54,12 @@ export struct QuickTaskListContent {
   private syncSections(): void {
     const instant: QuickTask[] = [];
     const delayed: QuickTask[] = [];
+    const duo: QuickTask[] = [];
     for (let i = 0; i < this.tasks.length; i++) {
       const task = this.tasks[i];
-      if (task.delay_min <= 0) {
+      if (isDuoQuickTask(task)) {
+        duo.push(task);
+      } else if (task.delay_min <= 0) {
         instant.push(task);
       } else {
         delayed.push(task);
@@ -61,6 +67,7 @@ export struct QuickTaskListContent {
     }
     this.instantTasks = instant;
     this.delayedTasks = delayed;
+    this.duoTasks = duo;
   }
 
   private onListDirtyChanged(): void {
@@ -129,6 +136,21 @@ export struct QuickTaskListContent {
     this.onCreateTask?.();
   }
 
+  private taskWhenLabel(task: QuickTask): string {
+    if (!isDuoQuickTask(task)) {
+      return startWhenLabel(task.delay_min);
+    }
+    const name = (task.partner_nickname ?? '').trim();
+    return `邀请 ${name.length > 0 ? name : '搭子'}`;
+  }
+
+  private startLabel(task: QuickTask): string {
+    if (!task.enabled) {
+      return '未启用';
+    }
+    return isDuoQuickTask(task) ? '邀请' : '开始';
+  }
+
   @Builder
   private buildSectionTitle(title: string): void {
     Text(title)
@@ -138,10 +160,21 @@ export struct QuickTaskListContent {
       .margin({ left: 4, bottom: 10 })
   }
 
+  private visibleCount(): number {
+    if (this.listMode === 'duo') {
+      return this.duoTasks.length;
+    }
+    return this.instantTasks.length + this.delayedTasks.length;
+  }
+
   @Builder
   private buildGroupedTaskList(): void {
     Column({ space: 0 }) {
-      if (this.instantTasks.length > 0) {
+      if (this.listMode === 'duo') {
+        ForEach(this.duoTasks, (task: QuickTask, index: number) => {
+          this.buildTaskCard(task, index, this.duoTasks.length)
+        }, (task: QuickTask) => task.id)
+      } else if (this.instantTasks.length > 0) {
         Column({ space: 0 }) {
           this.buildSectionTitle('即时任务')
           ForEach(this.instantTasks, (task: QuickTask, index: number) => {
@@ -151,7 +184,7 @@ export struct QuickTaskListContent {
         .width('100%')
       }
 
-      if (this.delayedTasks.length > 0) {
+      if (this.listMode !== 'duo' && this.delayedTasks.length > 0) {
         Column({ space: 0 }) {
           this.buildSectionTitle('延时任务')
           ForEach(this.delayedTasks, (task: QuickTask, index: number) => {
@@ -175,34 +208,38 @@ export struct QuickTaskListContent {
         .opacity(0.85)
         .margin({ bottom: 12 })
 
-      Text('还没有快捷任务')
+      Text(this.listMode === 'duo' ? '还没有互督任务' : '还没有快捷任务')
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
         .textAlign(TextAlign.Center)
 
-      Text('把常用的专注存成模版，每天点一下就开始。')
+      Text(this.listMode === 'duo'
+        ? '发起互督并选择搭子时，勾选「保存到互督任务」，下次一键邀请'
+        : '把常用的专注存成模版，每天点一下就开始。')
         .fontSize(14)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textMuted)
         .textAlign(TextAlign.Center)
         .width('100%')
 
-      Button('新建快捷任务')
-        .width('100%')
-        .height(46)
-        .type(ButtonType.Normal)
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .borderRadius(AppTheme.radius.button)
-        .clip(true)
-        .backgroundColor(AppTheme.colors.primary)
-        .fontColor('#FFFFFF')
-        .fontWeight(FontWeight.Medium)
-        .margin({ top: 20 })
-        .onClick(() => {
-          this.handleCreate();
-        })
+      if (this.listMode !== 'duo') {
+        Button('新建快捷任务')
+          .width('100%')
+          .height(46)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .borderRadius(AppTheme.radius.button)
+          .clip(true)
+          .backgroundColor(AppTheme.colors.primary)
+          .fontColor('#FFFFFF')
+          .fontWeight(FontWeight.Medium)
+          .margin({ top: 20 })
+          .onClick(() => {
+            this.handleCreate();
+          })
+      }
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 78 })
@@ -227,7 +264,7 @@ export struct QuickTaskListContent {
             .fontColor(AppTheme.colors.textSecondary)
             .width('100%')
 
-          Text(startWhenLabel(task.delay_min))
+          Text(this.taskWhenLabel(task))
             .fontSize(13)
             .fontColor(AppTheme.colors.textMuted)
             .width('100%')
@@ -239,7 +276,7 @@ export struct QuickTaskListContent {
       .padding({ right: 12 })
       .alignItems(HorizontalAlign.Start)
 
-      Button(task.enabled ? '开始' : '未启用')
+      Button(this.startLabel(task))
         .height(28)
         .padding({ left: 14, right: 14 })
         .type(ButtonType.Normal)
@@ -292,7 +329,7 @@ export struct QuickTaskListContent {
             .height(220)
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-          } else if (this.tasks.length === 0) {
+          } else if (this.visibleCount() === 0) {
             this.buildEmptyState()
           } else {
             this.buildGroupedTaskList()

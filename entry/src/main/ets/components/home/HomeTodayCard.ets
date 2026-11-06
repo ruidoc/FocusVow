@@ -6,11 +6,19 @@ import {
   findNextUpcomingPlanToday,
   getPlanSecondsUntilStart,
 } from "../../models/PlanModel";
-import { PageRoutes, openScheduledTaskTabOnce, pushLogin, pushRoute } from "../../router/PageRoutes";
+import {
+  PageRoutes,
+  openScheduledTaskTabOnce,
+  pushLogin,
+  pushPointLogs,
+  pushRoute,
+} from "../../router/PageRoutes";
+import { PointApiService } from "../../services/PointApiService";
 import { openHarmonyUpdate, syncHarmonyUpdateBadge } from "../../services/AppUpdateService";
 import { AnalyticsService } from "../../services/AnalyticsService";
 import { CheckinPickerDialog } from "./CheckinPickerDialog";
 import { homeTodayMetricsBg } from "../../constants/HomeCardStyle";
+import { HomeCopy } from "../../constants/HomeCopy";
 import { HomeGlassSurface } from "./HomeGlassSurface";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { UserStore } from "../../stores/UserStore";
@@ -21,6 +29,7 @@ import {
   sleepWindowLabel,
   wakeWindowLabel,
 } from "../../utils/CheckinUtil";
+import { formatContractPoints } from "../../utils/ContractPointUtil";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -59,9 +68,12 @@ export struct HomeTodayCard {
   @Prop taskCount: number = 0;
   @Prop failCount: number = 0;
   @Prop successRate: number = 0;
+  /** false：打卡入口在顶栏（AB f_home_table=exper），与 RN FocusHomeContent 一致 */
+  @Prop showHeaderCheckinButton: boolean = true;
   @State nextPlanName: string = "";
   @State nextPlanSecondsLeft: number = 0;
   @State showNextPlan: boolean = false;
+  @State contractPoints: number = 0;
   @StorageLink(StoreKeys.HarmonyUpdateAvailable) updateAvailable: boolean = false;
   private timerId: number = -1;
   private cardTick: number = 0;
@@ -69,18 +81,34 @@ export struct HomeTodayCard {
     builder: CheckinPickerDialog({
       onSelect: (kind: string): void => {
         this.onCheckinSelected(kind);
-      }
+      },
     }),
     customStyle: true,
     alignment: DialogAlignment.Center,
     autoCancel: true,
-    maskColor: 'rgba(0, 0, 0, 0.4)'
+    maskColor: "rgba(0, 0, 0, 0.4)",
   });
 
   aboutToAppear(): void {
     this.refreshNextPlan();
     this.startTimer();
     this.refreshAppUpdate();
+    void this.loadContractPoints();
+  }
+
+  private async loadContractPoints(): Promise<void> {
+    if (!UserStore.isLoggedIn()) {
+      this.contractPoints = 0;
+      return;
+    }
+    const id = UserStore.getUserInfo().id;
+    if (id.trim().length === 0) {
+      return;
+    }
+    const profile = await PointApiService.getProfile(id);
+    if (profile) {
+      this.contractPoints = profile.points;
+    }
   }
 
   private refreshAppUpdate(): void {
@@ -90,8 +118,8 @@ export struct HomeTodayCard {
 
   private trackHomeEntry(entryKey: string): void {
     const props: Record<string, Object> = {};
-    props['entry_key'] = entryKey;
-    AnalyticsService.trackEvent('home_entry_clicked', props);
+    props["entry_key"] = entryKey;
+    AnalyticsService.trackEvent("home_entry_clicked", props);
   }
 
   aboutToDisappear(): void {
@@ -101,12 +129,12 @@ export struct HomeTodayCard {
 
   private openCheckin(kind: CheckinKind, open: boolean): void {
     if (!open) {
-      const windowLabel = kind === 'wake' ? wakeWindowLabel() : sleepWindowLabel();
+      const windowLabel = kind === "wake" ? wakeWindowLabel() : sleepWindowLabel();
       showToast(`开放时段 ${windowLabel}`, this.getUIContext());
       return;
     }
     if (!UserStore.isLoggedIn()) {
-      showToast('请先登录', this.getUIContext());
+      showToast("请先登录", this.getUIContext());
       pushLogin();
       return;
     }
@@ -115,26 +143,26 @@ export struct HomeTodayCard {
   }
 
   private onCheckinSelected(kind: string): void {
-    if (kind === 'wake') {
-      this.openCheckin('wake', isWakeCheckinOpen());
+    if (kind === "wake") {
+      this.openCheckin("wake", isWakeCheckinOpen());
       return;
     }
-    if (kind === 'sleep') {
-      this.openCheckin('sleep', isSleepCheckinOpen());
+    if (kind === "sleep") {
+      this.openCheckin("sleep", isSleepCheckinOpen());
       return;
     }
-    if (kind === 'focus') {
-      this.openCheckin('focus', true);
+    if (kind === "focus") {
+      this.openCheckin("focus", true);
     }
   }
 
   private openCheckinPicker(): void {
-    this.trackHomeEntry('checkin');
+    this.trackHomeEntry("checkin");
     this.checkinDialog.open();
   }
 
   private onAppUpdatePress(): void {
-    this.trackHomeEntry('app_update');
+    this.trackHomeEntry("app_update");
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     void openHarmonyUpdate(hostContext);
   }
@@ -171,7 +199,8 @@ export struct HomeTodayCard {
       return;
     }
     this.showNextPlan = true;
-    this.nextPlanName = nextPlan.name.trim().length > 0 ? nextPlan.name.trim() : "定时契约";
+    this.nextPlanName =
+      nextPlan.name.trim().length > 0 ? nextPlan.name.trim() : HomeCopy.SCHEDULED_PLAN;
     this.nextPlanSecondsLeft = secondsLeft;
   }
 
@@ -189,10 +218,13 @@ export struct HomeTodayCard {
     openScheduledTaskTabOnce();
   }
 
-
   private getDisplayName(): string {
     const name = this.userInfo.username.trim();
-    return name.length > 0 ? name : "朋友";
+    return name.length > 0 ? name : HomeCopy.FRIEND;
+  }
+
+  private nextPlanHeaderText(): string {
+    return `${formatNextPlanCountdown(this.nextPlanSecondsLeft)}${HomeCopy.TASK_STARTS_IN}${this.nextPlanName}`;
   }
 
   private getTodayCardGradientStart(): string {
@@ -203,6 +235,64 @@ export struct HomeTodayCard {
     return this.themeMode === "dark" ? "#5C4AB8" : "#8B73ED";
   }
 
+  private openContractScore(): void {
+    if (!UserStore.isLoggedIn()) {
+      pushLogin();
+      return;
+    }
+    pushPointLogs();
+  }
+
+  @Builder
+  private buildMetricsRow(): void {
+    Row() {
+      Column({ space: 2 }) {
+        Text(HomeCopy.FOCUS_COUNT)
+          .fontSize(13)
+          .fontColor("rgba(255,255,255,0.78)")
+          .textAlign(TextAlign.Center)
+        Text(`${this.taskCount}`)
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor("rgba(255,255,255,0.96)")
+          .textAlign(TextAlign.Center)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+      Column({ space: 2 }) {
+        Text(HomeCopy.SUCCESS_RATE)
+          .fontSize(13)
+          .fontColor("rgba(255,255,255,0.78)")
+          .textAlign(TextAlign.Center)
+        Text(`${Math.round(this.successRate)}%`)
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor("rgba(255,255,255,0.96)")
+          .textAlign(TextAlign.Center)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+      Column({ space: 2 }) {
+        Text(HomeCopy.CONTRACT_SCORE)
+          .fontSize(13)
+          .fontColor("rgba(255,255,255,0.78)")
+          .textAlign(TextAlign.Center)
+        Text(formatContractPoints(this.contractPoints))
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor("rgba(255,255,255,0.96)")
+          .textAlign(TextAlign.Center)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+      .onClick(() => {
+        this.openContractScore();
+      })
+    }
+    .width("100%")
+    .padding({ top: 10, bottom: 10 });
+  }
+
   @Builder
   private buildMetricsGlass(): void {
     HomeGlassSurface({
@@ -210,10 +300,11 @@ export struct HomeTodayCard {
       enableBlur: true,
       blurStyle: BlurStyle.Thin,
       useLightBlurTint: true,
+      fitContent: true,
       content: (): void => {
-        Row()
+        this.buildMetricsRow();
       },
-    })
+    });
   }
 
   build() {
@@ -238,9 +329,7 @@ export struct HomeTodayCard {
                 SymbolGlyph($r("sys.symbol.alarm"))
                   .fontSize(17)
                   .fontColor(["#FFFFFF"])
-                Text(
-                  `${formatNextPlanCountdown(this.nextPlanSecondsLeft)} 后开始任务 · ${this.nextPlanName}`,
-                )
+                Text(this.nextPlanHeaderText())
                   .fontSize(13)
                   .fontColor("rgba(255,255,255,0.86)")
                   .maxLines(1)
@@ -256,42 +345,34 @@ export struct HomeTodayCard {
               });
             } else {
               Text(`${getGreeting()}，${this.getDisplayName()} 👋`)
-                .fontSize(13)
+                .fontSize(14)
+                .lineHeight(18)
                 .fontColor("rgba(255,255,255,0.78)")
+                .letterSpacing(0.3)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .layoutWeight(1);
             }
             Row({ space: 8 }) {
-              Row() {
-                Image($r("app.media.check_in"))
-                  .width(this.updateAvailable ? HOME_HEADER_ICON_SIZE : 20)
-                  .height(this.updateAvailable ? HOME_HEADER_ICON_SIZE : 20)
-                if (!this.updateAvailable) {
-                  Text("打卡")
-                    .fontSize(13)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor("rgba(255,255,255,0.96)")
-                    .margin({ left: 4 })
-                    .letterSpacing(0.3)
+              if (this.showHeaderCheckinButton) {
+                Row({ space: 4 }) {
+                  Image($r("app.media.check_in"))
+                    .width(this.updateAvailable ? HOME_HEADER_ICON_SIZE : 20)
+                    .height(this.updateAvailable ? HOME_HEADER_ICON_SIZE : 20)
+                  if (!this.updateAvailable) {
+                    Text(HomeCopy.CHECKIN)
+                      .fontSize(13)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor("rgba(255,255,255,0.96)")
+                      .letterSpacing(0.3);
+                  }
                 }
+                .backgroundColor(Color.Transparent)
+                .alignItems(VerticalAlign.Center)
+                .onClick(() => {
+                  this.openCheckinPicker();
+                });
               }
-              .padding(this.updateAvailable ? { left: 0, right: 0, top: 0, bottom: 0 } : {
-                left: 8,
-                right: 11,
-                top: 5,
-                bottom: 5
-              })
-              .borderRadius(this.updateAvailable ? 0 : 18)
-              .backgroundColor(this.updateAvailable ? Color.Transparent : "rgba(255,255,255,0.18)")
-              .border({
-                width: this.updateAvailable ? 0 : 1,
-                color: "rgba(255,255,255,0.32)"
-              })
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => {
-                this.openCheckinPicker();
-              })
 
               if (this.updateAvailable) {
                 Image($r("app.media.upversion"))
@@ -299,7 +380,7 @@ export struct HomeTodayCard {
                   .height(HOME_HEADER_ICON_SIZE)
                   .onClick(() => {
                     this.onAppUpdatePress();
-                  })
+                  });
               }
             }
           }
@@ -311,96 +392,57 @@ export struct HomeTodayCard {
             justifyContent: FlexAlign.Start,
             alignItems: ItemAlign.Baseline,
           }) {
-            Text("今日专注")
+            Text(HomeCopy.TODAY_FOCUS)
               .fontSize(16)
+              .lineHeight(16)
               .fontWeight(FontWeight.Medium)
               .fontColor("rgba(255,255,255,0.96)")
               .margin({ right: 4 })
             if (Math.max(0, Math.floor(this.actualMins)) < 60) {
               Text(`${Math.max(0, Math.floor(this.actualMins))}`)
                 .fontSize(34)
+                .lineHeight(34)
                 .fontWeight(FontWeight.Medium)
                 .fontColor("#FFFFFF")
-                .margin({ left: 4, right: 4 })
-              Text("分钟")
+                .margin({ left: 4, right: 4 });
+              Text(HomeCopy.MINUTE)
                 .fontSize(16)
+                .lineHeight(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor("rgba(255,255,255,0.96)")
+                .fontColor("rgba(255,255,255,0.96)");
             } else {
               Text(`${Math.floor(Math.max(0, Math.floor(this.actualMins)) / 60)}`)
                 .fontSize(34)
+                .lineHeight(34)
                 .fontWeight(FontWeight.Medium)
                 .fontColor("#FFFFFF")
-                .margin({ left: 4, right: 4 })
-              Text("小时")
+                .margin({ left: 4, right: 4 });
+              Text(HomeCopy.HOUR)
                 .fontSize(16)
+                .lineHeight(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor("rgba(255,255,255,0.96)")
+                .fontColor("rgba(255,255,255,0.96)");
               if (Math.max(0, Math.floor(this.actualMins)) % 60 > 0) {
                 Text(`${Math.max(0, Math.floor(this.actualMins)) % 60}`)
                   .fontSize(34)
+                  .lineHeight(34)
                   .fontWeight(FontWeight.Medium)
                   .fontColor("#FFFFFF")
-                  .margin({ left: 4, right: 4 })
-                Text("分钟")
+                  .margin({ left: 4, right: 4 });
+                Text(HomeCopy.MINUTE)
                   .fontSize(16)
+                  .lineHeight(16)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor("rgba(255,255,255,0.96)")
+                  .fontColor("rgba(255,255,255,0.96)");
               }
             }
           }
           .width("100%")
-          .margin({ top: 12 })
-          Stack({ alignContent: Alignment.Center }) {
+          .margin({ top: 8 })
+          Column() {
             this.buildMetricsGlass()
-            Row() {
-              Column({ space: 2 }) {
-                Text("专注次数")
-                  .fontSize(13)
-                  .fontColor("rgba(255,255,255,0.78)")
-                  .textAlign(TextAlign.Center)
-                Text(`${this.taskCount}`)
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor("rgba(255,255,255,0.96)")
-                  .textAlign(TextAlign.Center)
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Center)
-
-              Column({ space: 2 }) {
-                Text("成功率")
-                  .fontSize(13)
-                  .fontColor("rgba(255,255,255,0.78)")
-                  .textAlign(TextAlign.Center)
-                Text(`${Math.round(this.successRate)}%`)
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor("rgba(255,255,255,0.96)")
-                  .textAlign(TextAlign.Center)
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Center)
-
-              Column({ space: 2 }) {
-                Text("毁约次数")
-                  .fontSize(13)
-                  .fontColor("rgba(255,255,255,0.78)")
-                  .textAlign(TextAlign.Center)
-                Text(`${this.failCount}`)
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor("rgba(255,255,255,0.96)")
-                  .textAlign(TextAlign.Center)
-              }
-              .layoutWeight(1)
-              .alignItems(HorizontalAlign.Center)
-            }
-            .width("100%")
-            .padding({ top: 10, bottom: 10 })
           }
           .width("100%")
-          .height(58)
           .margin({ top: 12 })
           .borderRadius(16)
           .clip(true)

@@ -1,6 +1,5 @@
 import { HttpService } from './HttpService';
 import { ApiEnvelope } from '../models/UserModel';
-import { isPromoVipProductId } from '../config/FeatureFlags';
 
 export interface VipProduct {
   id: string;
@@ -10,6 +9,17 @@ export interface VipProduct {
   price: number;
   original_price: number;
   is_subscription: number;
+  coupon_delta_fen?: number;
+  coupon_ends_at?: number | null;
+  month_deal_active?: boolean;
+}
+
+export interface SubscriptionSnapshot {
+  status: string;
+  expires_at: string;
+  membership_kind?: string;
+  source?: string;
+  period?: number;
 }
 
 export interface WeChatPayOrderData {
@@ -19,11 +29,6 @@ export interface WeChatPayOrderData {
   timeStamp: string;
   sign: string;
   out_trade_no: string;
-}
-
-export interface SubscriptionSnapshot {
-  status: string;
-  expires_at: string;
 }
 
 const ENTITLED_STATUSES: Set<string> = new Set(['active', 'canceled', 'cancelled']);
@@ -52,8 +57,24 @@ function parseVipProduct(raw: Object | undefined): VipProduct | null {
   }
   const data = raw as Record<string, Object>;
   const productId = asString(data['product_id']);
-  if (!isPromoVipProductId(productId)) {
+  if (productId.length === 0) {
     return null;
+  }
+  const couponEndsRaw = data['coupon_ends_at'];
+  let couponEndsAt: number | null | undefined = undefined;
+  if (couponEndsRaw !== undefined && couponEndsRaw !== null && String(couponEndsRaw).length > 0) {
+    couponEndsAt = asNumber(couponEndsRaw, 0);
+  }
+  const monthDealRaw = data['month_deal_active'];
+  let monthDealActive: boolean | undefined = undefined;
+  if (monthDealRaw === true) {
+    monthDealActive = true;
+  } else if (monthDealRaw === false) {
+    monthDealActive = false;
+  } else if (monthDealRaw === 1 || monthDealRaw === '1' || monthDealRaw === 'true') {
+    monthDealActive = true;
+  } else if (monthDealRaw === 0 || monthDealRaw === '0' || monthDealRaw === 'false') {
+    monthDealActive = false;
   }
   const item: VipProduct = {
     id: asString(data['id']),
@@ -63,6 +84,9 @@ function parseVipProduct(raw: Object | undefined): VipProduct | null {
     price: asNumber(data['price'], 0),
     original_price: asNumber(data['original_price'], 0),
     is_subscription: asNumber(data['is_subscription'], 0),
+    coupon_delta_fen: asNumber(data['coupon_delta_fen'], 0),
+    coupon_ends_at: couponEndsAt,
+    month_deal_active: monthDealActive,
   };
   return item;
 }
@@ -91,6 +115,9 @@ function parseSubscriptionSnapshot(raw: Object | undefined): SubscriptionSnapsho
   const snapshot: SubscriptionSnapshot = {
     status: asString(data['status']),
     expires_at: asString(data['expires_at']),
+    membership_kind: asString(data['membership_kind']),
+    source: asString(data['source']),
+    period: asNumber(data['period'], 0),
   };
   return snapshot;
 }

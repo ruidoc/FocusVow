@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { copyDuoInviteText, shareDuoInviteText } from '../../services/DuoInviteShareService';
 import { showErrorToast, showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
+import { ProQuickPayHost } from '../../components/paywall/ProQuickPayDialog';
 import { AppTheme } from '../../constants/Theme';
 import {
   DuoSessionView,
@@ -33,6 +34,7 @@ import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { loadExitPlanIds } from '../../services/ExitPlanIdsService';
 import { promptEnableScheduledSlot, upsellIfProSlotQuota } from '../../services/ProQuotaService';
+import { markQuickPayForeground } from '../../utils/PaywallNavigationUtil';
 
 bootstrapStores();
 
@@ -75,6 +77,7 @@ struct PlanDetailPage {
   }
 
   onPageShow(): void {
+    markQuickPayForeground("plan_detail");
     this.startStatusTimer();
     if (this.sessionId.length === 0 || !UserStore.isLoggedIn()) {
       return;
@@ -795,6 +798,7 @@ struct PlanDetailPage {
 
   build() {
     Stack() {
+      ProQuickPayHost({ hostId: 'plan_detail' })
       SystemNavPage({
         title: this.getPageTitle(),
         showBack: true,

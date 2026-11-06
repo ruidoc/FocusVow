@@ -14,8 +14,10 @@ import { SettingsStore } from '../stores/SettingsStore';
 import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
 import { DuoBgSyncService } from './DuoBgSyncService';
+import { ExtensionNetworkService } from './ExtensionNetworkService';
+import { loadAccessToken } from './UserPersistenceService';
 import { clearMembershipUrgencyCountdown } from '../utils/OnboardingMembershipUtil';
-import { ensureDelayStartAllowed } from './ProQuotaService';
+import { ensureDelayStartAllowed, recordDelayedStartUsage } from './ProQuotaService';
 import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from './ScheduledPlanValidation';
 
 const PENDING_KEY: string = 'pending.quick_start';
@@ -122,6 +124,8 @@ export interface PendingQuickStartPayload {
   mode: 'shield' | 'allow';
   delayMinutes: number;
   fromOnboarding: boolean;
+  /** 固定时间预约的开始时刻；相对延时不传 */
+  fixedStartAtMs?: number;
 }
 
 interface PendingQuickStartState extends PendingQuickStartPayload {
@@ -190,6 +194,26 @@ export function getPendingRemainSeconds(context: common.Context, nowMs: number =
   return Math.max(0, Math.ceil((pending.startAtMs - nowMs) / 1000));
 }
 
+function reportDelayedStartSaved(context: common.Context, pending: PendingQuickStartState): void {
+  if (loadAccessToken(context).length === 0 || pending.planId.length === 0) {
+    return;
+  }
+  const body: Record<string, Object> = {
+    'plan_id': pending.planId,
+    'title': pending.title,
+    'start_at': pending.startAtMs,
+  };
+  void ExtensionNetworkService.post(context, '/focus/delayed-start', body);
+}
+
+function reportDelayedStartCancelled(context: common.Context, planId: string): void {
+  if (loadAccessToken(context).length === 0 || planId.length === 0) {
+    return;
+  }
+  const body: Record<string, Object> = { 'plan_id': planId };
+  void ExtensionNetworkService.post(context, '/focus/delayed-start/cancel', body);
+}
+
 export function clearPendingQuickStart(context: common.Context): void {
   removeStoredKey(context, PENDING_KEY);
   syncPendingToAppStorage(null);
@@ -199,6 +223,7 @@ export function clearPendingQuickStart(context: common.Context): void {
 export async function cancelPendingQuickStart(context: common.Context): Promise<void> {
   const pending = loadPending(context);
   if (pending && pending.planId.length > 0) {
+    reportDelayedStartCancelled(context, pending.planId);
     await removePlanGuardStrategy(pending.planId);
   }
   clearPendingQuickStart(context);
@@ -212,8 +237,11 @@ export async function schedulePendingQuickStart(
     return false;
   }
   const planId = `once_${Date.now()}`;
-  // 对齐 RN：精确 now + N 分钟，倒计时从 N:00 起
-  const startAtMs = Date.now() + payload.delayMinutes * 60_000;
+  const fixedStartAtMs = payload.fixedStartAtMs ?? 0;
+  // 相对延时：精确 now + N 分钟。固定时间用所选时刻。
+  const startAtMs = fixedStartAtMs > Date.now()
+    ? fixedStartAtMs
+    : Date.now() + payload.delayMinutes * 60_000;
   const selectedTokens = SettingsStore.getState().selectedTokens;
   const pending: PendingQuickStartState = {
     title: payload.title,
@@ -249,6 +277,8 @@ export async function schedulePendingQuickStart(
     'timer_mode': payload.timerMode,
     'from_onboarding': payload.fromOnboarding,
   });
+  reportDelayedStartSaved(context, pending);
+  recordDelayedStartUsage(context);
   return true;
 }
 
@@ -280,6 +310,7 @@ export async function reconcilePendingQuickStart(context: common.Context): Promi
     return false;
   }
   if (LockStore.isLocked()) {
+    reportDelayedStartCancelled(context, pending.planId);
     clearPendingQuickStart(context);
     return true;
   }

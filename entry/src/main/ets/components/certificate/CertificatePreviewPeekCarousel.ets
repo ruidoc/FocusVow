@@ -24,7 +24,7 @@ import { TraitorShameCertificateCard } from './TraitorShameCertificateCard';
 import { VictimShameCertificateCard } from './VictimShameCertificateCard';
 
 @Component
-struct CertificateCarouselSlot {
+export struct CertificateCarouselSlot {
   @Prop kind: string = 'honor';
   @Prop honorData: HonorCertificateData = createEmptyHonorCertificateData();
   @Prop shameData: ShameCertificateData = createEmptyShameCertificateData();

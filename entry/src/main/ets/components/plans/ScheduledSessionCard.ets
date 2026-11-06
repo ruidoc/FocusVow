@@ -3,6 +3,7 @@ import {
   DuoSessionView,
   getScheduleRepeatDays,
   getScheduledListStatusLabel,
+  getScheduledParticipationLabel,
   getScheduledSessionEndMin,
   getScheduledSessionStartMin,
   isInactiveScheduledListSession,
@@ -10,8 +11,9 @@ import {
 import { summarizeRepeatDays } from '../../models/PlanModel';
 import { minutesToHours } from '../../models/ActiveLockModel';
 import { getScheduledDurationMinutes } from '../../services/ScheduledPlanValidation';
-import { AppTheme } from '../../constants/Theme';
+import { AppTheme, isDarkThemeMode } from '../../constants/Theme';
 import { loadExitPlanIds } from '../../services/ExitPlanIdsService';
+import { isSleepSchedule } from '../../utils/ScheduledClockUtil';
 
 interface ScheduledStatusTagStyle {
   textColor: string;
@@ -64,29 +66,44 @@ export struct ScheduledSessionCard {
     return getScheduledListStatusLabel(this.session, loadExitPlanIds(hostContext));
   }
 
+  private colorWithAlpha(hex: string): string {
+    const raw = hex.replace('#', '');
+    if (raw.length !== 6) {
+      return hex;
+    }
+    const red = parseInt(raw.substring(0, 2), 16);
+    const green = parseInt(raw.substring(2, 4), 16);
+    const blue = parseInt(raw.substring(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, 0.094)`;
+  }
+
+  private mutedTagBackground(): string {
+    return isDarkThemeMode() ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
+  }
+
   private getStatusTagStyle(label: string): ScheduledStatusTagStyle {
+    if (label === '未启用' || label === '今日不生效') {
+      return {
+        textColor: AppTheme.colors.text3,
+        backgroundColor: this.mutedTagBackground()
+      };
+    }
     if (label === '今日已撕毁') {
       return {
         textColor: AppTheme.colors.danger,
-        backgroundColor: AppTheme.colors.dangerSoft
+        backgroundColor: this.colorWithAlpha(AppTheme.colors.danger)
       };
     }
     if (label === '今日已完成') {
       return {
         textColor: AppTheme.colors.success,
-        backgroundColor: AppTheme.colors.successSoft
-      };
-    }
-    if (label === '今日不生效') {
-      return {
-        textColor: AppTheme.colors.textMuted,
-        backgroundColor: AppTheme.colors.surfaceRaised
+        backgroundColor: this.colorWithAlpha(AppTheme.colors.success)
       };
     }
     if (this.session.status === 'active') {
       return {
         textColor: AppTheme.colors.primary,
-        backgroundColor: AppTheme.colors.primarySoft
+        backgroundColor: this.colorWithAlpha(AppTheme.colors.primary)
       };
     }
     return {
@@ -114,6 +131,25 @@ export struct ScheduledSessionCard {
     return summarizeRepeatDays(getScheduleRepeatDays(repeat));
   }
 
+  private formatEndDate(): string {
+    const raw = this.session.end_date ?? '';
+    if (raw.length >= 10) {
+      return raw.substring(0, 10);
+    }
+    return raw;
+  }
+
+  @Builder
+  private buildSleepBadge(): void {
+    Text('早睡')
+      .fontSize(11)
+      .fontWeight(FontWeight.Bold)
+      .fontColor('#06B6D4')
+      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+      .backgroundColor('rgba(6, 182, 212, 0.14)')
+      .borderRadius(AppTheme.radius.pill)
+  }
+
   @Builder
   private buildStatusTag(label: string): void {
     Text(label)
@@ -127,7 +163,7 @@ export struct ScheduledSessionCard {
 
   build() {
     Column({ space: 10 }) {
-      Row() {
+      Row({ space: 6 }) {
         Text(this.session.title.length > 0 ? this.session.title : '定时契约')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
@@ -136,10 +172,14 @@ export struct ScheduledSessionCard {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
+        if (isSleepSchedule(this.session.schedule_json)) {
+          this.buildSleepBadge()
+        }
         if (!this.session.enabled) {
           this.buildStatusTag('未启用')
+        } else {
+          this.buildStatusTag(this.getStatusLabel())
         }
-        this.buildStatusTag(this.getStatusLabel())
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
@@ -150,13 +190,20 @@ export struct ScheduledSessionCard {
           .fontColor(AppTheme.colors.textSecondary)
           .width('100%')
 
-        Text(`${this.getRepeatLabel()} · ${this.session.expects_duo ? '搭子互督' : '单人专注'}`)
+        Text(`${this.getRepeatLabel()} · ${getScheduledParticipationLabel(this.session)}`)
           .fontSize(13)
           .fontColor(AppTheme.colors.textMuted)
           .width('100%')
 
         if (this.session.partner?.nickname) {
           Text(`搭子：${this.session.partner.nickname}`)
+            .fontSize(12)
+            .fontColor(AppTheme.colors.textMuted)
+            .width('100%')
+        }
+
+        if ((this.session.end_date ?? '').length > 0) {
+          Text(`截止 ${this.formatEndDate()}`)
             .fontSize(12)
             .fontColor(AppTheme.colors.textMuted)
             .width('100%')

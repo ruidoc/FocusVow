@@ -114,9 +114,9 @@ function resolveProUnlockReason(params: Record<string, Object> | undefined): str
 
 function buildProductTrackProps(product: VipProduct, entrySource: string): Record<string, Object> {
   const props: Record<string, Object> = {};
-  props["screen_name"] = "paywall_index";
+  props["paywall_name"] = "paywall_full";
   props["entry_source"] = entrySource;
-  props["placement"] = "paywall_index";
+  props["purchase_intent"] = "subscribe";
   props["product_id"] = product.product_id;
   props["product_name"] = product.name;
   props["period"] = product.period;
@@ -209,9 +209,9 @@ struct PaywallPage {
 
   private buildPaywallContextProps(product?: VipProduct | null): Record<string, Object> {
     const props: Record<string, Object> = {};
-    props["screen_name"] = "paywall_index";
+    props["paywall_name"] = "paywall_full";
     props["entry_source"] = this.entrySource;
-    props["placement"] = "paywall_index";
+    props["purchase_intent"] = "subscribe";
     props["purchase_source"] = "wechat";
     if (product) {
       props["product_id"] = product.product_id;

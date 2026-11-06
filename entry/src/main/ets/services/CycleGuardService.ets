@@ -14,6 +14,7 @@ import {
   savePersistedActiveLockState
 } from './ActiveLockPersistenceService';
 import { loadPersistedCycleGuardState, savePersistedCycleGuardState } from './CycleGuardPersistenceService';
+import { FocusStartedNotifyService } from './FocusStartedNotifyService';
 import { GuardResult } from './ScreenTimeService';
 
 interface GuardErrorLike {
@@ -267,6 +268,15 @@ export async function handleCycleStrategyStart(
       state.lockMinutes
     )
   );
+  await FocusStartedNotifyService.reportAndWait(context, {
+    scene: 'cycle_guard_start',
+    durationMin: state.lockMinutes,
+    sessionType: 'solo_once',
+    title: '短视频限额',
+    timerMode: 'countup',
+    planId: 'once_cycle',
+    startedAtMs: Date.now(),
+  });
 }
 
 export async function handleCycleStrategyStop(

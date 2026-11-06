@@ -18,6 +18,12 @@ import { StoreKeys } from "../../stores/StoreKeys";
 import { UserStore } from "../../stores/UserStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { confirmPaidServiceAgreement } from "../../utils/PrivacyConsentUtil";
+import {
+  isMembershipTrial,
+  planPromoEndsAt,
+  resolveQuickPayProduct,
+  withFeaturedFirst,
+} from "../../utils/PaywallUtil";
 
 bootstrapStores();
 
@@ -34,17 +40,21 @@ interface MembershipPerk {
 
 const PERKS: MembershipPerk[] = [
   { title: "无限定时", desc: "定时任务不限次", symbol: $r("sys.symbol.calendar") },
-  { title: "短视频限额", desc: "到点强行锁机", symbol: $r("sys.symbol.timer") },
+  { title: "短视频限额", desc: "控制刷手机时间", symbol: $r("sys.symbol.timer") },
   { title: "无限快捷", desc: "快捷任务不限条", symbol: $r("sys.symbol.bolt") },
-  { title: "无限延时", desc: "自定义延时时长", symbol: $r("sys.symbol.hourglass") },
+  { title: "无限延时", desc: "开始前可随时延时", symbol: $r("sys.symbol.hourglass") },
 ];
 
 function formatPrice(fen: number): string {
-  const yuan = fen / 100;
-  if (Number.isInteger(yuan)) {
-    return `¥${yuan}`;
+  const yuan = Math.round(fen) / 100;
+  const rounded = Math.round(yuan * 100) / 100;
+  if (!Number.isFinite(rounded) || rounded < 0) {
+    return "—";
   }
-  return `¥${yuan.toFixed(2)}`;
+  if (Number.isInteger(rounded)) {
+    return `¥${rounded}`;
+  }
+  return `¥${rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}`;
 }
 
 function splitPriceDisplay(raw: string): string[] {
@@ -59,25 +69,32 @@ function splitPriceDisplay(raw: string): string[] {
 
 function planTitle(period: number): string {
   if (period >= 12) {
-    return "年会员";
+    return "年度蜕变";
+  }
+  if (period === 3) {
+    return "季度冲刺";
   }
   if (period === 2) {
-    return "双月会员";
+    return "双月冲刺";
   }
   if (period === 7) {
     return "周会员";
   }
-  return "月会员";
+  return "单月体验";
 }
 
 function planTag(period: number): string {
   if (period >= 12) {
     return "多送2个月";
   }
-  if (period === 2) {
+  if (period === 2 || period === 3) {
     return "限时特惠";
   }
   return "";
+}
+
+function isSprintPeriod(period: number): boolean {
+  return period === 2 || period === 3;
 }
 
 function benefitDays(period: number): number {
@@ -87,8 +104,12 @@ function benefitDays(period: number): number {
   return Math.max(period, 1) * 30;
 }
 
-function dayPrice(product: VipProduct): string {
-  return formatPrice(Math.round(product.price / benefitDays(product.period)));
+function planPriceHint(product: VipProduct): string {
+  if (product.period >= 12 || isSprintPeriod(product.period)) {
+    const months = product.period >= 12 ? 14 : Math.max(product.period, 1);
+    return `约 ${formatPrice(product.price / months)}/月`;
+  }
+  return `约 ${formatPrice(product.price / benefitDays(product.period))}/天`;
 }
 
 function formatExpiry(dateStr: string): string {
@@ -148,11 +169,15 @@ struct MembershipPage {
   @State selectedProductId: string = "";
   @State loadingProducts: boolean = true;
   @State paymentStatus: string = "idle";
+  @State promoTick: number = 0;
+  private promoTimerId: number = -1;
   @State agreed: boolean = false;
   @State subscription: SubscriptionSnapshot | null = null;
   @State bottomInset: number = 12;
   @State contentWidth: number = 360;
   private entrySource: string = "profile";
+  private paywallOpenedAtMs: number = 0;
+  private paywallClosedTracked: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -178,8 +203,18 @@ struct MembershipPage {
     }
     const routeParams = router.getParams() as Record<string, Object>;
     this.entrySource = resolveEntrySource(routeParams);
-    this.trackRightsViewed();
+    this.paywallOpenedAtMs = Date.now();
+    this.paywallClosedTracked = false;
+    this.trackPaywallOpened();
     void this.load();
+  }
+
+  aboutToDisappear(): void {
+    this.trackPaywallClosed("navigate_away");
+    if (this.promoTimerId >= 0) {
+      clearInterval(this.promoTimerId);
+      this.promoTimerId = -1;
+    }
   }
 
   @State topInsetVp: number = 0;
@@ -197,31 +232,60 @@ struct MembershipPage {
     void BenefitStore.refresh();
     this.subscription = await SubscriptionApiService.fetchSubscription();
     const list = await SubscriptionApiService.listVipProducts();
-    const visible: VipProduct[] = [];
-    for (let i = 0; i < list.length; i++) {
-      visible.push(list[i]);
-    }
-    visible.sort(sortPlans);
-    this.products = visible;
-    let selected = visible.length > 0 ? visible[0].product_id : "";
-    for (let i = 0; i < visible.length; i++) {
-      if (visible[i].period >= 12) {
-        selected = visible[i].product_id;
-        break;
+    const ordered = withFeaturedFirst(list);
+    ordered.sort((a, b) => {
+      const featured = resolveQuickPayProduct(list);
+      if (featured && a.product_id === featured.product_id) {
+        return -1;
+      }
+      if (featured && b.product_id === featured.product_id) {
+        return 1;
+      }
+      return sortPlans(a, b);
+    });
+    this.products = ordered;
+    const featured = resolveQuickPayProduct(list);
+    let selected = featured?.product_id ?? (ordered.length > 0 ? ordered[0].product_id : "");
+    if (selected.length === 0) {
+      for (let i = 0; i < ordered.length; i++) {
+        if (ordered[i].period >= 12) {
+          selected = ordered[i].product_id;
+          break;
+        }
       }
     }
     this.selectedProductId = selected;
     this.loadingProducts = false;
+    if (this.promoTimerId < 0) {
+      this.promoTimerId = setInterval(() => {
+        this.promoTick++;
+      }, 1000);
+    }
   }
 
-  private trackRightsViewed(): void {
+  private buildPaywallContextProps(): Record<string, Object> {
     const props: Record<string, Object> = {};
-    props["screen_name"] = "rights_page";
+    props["paywall_name"] = "paywall_membership";
     props["entry_source"] = this.entrySource;
-    props["placement"] = "membership_center";
     props["subscription_status"] = this.membershipStatus;
     props["is_entitled"] = this.isActive();
-    AnalyticsService.trackEvent("rights_page_viewed", props);
+    props["purchase_intent"] = this.isActive() ? "renew" : "subscribe";
+    return props;
+  }
+
+  private trackPaywallOpened(): void {
+    AnalyticsService.trackEvent("paywall_opened", this.buildPaywallContextProps());
+  }
+
+  private trackPaywallClosed(closeAction: string): void {
+    if (this.paywallClosedTracked) {
+      return;
+    }
+    this.paywallClosedTracked = true;
+    const props = this.buildPaywallContextProps();
+    props["close_action"] = closeAction;
+    props["dwell_ms"] = Date.now() - this.paywallOpenedAtMs;
+    AnalyticsService.trackEvent("paywall_closed", props);
   }
 
   private getSelectedProduct(): VipProduct | null {
@@ -385,7 +449,9 @@ struct MembershipPage {
             Image($r("app.media.startIcon")).width(56).height(56).borderRadius(28);
           }
           Column() {
-            Text(this.isActive() ? "Pro 生效中" : "尚未开通")
+            Text(this.isActive()
+              ? (isMembershipTrial(this.subscription) ? "Pro 试用中" : "Pro 生效中")
+              : "尚未开通")
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.goldText())
@@ -450,32 +516,68 @@ struct MembershipPage {
     return isDarkThemeMode() ? "#F3D7A0" : "#8A5A12";
   }
 
+  private planPromoActive(product: VipProduct): boolean {
+    const endsAt = planPromoEndsAt(product, this.products);
+    return endsAt !== null && endsAt > Date.now();
+  }
+
+  private planPromoCountdownLabel(product: VipProduct): string {
+    const endsAt = planPromoEndsAt(product, this.products);
+    if (endsAt === null) {
+      return "";
+    }
+    const now = this.promoTick >= 0 ? Date.now() : Date.now();
+    const totalSec = Math.max(0, Math.ceil((endsAt - now) / 1000));
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const pad = (value: number): string => (value < 10 ? `0${value}` : `${value}`);
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+
   @Builder
-  private buildPlanTag(product: VipProduct): void {
-    if (planTag(product.period).length > 0) {
-      Text(planTag(product.period))
+  private buildOfferBadge(label: string, selected: boolean, showGift: boolean, greenWhenSelected: boolean): void {
+    Row({ space: 3 }) {
+      if (showGift) {
+        SymbolGlyph($r("sys.symbol.gift"))
+          .fontSize(11)
+          .fontColor([selected ? "#FFF0D4" : GOLD])
+      }
+      Text(label)
         .fontSize(10)
         .fontWeight(FontWeight.Bold)
-        .fontColor(
-          this.isProductSelected(product.product_id)
-            ? CHECKOUT_TEXT
-            : AppTheme.colors.textSecondary,
-        )
-        .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-        .backgroundColor(
-          product.period >= 12
-            ? this.isProductSelected(product.product_id)
-              ? TRIAL_GREEN
-              : isDarkThemeMode()
-                ? "#3A3A3A"
-                : "#E8E8E8"
-            : this.isProductSelected(product.product_id)
-              ? GOLD
-              : isDarkThemeMode()
-                ? "#3A3A3A"
-                : "#E8E8E8",
-        )
-        .borderRadius(8);
+        .fontColor(selected ? (greenWhenSelected ? "#FFFFFF" : CHECKOUT_TEXT) : AppTheme.colors.textSecondary)
+    }
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+    .backgroundColor(
+      selected
+        ? greenWhenSelected
+          ? TRIAL_GREEN
+          : GOLD
+        : isDarkThemeMode()
+          ? "#3A3A3A"
+          : "#E8E8E8",
+    )
+    .borderRadius(8)
+  }
+
+  @Builder
+  private buildPlanTag(product: VipProduct): void {
+    if (this.planPromoActive(product)) {
+      this.buildOfferBadge(
+        `限时 ${this.planPromoCountdownLabel(product)}`,
+        this.isProductSelected(product.product_id),
+        true,
+        true,
+      )
+    } else if (planTag(product.period).length > 0) {
+      this.buildOfferBadge(
+        planTag(product.period),
+        this.isProductSelected(product.product_id),
+        isSprintPeriod(product.period),
+        product.period >= 12 || isSprintPeriod(product.period),
+      )
     }
   }
 
@@ -505,7 +607,7 @@ struct MembershipPage {
             .fontColor(AppTheme.colors.textPrimary)
         }
         .margin({ top: 16 })
-        Text(`约 ${dayPrice(product)}/天`)
+        Text(planPriceHint(product))
           .fontSize(11)
           .fontColor(AppTheme.colors.textSecondary)
           .width("100%")

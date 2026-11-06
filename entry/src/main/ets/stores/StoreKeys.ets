@@ -57,6 +57,7 @@ export class StoreKeys {
   static readonly QuickTaskCurrentId: string = 'quickTask.currentId';
   static readonly TasksSubTabIndex: string = 'tasks.subTab.index';
   static readonly OpenQuickTaskTabOnce: string = 'tasks.openQuickTabOnce';
+  static readonly OpenDuoTaskTabOnce: string = 'tasks.openDuoTabOnce';
   static readonly OpenScheduledTaskTabOnce: string = 'tasks.openScheduledTabOnce';
   static readonly CycleGuardConfigured: string = 'cycleGuard.configured';
   static readonly NeedsScheduledGuardSync: string = 'tasks.needsScheduledGuardSync';
@@ -95,6 +96,7 @@ export class StoreKeys {
   static readonly ProQuickPayReason: string = 'pay.quick.reason';
   static readonly ProQuickPayTitle: string = 'pay.quick.title';
   static readonly ProQuickPayLine2: string = 'pay.quick.line2';
+  static readonly ProQuickPayForegroundHost: string = 'pay.quick.foregroundHost';
   static readonly MembershipUrgencyTick: string = 'membership.urgencyTick';
   static readonly ShowGuestMembershipReclaim: string = 'membership.showGuestReclaim';
   static readonly ShowSignupTrialCelebration: string = 'membership.showCelebration';

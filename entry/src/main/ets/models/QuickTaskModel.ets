@@ -11,6 +11,8 @@ export interface QuickTask {
   apps: string[];
   /** 未下发时视为已启用，与 RN enabled !== false 一致 */
   enabled: boolean;
+  partner_user_id?: string;
+  partner_nickname?: string;
 }
 
 export interface QuickTaskUpsertPayload {
@@ -22,6 +24,12 @@ export interface QuickTaskUpsertPayload {
   no_stop: boolean;
   apps: string[];
   enabled?: boolean;
+  partner_user_id?: string;
+  partner_nickname?: string;
+}
+
+export function isDuoQuickTask(task: QuickTask): boolean {
+  return (task.partner_user_id ?? '').trim().length > 0;
 }
 
 export function parseQuickTask(raw: Record<string, Object> | null | undefined): QuickTask | null {
@@ -56,6 +64,8 @@ export function parseQuickTask(raw: Record<string, Object> | null | undefined): 
     apps: apps,
     enabled: raw['enabled'] !== false && raw['enabled'] !== 0 && String(raw['enabled'] ?? '') !== '0' &&
       String(raw['enabled'] ?? '') !== 'false',
+    partner_user_id: String(raw['partner_user_id'] ?? '').trim(),
+    partner_nickname: String(raw['partner_nickname'] ?? '').trim(),
   };
 }
 

@@ -175,7 +175,7 @@ export async function tryPresentAppUpdateOnLaunch(
   const pair = await fetchHarmonyPair(context);
   const current = await getAppVersion();
   let level = resolveUpdateLevel(current, pair);
-  if (level === 'soft' && !shouldShowUpdateDialog(context, pair.latest)) {
+  if (level !== 'none' && !shouldShowUpdateDialog(context, pair.latest)) {
     level = 'none';
   }
   if (level === 'none') {
@@ -183,29 +183,15 @@ export async function tryPresentAppUpdateOnLaunch(
   }
 
   presenting = true;
-  if (level === 'soft') {
-    markUpdateDialogShown(context, pair.latest);
-  }
+  markUpdateDialogShown(context, pair.latest);
   const message = level === 'force' ? MESSAGE_FORCE : MESSAGE_SOFT;
   const finish = (): void => {
     presenting = false;
   };
-
-  if (level === 'force') {
-    uiContext.showAlertDialog({
-      title: TITLE,
-      message,
-      autoCancel: false,
-      primaryButton: {
-        value: '立即更新',
-        action: () => {
-          finish();
-          void openHarmonyAppGallery(context);
-        },
-      },
-    });
-    return;
-  }
+  const dismiss = (): void => {
+    markUpdateDialogShown(context, pair.latest);
+    finish();
+  };
 
   uiContext.showAlertDialog({
     title: TITLE,
@@ -214,13 +200,13 @@ export async function tryPresentAppUpdateOnLaunch(
     primaryButton: {
       value: '稍后再说',
       action: () => {
-        finish();
+        dismiss();
       },
     },
     secondaryButton: {
       value: '立即更新',
       action: () => {
-        finish();
+        dismiss();
         void openHarmonyAppGallery(context);
       },
     },

@@ -1,20 +1,26 @@
 import { common } from "@kit.AbilityKit";
-import { showErrorToast } from "../../common/Toast";
+import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { FocusDurationCard } from "../../components/focus/FocusDurationCard";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
-import { PageRoutes, backRoute, pushRoute, replaceRoute } from "../../router/PageRoutes";
+import { QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
+import { PageRoutes, backRoute, openDuoTaskTabOnce, pushDuoPickFriend, pushRoute, replaceRoute } from "../../router/PageRoutes";
 import {
   chooseRestrictedApps,
 } from "../../services/ScreenTimeService";
 import { ensureTaskPermission } from "../../utils/TaskPermissionUtil";
 import { DuoApiService } from "../../services/DuoApiService";
+import { QuickTaskApiService } from "../../services/QuickTaskApiService";
 import { DuoInviteClipboardService } from "../../services/DuoInviteClipboardService";
+import { takeDuoPartnerPick } from "../../services/DuoPartnerPickService";
 import { setInstantDuoWait } from "../../services/DuoWaitContextService";
+import { getPendingRemainSeconds, hasPendingQuickStart } from "../../services/PendingQuickStartService";
+import { promptSlotUpsellIfDisabled, upsellIfProSlotQuota } from "../../services/ProQuotaService";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { UserStore } from "../../stores/UserStore";
 import { BenefitStore } from "../../stores/BenefitStore";
+import { QuickTaskStore } from "../../stores/QuickTaskStore";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
 import { StoreKeys } from "../../stores/StoreKeys";
 import { TimerMode } from "../../utils/TimerMode";
@@ -30,6 +36,9 @@ struct DuoCreatePage {
   @State durationMinutes: number = 45;
   @State timerMode: TimerMode = "countdown";
   @State isSubmitting: boolean = false;
+  @State targetId: string = "";
+  @State targetName: string = "";
+  @State saveToDuoTask: boolean = false;
 
   private readonly durationMin: number = 5;
   private readonly durationMax: number = 180;
@@ -44,6 +53,75 @@ struct DuoCreatePage {
       return;
     }
     void BenefitStore.refresh();
+  }
+
+  onPageShow(): void {
+    const picked = takeDuoPartnerPick();
+    if (!picked) {
+      return;
+    }
+    this.targetId = picked.target.trim();
+    this.targetName = picked.name.trim();
+    if (this.targetId.length === 0) {
+      this.saveToDuoTask = false;
+    }
+  }
+
+  private submitLabel(): string {
+    if (this.saveToDuoTask && this.targetId.length > 0) {
+      return this.isSubmitting ? "保存中..." : "保存到互督任务";
+    }
+    if (this.targetName.length > 0) {
+      return `邀请 ${this.targetName}`;
+    }
+    return "生成口令";
+  }
+
+  private async saveDuoTask(): Promise<void> {
+    if (this.targetId.length === 0) {
+      this.isSubmitting = false;
+      return;
+    }
+    if (QuickTaskStore.isDirty()) {
+      await QuickTaskStore.loadAll();
+    }
+    if (QuickTaskStore.duoTitleExists(this.title.trim())) {
+      this.toastError("已有同名快捷任务，请修改名称");
+      this.isSubmitting = false;
+      return;
+    }
+    const payload: QuickTaskUpsertPayload = {
+      title: this.title.trim(),
+      duration_min: this.durationMinutes,
+      timer_mode: this.timerMode,
+      mode: "allow",
+      delay_min: 0,
+      no_stop: false,
+      apps: [...this.selectedTokens],
+      partner_user_id: this.targetId,
+      partner_nickname: this.targetName,
+    };
+    try {
+      const response = await QuickTaskStore.createTask(payload);
+      if (response.statusCode !== 200) {
+        const errMsg = typeof response.message === "string" && response.message.length > 0
+          ? response.message
+          : "保存快捷任务失败";
+        if (!upsellIfProSlotQuota(errMsg, "quick")) {
+          this.toastError(errMsg);
+        }
+        this.isSubmitting = false;
+        return;
+      }
+      const created = QuickTaskApiService.parseTask(response);
+      promptSlotUpsellIfDisabled(created ? created.enabled : undefined, "quick");
+      showToast("已保存到互督任务", this.getUIContext());
+      this.isSubmitting = false;
+      openDuoTaskTabOnce();
+    } catch (_error) {
+      this.toastError("保存快捷任务失败");
+      this.isSubmitting = false;
+    }
   }
 
   private normalizeDuration(raw: number): number {
@@ -81,20 +159,38 @@ struct DuoCreatePage {
       return;
     }
 
+    this.isSubmitting = true;
+    if (this.saveToDuoTask && this.targetId.length > 0) {
+      await this.saveDuoTask();
+      return;
+    }
+
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (hasPendingQuickStart(hostContext) && getPendingRemainSeconds(hostContext) <= 20 * 60) {
+      this.toastError("已有即将开始的预约专注");
+      this.isSubmitting = false;
+      return;
+    }
     if (!(await ensureTaskPermission(hostContext, this.getUIContext(), {
       entry_source: 'duo_create',
       screen_name: 'duo_create',
     }))) {
+      this.isSubmitting = false;
       return;
     }
 
-    this.isSubmitting = true;
-    const response = await DuoApiService.instantCreate(
-      this.title.trim(),
-      this.durationMinutes,
-      this.timerMode,
-    );
+    const response = this.targetId.length > 0
+      ? await DuoApiService.inviteFriend(
+        this.targetId,
+        this.title.trim(),
+        this.durationMinutes,
+        this.timerMode,
+      )
+      : await DuoApiService.instantCreate(
+        this.title.trim(),
+        this.durationMinutes,
+        this.timerMode,
+      );
     const session = DuoApiService.parseSession(response);
     if (!session) {
       this.toastError(response.message ?? "创建失败");
@@ -186,7 +282,51 @@ struct DuoCreatePage {
           this.durationMinutes = this.normalizeDuration(value);
         },
       })
-      Button("生成口令")
+      Row() {
+        Text("互督搭子")
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .layoutWeight(1)
+        Text(this.targetName.length > 0 ? this.targetName : "口令邀请")
+          .fontSize(14)
+          .fontColor(AppTheme.colors.textSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: 160 })
+        SymbolGlyph($r("sys.symbol.chevron_right"))
+          .fontSize(16)
+          .fontColor([AppTheme.colors.textMuted])
+          .margin({ left: 4 })
+      }
+      .width("100%")
+      .height(56)
+      .padding({ left: 16, right: 16 })
+      .alignItems(VerticalAlign.Center)
+      .backgroundColor(AppTheme.colors.surface)
+      .borderRadius(AppTheme.radius.lg)
+      .onClick(() => {
+        pushDuoPickFriend(this.targetId);
+      })
+
+      if (this.targetId.length > 0) {
+        Row({ space: 8 }) {
+          Checkbox()
+            .select(this.saveToDuoTask)
+            .selectedColor(AppTheme.colors.primary)
+            .onChange((checked: boolean) => {
+              this.saveToDuoTask = checked;
+            })
+          Text("保存到互督任务，下次一键开启专注")
+            .fontSize(13)
+            .fontColor(AppTheme.colors.textSecondary)
+            .layoutWeight(1)
+        }
+        .width("100%")
+        .alignItems(VerticalAlign.Center)
+      }
+
+      Button(this.submitLabel())
         .width("100%")
         .height(52)
         .type(ButtonType.Normal)

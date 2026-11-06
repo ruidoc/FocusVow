@@ -16,5 +16,5 @@ export function homeGlassGoldIconBg(): string {
 
 export function homeTodayMetricsBg(): string {
   // 明暗模式均保持白色半透明（对齐 RN，略提高透明度）
-  return 'rgba(255, 255, 255, 0.10)';
+  return 'rgba(255, 255, 255, 0.14)';
 }

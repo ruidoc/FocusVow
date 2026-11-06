@@ -1,14 +1,20 @@
 import { common } from '@kit.AbilityKit';
-import { QuickTask } from '../models/QuickTaskModel';
+import { isDuoQuickTask, QuickTask } from '../models/QuickTaskModel';
 import { filterSessionAppsForHarmony } from '../models/DuoModel';
 import { showErrorToast, showToast } from '../common/Toast';
 import { UIContext } from '@kit.ArkUI';
 import { ensureSoloFocusAccess } from './GuestSoloFocusService';
 import {
+  getPendingRemainSeconds,
   getQuickStartDelayOptions,
   hasPendingQuickStart,
   schedulePendingQuickStart,
 } from './PendingQuickStartService';
+import { DuoApiService } from './DuoApiService';
+import { DuoInviteClipboardService } from './DuoInviteClipboardService';
+import { setInstantDuoWait } from './DuoWaitContextService';
+import { PageRoutes, replaceRoute } from '../router/PageRoutes';
+import { UserStore } from '../stores/UserStore';
 import { applyScreenRestriction } from './ScreenTimeService';
 import { ensureTaskPermission } from '../utils/TaskPermissionUtil';
 import { LockStore } from '../stores/LockStore';
@@ -31,11 +37,72 @@ function resolveTaskApps(context: common.Context, task: QuickTask): string[] {
   return [...SettingsStore.getState().selectedTokens];
 }
 
+const PENDING_IMMINENT_SECONDS: number = 20 * 60;
+
+async function startSavedDuoTask(
+  context: common.UIAbilityContext,
+  uiContext: UIContext,
+  task: QuickTask
+): Promise<boolean> {
+  const partnerId = (task.partner_user_id ?? '').trim();
+  if (partnerId.length === 0) {
+    return false;
+  }
+  if (!UserStore.isLoggedIn()) {
+    showErrorToast('请先登录', uiContext);
+    return false;
+  }
+  if (hasPendingQuickStart(context) && getPendingRemainSeconds(context) <= PENDING_IMMINENT_SECONDS) {
+    showErrorToast('已有即将开始的预约专注', uiContext);
+    return false;
+  }
+  if (LockStore.isLocked()) {
+    showErrorToast('已有专注任务正在进行中', uiContext);
+    return false;
+  }
+  if (!(await ensureTaskPermission(context, uiContext, {
+    entry_source: 'duo_task',
+    screen_name: 'plans',
+  }))) {
+    return false;
+  }
+
+  if (task.apps.length > 0) {
+    SettingsStore.updateSelectedTokens(
+      context,
+      resolveTaskApps(context, task),
+      `已载入互督任务「${task.title}」的应用`
+    );
+  }
+
+  const title = task.title.trim().length > 0 ? task.title.trim() : '搭子互督';
+  const response = await DuoApiService.inviteFriend(
+    partnerId,
+    title,
+    task.duration_min,
+    task.timer_mode
+  );
+  const session = DuoApiService.parseSession(response);
+  if (!session) {
+    showErrorToast(response.message ?? '创建失败', uiContext);
+    return false;
+  }
+  if (session.token.length > 0) {
+    DuoInviteClipboardService.dismissToken(session.token);
+  }
+  setInstantDuoWait(session, title, task.duration_min);
+  replaceRoute(PageRoutes.DuoWait);
+  return true;
+}
+
 export async function startQuickTask(
   context: common.UIAbilityContext,
   uiContext: UIContext,
   task: QuickTask
 ): Promise<boolean> {
+  if (isDuoQuickTask(task)) {
+    return startSavedDuoTask(context, uiContext, task);
+  }
   if (!ensureSoloFocusAccess(context)) {
     return false;
   }

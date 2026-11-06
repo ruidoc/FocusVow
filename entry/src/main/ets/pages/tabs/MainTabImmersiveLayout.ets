@@ -98,7 +98,7 @@ export struct MainTabImmersiveLayout {
           .height("100%")
       }.tabBar(this.buildSymbolTabBar("stats", "统计"))
       TabContent() {
-        ProfilePage()
+        ProfilePage({ isPageActive: this.currentTab === "profile" })
           .width("100%")
           .height("100%")
       }.tabBar(this.buildSymbolTabBar("profile", "我的"))

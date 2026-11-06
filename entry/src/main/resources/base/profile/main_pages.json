@@ -6,11 +6,14 @@
     "pages/focus/DuoWaitPage",
     "pages/focus/DuoJoinPage",
     "pages/focus/DuoMatchPage",
+    "pages/focus/DuoPickFriendPage",
     "pages/focus/FocusResultPage",
     "pages/onboarding/WelcomePage",
     "pages/onboarding/OnboardingPage",
     "pages/plans/PlanListPage",
     "pages/plans/PlanAddPage",
+    "pages/plans/SleepPlanPage",
+    "pages/plans/SleepRecordsPage",
     "pages/plans/PlanDetailPage",
     "pages/plans/QuickTaskFormPage",
     "pages/plans/QuickTaskDetailPage",
@@ -26,6 +29,7 @@
     "pages/settings/WebViewPage",
     "pages/settings/AboutPage",
     "pages/settings/FeedbackPage",
+    "pages/settings/ContactPage",
     "pages/login/LoginPage",
     "pages/login/EmailLoginPage",
     "pages/login/RegisterPage",
@@ -47,6 +51,9 @@
     "pages/inbox/InboxListPage",
     "pages/inbox/InboxDetailPage",
     "pages/rank/GlobalRankPage",
-    "pages/checkin/CheckinPage"
+    "pages/checkin/CheckinPage",
+    "pages/user/UserProfilePage",
+    "pages/user/UserFollowsPage",
+    "pages/user/PointLogsPage"
   ]
 }

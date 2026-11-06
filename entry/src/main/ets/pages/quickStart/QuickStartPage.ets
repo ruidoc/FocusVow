@@ -6,16 +6,17 @@ import { showErrorToast, showToast } from "../../common/Toast";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { FocusDurationCard } from "../../components/focus/FocusDurationCard";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
+import { ProQuickPayHost } from "../../components/paywall/ProQuickPayDialog";
 import { AppTheme } from "../../constants/Theme";
 import { backRoute, openQuickTaskTabOnce, returnToMainTab } from "../../router/PageRoutes";
 import { applyScreenRestriction, chooseRestrictedApps } from "../../services/ScreenTimeService";
 import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from "../../services/ScheduledPlanValidation";
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
+import { markQuickPayForeground } from "../../utils/PaywallNavigationUtil";
 import { ensureTaskPermission } from "../../utils/TaskPermissionUtil";
 import { AnalyticsService } from "../../services/AnalyticsService";
 import {
   getQuickStartDelayOptions,
-  getStartDelayHint,
   getStartDelayPickerLabel,
   hasPendingQuickStart,
   schedulePendingQuickStart,
@@ -59,6 +60,11 @@ interface QuickStartRouteParams {
   delay?: string;
 }
 
+interface ClockPickerResult {
+  hour: number;
+  minute: number;
+}
+
 @Entry
 @Component
 struct QuickStartPage {
@@ -67,12 +73,19 @@ struct QuickStartPage {
   @StorageLink(StoreKeys.SettingsSelectedAppCount) selectedAppCount: number = 0;
   @State durationMinutes: number = 15;
   @State startDelayMinutes: number = 0;
+  @State scheduleMode: string = 'relative';
+  @State scheduleSheetOpen: boolean = false;
+  @State draftMode: string = 'relative';
+  @State draftDelayMinutes: number = 5;
+  @State clockDraft: Date = new Date();
+  @State clockLabel: string = '';
   @State timerMode: TimerMode = "countdown";
   @State mode: "shield" | "allow" = "allow";
   @State title: string = "";
   @State saveToQuickTask: boolean = false;
   @State private membershipUiTick: number = 0;
   private isDelayedEntry: boolean = false;
+  private clockStartMs: number = 0;
   private fromOnboarding: boolean = false;
   private focusStarted: boolean = false;
   private appliedFirstFocusPreset: boolean = false;
@@ -98,6 +111,7 @@ struct QuickStartPage {
       const presetDelayRaw = Number(params.delay ?? 0);
       if (presetDelayRaw > 0) {
         this.isDelayedEntry = true;
+        this.ensureClockStart();
         const delay = normalizeDelayMinutes(presetDelayRaw);
         const options = getQuickStartDelayOptions(true);
         if (options.indexOf(delay) >= 0) {
@@ -141,6 +155,7 @@ struct QuickStartPage {
   }
 
   onPageShow(): void {
+    markQuickPayForeground("quick_start");
     this.startMembershipUiTimer();
   }
 
@@ -354,8 +369,19 @@ struct QuickStartPage {
       return;
     }
 
-    if (this.startDelayMinutes > 0) {
-      if (!ensureDelayStartAllowed(hostContext, this.startDelayMinutes)) {
+    const clockMode = this.isDelayedEntry && this.scheduleMode === 'clock';
+    let delayMinutes = this.startDelayMinutes;
+    let fixedStartAtMs = 0;
+    if (clockMode) {
+      if (this.clockStartMs <= Date.now()) {
+        this.toastError('预约时间需晚于当前时间');
+        return;
+      }
+      delayMinutes = Math.max(1, Math.round((this.clockStartMs - Date.now()) / 60000));
+      fixedStartAtMs = this.clockStartMs;
+    }
+    if (delayMinutes > 0) {
+      if (!ensureDelayStartAllowed(hostContext, delayMinutes)) {
         return;
       }
       clearMembershipUrgencyCountdown(hostContext);
@@ -364,14 +390,18 @@ struct QuickStartPage {
         durationMinutes: this.durationMinutes,
         timerMode: this.timerMode,
         mode: this.mode,
-        delayMinutes: this.startDelayMinutes,
+        delayMinutes: delayMinutes,
         fromOnboarding: this.fromOnboarding,
+        fixedStartAtMs: fixedStartAtMs > 0 ? fixedStartAtMs : undefined,
       });
       if (!scheduled) {
         this.toastError("预约失败，请稍后重试");
         return;
       }
-      showToast(`${this.startDelayMinutes} 分钟后开始专注`, this.getUIContext());
+      showToast(
+        clockMode ? `将在 ${this.clockLabel} 开始专注` : `${delayMinutes} 分钟后开始专注`,
+        this.getUIContext(),
+      );
       returnToMainTab("focus");
       return;
     }
@@ -447,56 +477,213 @@ struct QuickStartPage {
     return raw;
   }
 
+  private startTimeRightText(): string {
+    if (this.scheduleMode === 'clock' && this.clockLabel.length > 0) {
+      return this.clockLabel;
+    }
+    const minutes = this.startDelayMinutes > 0
+      ? this.startDelayMinutes
+      : (this.getStartDelayOptions()[0] ?? 5);
+    return getStartDelayPickerLabel(minutes);
+  }
+
+  private draftDelayIndex(): number {
+    const options = this.getStartDelayOptions();
+    const idx = options.indexOf(this.draftDelayMinutes);
+    return idx >= 0 ? idx : 0;
+  }
+
+  private openScheduleSheet(): void {
+    this.draftMode = this.scheduleMode;
+    const options = this.getStartDelayOptions();
+    const current = this.startDelayMinutes > 0 ? this.startDelayMinutes : (options[0] ?? 5);
+    this.draftDelayMinutes = options.indexOf(current) >= 0 ? current : (options[0] ?? 5);
+    this.ensureClockStart();
+    const clockMs = this.clockStartMs > Date.now() ? this.clockStartMs : this.defaultClockDate().getTime();
+    this.clockDraft = new Date(clockMs);
+    this.scheduleSheetOpen = true;
+  }
+
+  private confirmScheduleSheet(): void {
+    if (this.draftMode === 'clock') {
+      const picked = new Date();
+      picked.setHours(this.clockDraft.getHours(), this.clockDraft.getMinutes(), 0, 0);
+      if (picked.getTime() <= Date.now()) {
+        this.toastError('预约时间需晚于当前时间');
+        return;
+      }
+      this.scheduleMode = 'clock';
+      this.clockStartMs = picked.getTime();
+      this.clockLabel = this.formatClock(picked);
+      this.saveToQuickTask = false;
+    } else {
+      this.scheduleMode = 'relative';
+      this.startDelayMinutes = this.draftDelayMinutes;
+    }
+    this.scheduleSheetOpen = false;
+  }
+
   private openStartDelayPicker(): void {
-    this.getUIContext().showTextPickerDialog({
-      range: this.getStartDelayPickerLabels(),
-      selected: this.getStartDelayPickerSelectedIndex(),
-      canLoop: false,
-      onAccept: (value: TextPickerResult) => {
-        const index = this.resolvePickerIndex(value.index);
-        const options = this.getStartDelayOptions();
-        if (index >= 0 && index < options.length) {
-          this.startDelayMinutes = options[index];
-        }
-      },
-    });
+    this.openScheduleSheet();
+  }
+
+  private defaultClockDate(): Date {
+    const next = new Date(Date.now() + 10 * 60 * 1000);
+    next.setSeconds(0, 0);
+    return next;
+  }
+
+  private formatClock(date: Date): string {
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const hourText = hour < 10 ? `0${hour}` : `${hour}`;
+    const minuteText = minute < 10 ? `0${minute}` : `${minute}`;
+    return `${hourText}:${minuteText}`;
+  }
+
+  private ensureClockStart(): void {
+    if (this.clockStartMs > Date.now() && this.clockLabel.length > 0) {
+      return;
+    }
+    const next = this.defaultClockDate();
+    this.clockStartMs = next.getTime();
+    this.clockDraft = next;
+    this.clockLabel = this.formatClock(next);
   }
 
   @Builder
-  buildStartDelayCard(): void {
-    Column({ space: 14 }) {
+  private buildScheduleModeChip(label: string, mode: string): void {
+    Text(label)
+      .layoutWeight(1)
+      .height(36)
+      .fontSize(14)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.draftMode === mode ? '#FFFFFF' : AppTheme.colors.textSecondary)
+      .textAlign(TextAlign.Center)
+      .borderRadius(18)
+      .backgroundColor(this.draftMode === mode ? AppTheme.colors.primary : AppTheme.colors.surfaceRaised)
+      .onClick(() => {
+        this.draftMode = mode;
+        if (mode === 'clock') {
+          const picked = new Date();
+          picked.setHours(this.clockDraft.getHours(), this.clockDraft.getMinutes(), 0, 0);
+          if (picked.getTime() <= Date.now()) {
+            this.clockDraft = this.defaultClockDate();
+          }
+        }
+      })
+  }
+
+  @Builder
+  private buildClockPickerSheet(): void {
+    Column() {
       Row() {
-        Text("开始时间")
+        Text('取消')
+          .fontSize(16)
+          .fontColor(AppTheme.colors.textSecondary)
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .onClick(() => {
+            this.scheduleSheetOpen = false;
+          })
+        Text('开始时间')
           .layoutWeight(1)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.colors.textPrimary)
-        Text(getStartDelayPickerLabel(this.startDelayMinutes))
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .margin({ right: 4 })
-        SymbolGlyph($r("sys.symbol.chevron_right"))
-          .fontSize(14)
-          .fontColor([AppTheme.colors.textMuted])
+          .textAlign(TextAlign.Center)
+        Text('确定')
+          .fontSize(16)
+          .fontColor(AppTheme.colors.primary)
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .onClick(() => {
+            this.confirmScheduleSheet();
+          })
       }
-      .width("100%")
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        this.openStartDelayPicker();
-      })
+      .width('100%')
+      .padding({ left: 8, right: 8, top: 12, bottom: 12 })
+      .border({ width: { bottom: 1 }, color: AppTheme.colors.border })
 
-      if (this.startDelayMinutes > 0) {
-        Text(getStartDelayHint(this.startDelayMinutes))
-          .fontSize(13)
-          .fontColor(AppTheme.colors.warning)
-          .width("100%");
+      Row({ space: 8 }) {
+        this.buildScheduleModeChip('几分钟后', 'relative')
+        this.buildScheduleModeChip('固定时间', 'clock')
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
+
+      if (this.draftMode === 'relative') {
+        TextPicker({
+          range: this.getStartDelayPickerLabels(),
+          selected: this.draftDelayIndex(),
+        })
+          .width('100%')
+          .height(216)
+          .canLoop(false)
+          .onChange((_value: string | string[], index: number | number[]) => {
+            const picked = this.resolvePickerIndex(index);
+            const options = this.getStartDelayOptions();
+            if (picked >= 0 && picked < options.length) {
+              this.draftDelayMinutes = options[picked];
+            }
+          })
+      } else {
+        TimePicker({
+          selected: this.clockDraft,
+          format: TimePickerFormat.HOUR_MINUTE,
+        })
+          .width('100%')
+          .height(216)
+          .useMilitaryTime(true)
+          .onChange((value: ClockPickerResult) => {
+            const next = new Date(this.clockDraft);
+            next.setHours(value.hour, value.minute, 0, 0);
+            this.clockDraft = next;
+          })
       }
     }
-    .width("100%")
-    .padding(16)
-    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding({ bottom: 34 })
     .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(AppTheme.radius.lg);
+  }
+
+  @Builder
+  buildStartDelayCard(): void {
+    Column() {
+      Row() {
+        Row({ space: 6 }) {
+          Text('开始时间')
+            .fontSize(16)
+            .fontColor(AppTheme.colors.textPrimary)
+          Text('新')
+            .fontSize(10)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#FFFFFF')
+            .lineHeight(14)
+            .padding({ left: 5, right: 5, top: 2, bottom: 2 })
+            .backgroundColor('#FF3B30')
+            .borderRadius(4)
+        }
+        .alignItems(VerticalAlign.Center)
+        .layoutWeight(1)
+
+        Text(this.startTimeRightText())
+          .fontSize(16)
+          .fontColor(AppTheme.colors.textPrimary)
+          .opacity(0.6)
+          .margin({ right: 8 })
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([AppTheme.colors.textSecondary])
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 15, bottom: 15 })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.openScheduleSheet();
+      })
+    }
+    .width('100%')
+    .backgroundColor(AppTheme.colors.surface)
+    .borderRadius(AppTheme.radius.lg)
   }
 
   @Builder
@@ -655,7 +842,7 @@ struct QuickStartPage {
         this.buildStartDelayCard();
       }
       Column({ space: 6 }) {
-        if (!this.isMembershipSimplified()) {
+        if (!this.isMembershipSimplified() && this.scheduleMode !== 'clock') {
           Row({ space: 4 }) {
             Checkbox()
               .select(this.saveToQuickTask)
@@ -676,9 +863,11 @@ struct QuickStartPage {
             ? "开始专注"
             : this.saveToQuickTask
               ? "保存到快捷任务"
-              : this.startDelayMinutes > 0
-                ? "预约开始"
-                : "开始专注",
+              : this.isDelayedEntry && this.scheduleMode === 'clock'
+                ? "立即预约"
+                : this.startDelayMinutes > 0
+                  ? "预约开始"
+                  : "开始专注",
         )
           .width("100%")
           .height(52)
@@ -703,6 +892,7 @@ struct QuickStartPage {
 
   build() {
     Stack() {
+      ProQuickPayHost({ hostId: "quick_start" })
       SystemNavPage({
         title: this.getPageTitle(),
         showBack: true,
@@ -715,6 +905,16 @@ struct QuickStartPage {
       })
     }
     .width("100%")
-    .height("100%");
+    .height("100%")
+    .bindSheet($$this.scheduleSheetOpen, this.buildClockPickerSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      preferType: SheetType.BOTTOM,
+      showClose: false,
+      dragBar: false,
+      backgroundColor: AppTheme.colors.surface,
+      onDisappear: () => {
+        this.scheduleSheetOpen = false;
+      },
+    });
   }
 }

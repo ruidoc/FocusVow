@@ -1,22 +1,17 @@
 import { common } from '@kit.AbilityKit';
 import { showToast } from '../../common/Toast';
-import { AppTheme } from '../../constants/Theme';
 import { SystemNavPage } from '../common/SystemNavPage';
-import { PlanListContent } from './PlanListContent';
 import { QuickTaskListContent } from './QuickTaskListContent';
 import { TasksTabTitleBar } from './TasksTabTitleBar';
 import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { UserStore } from '../../stores/UserStore';
 import { QuickTaskStore } from '../../stores/QuickTaskStore';
-import { ScheduledListStore } from '../../stores/ScheduledListStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import {
+  consumeOpenDuoTaskTabOnce,
   consumeOpenQuickTaskTabOnce,
-  consumeOpenScheduledTaskTabOnce,
-  hydrateScheduledGuardSyncFlags,
-  needsScheduledGuardSync
 } from '../../services/ScheduledCovenantService';
 
 bootstrapStores();
@@ -27,31 +22,29 @@ export struct TasksCollectionPage {
   @Prop @Watch('onIsPageActiveChanged') isPageActive: boolean = true;
 
   @State private subTabIndex: number = 0;
-  /** 0=快捷任务，1=定时任务；跟手滑动时为连续值 */
+  /** 0=快捷任务，1=互督任务；跟手滑动时为连续值 */
   @State private tabProgress: number = 0;
   @State private swiperWidth: number = 0;
 
   private readonly swiperAnimDuration: number = 300;
   private swiperController: SwiperController = new SwiperController();
   private quickScroller: Scroller = new Scroller();
-  private scheduledScroller: Scroller = new Scroller();
+  private duoScroller: Scroller = new Scroller();
   @State private quickScrollerReady: boolean = false;
-  @State private scheduledScrollerReady: boolean = false;
-  @StorageLink(StoreKeys.OpenScheduledTaskTabOnce)
-  @Watch('onOpenScheduledTabOnceChanged')
-  private openScheduledTabOnce: boolean = false;
+  @State private duoScrollerReady: boolean = false;
+  @StorageLink(StoreKeys.OpenDuoTaskTabOnce)
+  @Watch('onOpenDuoTabOnceChanged')
+  private openDuoTabOnce: boolean = false;
   @StorageLink(StoreKeys.TasksSubTabIndex)
   @Watch('onTasksSubTabIndexChanged')
   private tasksSubTabIndex: number = 0;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    hydrateScheduledGuardSyncFlags(hostContext);
     UserStore.hydrate(hostContext);
     LockStore.hydrate(hostContext);
-    ScheduledListStore.hydrate();
 
-    const initialTab = this.resolveInitialTabIndex(hostContext);
+    const initialTab = this.resolveInitialTabIndex();
     this.subTabIndex = initialTab;
     this.tabProgress = initialTab;
     this.swiperController.changeIndex(initialTab, false);
@@ -65,22 +58,19 @@ export struct TasksCollectionPage {
     this.goToTab(next, false);
   }
 
-  private resolveInitialTabIndex(context: common.UIAbilityContext): number {
+  private resolveInitialTabIndex(): number {
+    if (consumeOpenDuoTaskTabOnce()) {
+      return 1;
+    }
     if (consumeOpenQuickTaskTabOnce()) {
       return 0;
-    }
-    if (consumeOpenScheduledTaskTabOnce()) {
-      return 1;
-    }
-    if (needsScheduledGuardSync(context)) {
-      return 1;
     }
     const saved = AppStorage.get<number>(StoreKeys.TasksSubTabIndex) ?? 0;
     return saved === 1 ? 1 : 0;
   }
 
-  private onOpenScheduledTabOnceChanged(): void {
-    if (!consumeOpenScheduledTaskTabOnce()) {
+  private onOpenDuoTabOnceChanged(): void {
+    if (!consumeOpenDuoTaskTabOnce()) {
       return;
     }
     this.goToTab(1, false);
@@ -90,23 +80,13 @@ export struct TasksCollectionPage {
     if (!this.isPageActive) {
       return;
     }
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (consumeOpenQuickTaskTabOnce()) {
-      this.goToTab(0, false);
-      return;
-    }
-    if (consumeOpenScheduledTaskTabOnce()) {
+    if (consumeOpenDuoTaskTabOnce()) {
       this.goToTab(1, false);
       return;
     }
-    this.goToScheduledIfNeeded(hostContext);
-  }
-
-  private goToScheduledIfNeeded(context: common.UIAbilityContext): void {
-    if (!needsScheduledGuardSync(context)) {
-      return;
+    if (consumeOpenQuickTaskTabOnce()) {
+      this.goToTab(0, false);
     }
-    this.goToTab(1, false);
   }
 
   private onSubTabChange(index: number): void {
@@ -156,22 +136,16 @@ export struct TasksCollectionPage {
       return;
     }
     if (LockStore.isLocked()) {
-      const message = this.subTabIndex === 0
-        ? '专注进行中，不可以创建任务'
-        : '专注进行中，不可以创建契约';
-      showToast(message, this.getUIContext());
+      showToast('专注进行中，不可以创建任务', this.getUIContext());
       return;
     }
-    ScheduledListStore.hydrate();
     QuickTaskStore.hydrate();
     if (this.subTabIndex === 0) {
       AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
       pushRoute(PageRoutes.QuickTaskForm);
       return;
     }
-    AppStorage.setOrCreate(StoreKeys.ScheduledSessionCurrentId, '');
-    ScheduledListStore.clearEditingSession();
-    pushRoute(PageRoutes.PlanAdd);
+    pushRoute(PageRoutes.DuoCreate);
   }
 
   @Builder
@@ -180,6 +154,7 @@ export struct TasksCollectionPage {
       Row() {
         TasksTabTitleBar({
           progress: this.tabProgress,
+          secondTabLabel: '互督任务',
           onTabPress: (index: number) => {
             this.goToTab(index);
           }
@@ -190,21 +165,10 @@ export struct TasksCollectionPage {
       .alignItems(VerticalAlign.Bottom)
       .height(34)
 
-      Row() {
-        SymbolGlyph($r('sys.symbol.plus'))
-          .fontSize(22)
-          .fontColor([AppTheme.colors.textPrimary])
-      }
-      .width(42)
-      .height(42)
-      .borderRadius(21)
-      .backgroundColor(AppTheme.colors.surface)
-      .border({ width: 1, color: AppTheme.colors.border })
-      .justifyContent(FlexAlign.Center)
-      .margin({ right: 20 })
-      .onClick(() => {
-        this.openCreate();
-      })
+      Row()
+        .width(42)
+        .height(42)
+        .margin({ right: 20 })
     }
     .width('100%')
     .padding({ bottom: 4 })
@@ -224,14 +188,15 @@ export struct TasksCollectionPage {
           this.quickScrollerReady = true;
         }
       })
-      PlanListContent({
+      QuickTaskListContent({
         isPageActive: this.isPageActive,
-        onCreatePlan: () => {
+        listMode: 'duo',
+        onCreateTask: () => {
           this.openCreate();
         },
         onScrollerReady: (scroller: Scroller) => {
-          this.scheduledScroller = scroller;
-          this.scheduledScrollerReady = true;
+          this.duoScroller = scroller;
+          this.duoScrollerReady = true;
         }
       })
     }
@@ -286,7 +251,7 @@ export struct TasksCollectionPage {
       hiddenTitleTopPadding: 0,
       bindScrollers: this.subTabIndex === 0
         ? (this.quickScrollerReady ? [this.quickScroller] : [])
-        : (this.scheduledScrollerReady ? [this.scheduledScroller] : []),
+        : (this.duoScrollerReady ? [this.duoScroller] : []),
       onBack: () => {
         backRoute();
       },

@@ -8,7 +8,7 @@ import { FocusStartedNotifyService } from "./FocusStartedNotifyService";
 import { applyScreenRestriction } from "./ScreenTimeService";
 import { blockIfOverlapsScheduledPlan } from "./ScheduledPlanValidation";
 import { clearDuoWaitContext } from "./DuoWaitContextService";
-import { COUNTUP_OPEN_LOCK_MIN, isCountupMode, normalizeTimerMode } from "../utils/TimerMode";
+import { INSTANT_COUNTUP_LOCK_MIN, isCountupMode, normalizeTimerMode } from "../utils/TimerMode";
 
 export interface DuoInstantLockResult {
   ok: boolean;
@@ -67,8 +67,8 @@ export function buildDuoAlignedOptions(session: DuoSessionView, title?: string):
   const timerMode = fields[0];
   const durationMin = fields[1];
   const minDurationMin = fields[2];
-  // 正计时锁窗上限 23h；倒计时=契约时长
-  const durationMs = (isCountupMode(timerMode) ? COUNTUP_OPEN_LOCK_MIN : durationMin) * 60 * 1000;
+  // 正计时锁窗 3 小时；倒计时=契约时长
+  const durationMs = (isCountupMode(timerMode) ? INSTANT_COUNTUP_LOCK_MIN : durationMin) * 60 * 1000;
   const nowMs = Date.now();
   let startedAtMs = parseDuoServerTimeMs(session.active_at);
   let endAtMs = parseDuoServerTimeMs(session.end_at);

@@ -2,6 +2,8 @@ import { showToast } from '../common/Toast';
 import { DuoSessionView, getScheduleRepeatDays, getScheduledSessionEndMin, getScheduledSessionStartMin, isInactiveScheduledSession } from '../models/DuoModel';
 import { FocusPlan, getTodayRepeatDay, normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
 import { PlanStore } from '../stores/PlanStore';
+import { ScheduledListStore } from '../stores/ScheduledListStore';
+import { isSleepSchedule } from '../utils/ScheduledClockUtil';
 
 interface ScheduledSessionTimeRange {
   startMin: number;
@@ -206,4 +208,36 @@ export function validateScheduledPlanTime(
     return '与其他契约时间重叠';
   }
   return '';
+}
+
+export function toastIfScheduleOverlapsEnabled(session: DuoSessionView): boolean {
+  if (session.enabled === false) {
+    return false;
+  }
+  const repeatRaw = session.schedule_repeat && session.schedule_repeat.length > 0
+    ? session.schedule_repeat
+    : String(session.schedule_json?.['repeat'] ?? '1,2,3,4,5');
+  const repeatDays = getScheduleRepeatDays(repeatRaw);
+  const startMin = getScheduledSessionStartMin(session);
+  const endMin = getScheduledSessionEndMin(session);
+  const hit = findOverlappingScheduledSession(
+    startMin,
+    endMin,
+    repeatDays,
+    ScheduledListStore.getAllSessions(),
+    session.session_id,
+  );
+  if (!hit) {
+    return false;
+  }
+  const selfSleep = isSleepSchedule(session.schedule_json);
+  const otherSleep = isSleepSchedule(hit.schedule_json);
+  let message = '与其他契约时间重叠';
+  if (otherSleep) {
+    message = '与早睡契约时间重叠';
+  } else if (selfSleep) {
+    message = '与普通定时任务时间重叠';
+  }
+  showToast(message);
+  return true;
 }

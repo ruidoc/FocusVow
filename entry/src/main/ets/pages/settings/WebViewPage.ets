@@ -27,7 +27,10 @@ struct WebViewPage {
 
   @Builder
   private buildWebContent(): void {
-    LegalWebView({ url: this.pageUrl })
+    LegalWebView({
+      url: this.pageUrl,
+      openNativeProfile: this.pageUrl.indexOf('/challenges') >= 0 || this.pageTitle === '挑战',
+    })
   }
 
   build() {

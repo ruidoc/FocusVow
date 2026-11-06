@@ -23,6 +23,7 @@ import { ensureNotifyOnLaunch } from "../../services/NotifyLaunchService";
 import { tryPresentAppUpdateOnLaunch } from "../../services/AppUpdateService";
 import { hasPendingOnboardingActivationModal } from "../../utils/OnboardingMembershipUtil";
 import { warmUpPreferencesStore } from "../../services/PreferencesService";
+import { promptScreenTimeIfRevoked } from '../../services/ScreenTimeService';
 import { reconcileLockLifecycle } from "../../services/LockReconcileService";
 import { hydratePendingQuickStart } from "../../services/PendingQuickStartService";
 import { getAppVersion } from "../../common/AppInfo";
@@ -39,6 +40,7 @@ import { ThemeStore } from "../../stores/ThemeStore";
 import { UserStore } from "../../stores/UserStore";
 import { InAppMessageBanner } from "../../components/common/InAppMessageBanner";
 import { ProQuickPayHost } from "../../components/paywall/ProQuickPayDialog";
+import { markQuickPayForeground } from "../../utils/PaywallNavigationUtil";
 import { MainTabImmersiveLayout } from "./MainTabImmersiveLayout";
 import { MainTabLegacyLayout } from "./MainTabLegacyLayout";
 import { shouldHideMainTabBar, supportsImmersiveTab } from "./MainTabUtil";
@@ -60,7 +62,7 @@ struct MainTabPage {
   @StorageLink(StoreKeys.PendingQuickStartStartAtMs)
   @Watch("onHideTabBarSourceChanged")
   pendingQuickStartStartAtMs: number = 0;
-  @StorageLink(StoreKeys.AppForegroundAt) foregroundAt: number = 0;
+  @StorageLink(StoreKeys.AppForegroundAt) @Watch("onAppForeground") foregroundAt: number = 0;
   @StorageLink(StoreKeys.MainTabTarget) @Watch("onMainTabTargetChanged") pendingTab: string = "";
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
 
@@ -110,6 +112,8 @@ struct MainTabPage {
   }
 
   onPageShow(): void {
+    markQuickPayForeground("main");
+    this.promptHealthUsageIfNeeded();
     // 引导页压在 MainTab 之上时不弹；回首页后再申请通知（激活弹窗优先）
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (hasPendingOnboardingActivationModal(hostContext)
@@ -118,6 +122,15 @@ struct MainTabPage {
     }
     void ensureNotifyOnLaunch(hostContext);
     void tryPresentAppUpdateOnLaunch(hostContext, this.getUIContext());
+  }
+
+  private onAppForeground(): void {
+    this.promptHealthUsageIfNeeded();
+  }
+
+  private promptHealthUsageIfNeeded(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void promptScreenTimeIfRevoked(hostContext);
   }
 
   private clearTimer(): void {
