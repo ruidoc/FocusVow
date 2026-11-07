@@ -17,10 +17,15 @@ export struct FeatureIntroCard {
   @Prop description: string = '';
   @Prop confirmTitle: string = '确定了解了？';
   @Prop confirmMessage: string = '关闭后不再显示此介绍';
+  @Prop dismissible: boolean = true;
+  @Prop actionTitle: string = '';
+  @Prop marginTop: number = 0;
+  @Prop marginBottom: number = 16;
+  onAction: () => void = (): void => {};
   @State private visible: boolean = true;
 
   aboutToAppear(): void {
-    this.visible = !isFeatureIntroDismissed(this.introId);
+    this.visible = !this.dismissible || !isFeatureIntroDismissed(this.introId);
   }
 
   private confirmDismiss(): void {
@@ -68,23 +73,35 @@ export struct FeatureIntroCard {
                 .fontColor(AppTheme.colors.textSecondary)
                 .width('100%')
             }
+            if (this.actionTitle.length > 0) {
+              Text(`${this.actionTitle} →`)
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(isDarkThemeMode() ? '#7CD4FD' : '#1570EF')
+                .margin({ top: 8 })
+                .onClick(() => {
+                  this.onAction();
+                })
+            }
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(16)
-            .fontColor([isDarkThemeMode() ? '#7CD4FD' : '#1570EF'])
-            .onClick(() => {
-              this.showDismissConfirmDialog();
-            })
+          if (this.dismissible) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(16)
+              .fontColor([isDarkThemeMode() ? '#7CD4FD' : '#1570EF'])
+              .onClick(() => {
+                this.showDismissConfirmDialog();
+              })
+          }
         }
         .width('100%')
         .alignItems(VerticalAlign.Top)
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .margin({ bottom: 16 })
+      .margin({ top: this.marginTop, bottom: this.marginBottom })
       .borderRadius(12)
       .backgroundColor(isDarkThemeMode() ? 'rgba(46, 144, 250, 0.12)' : '#EFF8FF')
       .border({

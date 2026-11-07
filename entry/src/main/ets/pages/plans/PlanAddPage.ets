@@ -1,6 +1,7 @@
 import { common } from "@kit.AbilityKit";
 import { router } from "@kit.ArkUI";
 import { showErrorToast, showToast } from "../../common/Toast";
+import { FeatureIntroCard } from "../../components/common/FeatureIntroCard";
 import { SystemNavPage } from "../../components/common/SystemNavPage";
 import { ProQuickPayHost } from "../../components/paywall/ProQuickPayDialog";
 import { AppTheme } from "../../constants/Theme";
@@ -49,6 +50,7 @@ import {
   SLEEP_DEFAULT_START_CLOCK,
   SLEEP_WEEKLY_REPEAT,
   isSleepSchedule,
+  shouldPromptHomeSleepPlan,
   validateSleepClockWindow,
 } from "../../utils/ScheduledClockUtil";
 import { bootstrapStores } from "../../stores/StoreBootstrap";
@@ -92,6 +94,7 @@ struct PlanAddPage {
   @State duoTargetName: string = "";
   @State planKind: string = "";
   @State private editingSession: DuoSessionView | null = null;
+  private skipSleepGuide: boolean = false;
 
   private readonly dayOptions: number[] = PLAN_REPEAT_DAY_OPTIONS;
   private nameInputController: TextInputController = new TextInputController();
@@ -102,6 +105,31 @@ struct PlanAddPage {
 
   private isPartnerEdit(): boolean {
     return this.isEditing() && this.editingSession?.viewer_role === "partner";
+  }
+
+  private openSleepPlan(): void {
+    pushRoute(PageRoutes.SleepPlan);
+  }
+
+  private confirmSleepGuide(): void {
+    this.getUIContext().showAlertDialog({
+      title: "是否改用早睡？",
+      message: "如果您要设置定时早睡，建议使用首页「早睡」，有专属记录且不计入专注时长。",
+      autoCancel: true,
+      primaryButton: {
+        value: "继续创建定时",
+        action: () => {
+          this.skipSleepGuide = true;
+          void this.savePlan();
+        },
+      },
+      secondaryButton: {
+        value: "前往早睡",
+        action: () => {
+          this.openSleepPlan();
+        },
+      },
+    });
   }
 
   private isSleepPlan(): boolean {
@@ -464,6 +492,13 @@ struct PlanAddPage {
       if (this.selectedTokens.length > 1) {
         this.selectedTokens = this.selectedTokens.slice(0, 1);
       }
+    } else if (
+      !this.isPartnerEdit() &&
+      !this.skipSleepGuide &&
+      shouldPromptHomeSleepPlan(startMin, endMin)
+    ) {
+      this.confirmSleepGuide();
+      return;
     }
 
     const startTimeError = validateScheduledStartTime(
@@ -481,6 +516,8 @@ struct PlanAddPage {
       this.endTime,
       this.repeatDays,
       ScheduledListStore.getAllSessions(),
+      "",
+      this.isSleepPlan(),
     );
     if (scheduleTimeError.length > 0) {
       showErrorToast(scheduleTimeError, uiContext);
@@ -612,6 +649,15 @@ struct PlanAddPage {
             showErrorToast(sleepError, uiContext);
             return;
           }
+        } else if (
+          !this.skipSleepGuide &&
+          shouldPromptHomeSleepPlan(
+            this.timeToMinutes(this.startTime),
+            this.timeToMinutes(this.endTime),
+          )
+        ) {
+          this.confirmSleepGuide();
+          return;
         }
         const scheduleTimeError = validateScheduledPlanTime(
           this.startTime,
@@ -619,6 +665,7 @@ struct PlanAddPage {
           this.repeatDays,
           ScheduledListStore.getAllSessions(),
           session.session_id,
+          this.isSleepPlan(),
         );
         if (scheduleTimeError.length > 0) {
           showErrorToast(scheduleTimeError, uiContext);
@@ -889,6 +936,24 @@ struct PlanAddPage {
           .lineHeight(19)
           .fontColor(AppTheme.colors.textSecondary)
           .width("100%");
+      } else if (
+        !this.isPartnerEdit() &&
+        shouldPromptHomeSleepPlan(
+          this.timeToMinutes(this.startTime),
+          this.timeToMinutes(this.endTime),
+        )
+      ) {
+        FeatureIntroCard({
+          introId: "scheduled_sleep_window",
+          dismissible: false,
+          description: "如果您要设置定时早睡，建议使用首页「早睡」，有专属记录且不计入专注时长。",
+          actionTitle: "前往早睡",
+          marginTop: 8,
+          marginBottom: 4,
+          onAction: (): void => {
+            this.openSleepPlan();
+          },
+        });
       }
     }
     .width("100%")
@@ -1045,6 +1110,12 @@ struct PlanAddPage {
       this.buildAppCard()
       if (!this.isPartnerEdit() && !this.isSleepPlan()) {
         this.buildRepeatDaysCard();
+      }
+      if (this.isSleepPlan()) {
+        Text("早睡不计入专注时长和排行榜")
+          .fontSize(13)
+          .fontColor(AppTheme.colors.textSecondary)
+          .width("100%");
       }
       Button(this.getSubmitLabel())
         .width("100%")

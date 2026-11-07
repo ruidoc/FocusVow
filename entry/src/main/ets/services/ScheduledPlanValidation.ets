@@ -84,6 +84,9 @@ function isActiveScheduledSession(session: DuoSessionView): boolean {
   if (session.type !== 'scheduled') {
     return false;
   }
+  if (session.enabled === false) {
+    return false;
+  }
   return !isInactiveScheduledSession(session);
 }
 
@@ -98,6 +101,17 @@ function getSessionTimeRange(session: DuoSessionView): ScheduledSessionTimeRange
     repeatDays: getScheduleRepeatDays(repeatRaw)
   };
   return range;
+}
+
+/** 与 RN scheduleOverlapMessageKey 文案一致 */
+export function scheduledOverlapToastMessage(selfIsSleep: boolean, otherIsSleep: boolean): string {
+  if (otherIsSleep) {
+    return '与早睡重叠';
+  }
+  if (selfIsSleep) {
+    return '与定时任务重叠';
+  }
+  return '与其他契约时间重叠';
 }
 
 export function findOverlappingScheduledSession(
@@ -164,7 +178,7 @@ export function blockIfOverlapsScheduledPlan(windowMin: number): boolean {
   const startMinute = now.getHours() * 60 + now.getMinutes();
   const today = getTodayRepeatDay();
   const plans: FocusPlan[] = PlanStore.getPlans();
-  let conflictStart = -1;
+  let conflictPlan: FocusPlan | undefined = undefined;
   for (let i = 0; i < plans.length; i++) {
     const plan = plans[i];
     if (!plan.enabled || plan.repeatDays.length === 0) {
@@ -173,20 +187,39 @@ export function blockIfOverlapsScheduledPlan(windowMin: number): boolean {
     const planStart = timeToMinutes(plan.startTime);
     const planEnd = timeToMinutes(plan.endTime);
     if (windowOverlapsPlan(startMinute, windowMin, planStart, planEnd, plan.repeatDays, today)) {
-      conflictStart = planStart;
+      conflictPlan = plan;
       break;
     }
   }
-  if (conflictStart < 0) {
+  if (!conflictPlan) {
     return false;
   }
+  const conflictStart = timeToMinutes(conflictPlan.startTime);
+  const sleepConflict = isSleepPlanId(conflictPlan.duoSessionId);
   const minutesUntil = conflictStart - startMinute;
   if (minutesUntil > 0) {
-    showToast(`${minutesUntil}分钟后契约开始，不可超时`);
+    showToast(
+      sleepConflict
+        ? `${minutesUntil}分钟后早睡开始，不可超时`
+        : `${minutesUntil}分钟后契约开始，不可超时`,
+    );
   } else {
-    showToast('与其他契约时间重叠');
+    showToast(sleepConflict ? '与早睡时间冲突，请调整时长' : '与契约时间冲突，请调整时长');
   }
   return true;
+}
+
+function isSleepPlanId(duoSessionId: string): boolean {
+  if (duoSessionId.length === 0) {
+    return false;
+  }
+  const sessions = ScheduledListStore.getAllSessions();
+  for (let i = 0; i < sessions.length; i++) {
+    if (sessions[i].session_id === duoSessionId) {
+      return isSleepSchedule(sessions[i].schedule_json);
+    }
+  }
+  return false;
 }
 
 export function validateScheduledPlanTime(
@@ -194,7 +227,8 @@ export function validateScheduledPlanTime(
   endTime: string,
   repeatDays: number[],
   sessions: DuoSessionView[],
-  excludeSessionId: string = ''
+  excludeSessionId: string = '',
+  selfIsSleep: boolean = false,
 ): string {
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
@@ -204,8 +238,9 @@ export function validateScheduledPlanTime(
   if (getScheduledDurationMinutes(startMin, endMin) < MIN_SCHEDULED_PLAN_MINUTES) {
     return `时间间隔最少${MIN_SCHEDULED_PLAN_MINUTES}分钟`;
   }
-  if (findOverlappingScheduledSession(startMin, endMin, repeatDays, sessions, excludeSessionId)) {
-    return '与其他契约时间重叠';
+  const hit = findOverlappingScheduledSession(startMin, endMin, repeatDays, sessions, excludeSessionId);
+  if (hit) {
+    return scheduledOverlapToastMessage(selfIsSleep, isSleepSchedule(hit.schedule_json));
   }
   return '';
 }
@@ -232,12 +267,6 @@ export function toastIfScheduleOverlapsEnabled(session: DuoSessionView): boolean
   }
   const selfSleep = isSleepSchedule(session.schedule_json);
   const otherSleep = isSleepSchedule(hit.schedule_json);
-  let message = '与其他契约时间重叠';
-  if (otherSleep) {
-    message = '与早睡契约时间重叠';
-  } else if (selfSleep) {
-    message = '与普通定时任务时间重叠';
-  }
-  showToast(message);
+  showToast(scheduledOverlapToastMessage(selfSleep, otherSleep));
   return true;
 }

@@ -35,7 +35,7 @@ struct SettingsPage {
   private confirmForceUnlock(): void {
     this.getUIContext().showAlertDialog({
       title: '强制解锁',
-      message: '异常无法解锁时再用。没锁的话，点了也没关系。',
+      message: '仅在异常无法解锁时使用。当前没有应用被锁时，此操作无效',
       autoCancel: true,
       primaryButton: {
         value: '确认解锁',

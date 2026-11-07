@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { ActiveLockState, isTimedLockFinished, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
+import { ActiveLockState, createCovenantLockState, isTimedLockFinished, resolveDuoSessionIdFromLock } from '../models/ActiveLockModel';
 import {
   DuoSessionView,
   applyTornTodayToRepeatDays,
@@ -13,7 +13,8 @@ import {
   mergeSessionAppsForHarmony,
   shouldCompleteStaleScheduledWindow
 } from '../models/DuoModel';
-import { normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
+import { FocusPlan, normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
+import { getPlanWindow } from './PlanWindowService';
 import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { LockStore } from '../stores/LockStore';
 import { DuoApiService } from './DuoApiService';
@@ -399,6 +400,49 @@ function formatDayKey(now: number): string {
   return `${date.getFullYear()}-${monthText}-${dayText}`;
 }
 
+/** 已在定时区间但首页没有倒计时：补一条 covenant。已有进行中的锁不覆盖 */
+function showScheduledCountdownIfMissing(context: common.Context, session: DuoSessionView): void {
+  const lock = LockStore.getState();
+  if (lock.kind === 'cycle_guard') {
+    return;
+  }
+  if ((lock.kind === 'covenant' || lock.kind === 'quick_focus') && !isTimedLockFinished(lock, Date.now())) {
+    return;
+  }
+  const snapshot = buildGuardSnapshotFromSession(session, context);
+  if (!snapshot) {
+    return;
+  }
+  const plan: FocusPlan = {
+    id: `session_${snapshot.sessionId}`,
+    name: snapshot.title,
+    startTime: snapshot.startTime,
+    endTime: snapshot.endTime,
+    repeatDays: snapshot.repeatDays,
+    selectedTokens: snapshot.selectedTokens,
+    selectedCount: snapshot.selectedTokens.length,
+    mode: snapshot.mode,
+    enabled: true,
+    duoSessionId: snapshot.sessionId,
+    createdAt: 0,
+    updatedAt: 0
+  };
+  const planWindow = getPlanWindow(plan, new Date());
+  LockStore.setState(
+    context,
+    createCovenantLockState(
+      plan.id,
+      plan.name,
+      plan.selectedTokens,
+      plan.mode,
+      planWindow.startAt,
+      planWindow.endAt,
+      Date.now(),
+      snapshot.sessionId
+    )
+  );
+}
+
 /**
  * 对齐 iOS：打开 App 时已落在启用的定时区间、本机却没锁，才自动同步一次。
  * 没列表先拉；已有列表直接判断。不在任何区间内不自动跑。
@@ -463,6 +507,12 @@ export async function recoverScheduledLockIfInWindow(context: common.Context): P
     }
     return 0;
   });
+  for (let i = 0; i < sessions.length; i++) {
+    if (sessions[i].session_id === dueIds[0]) {
+      showScheduledCountdownIfMissing(context, sessions[i]);
+      break;
+    }
+  }
   const key = `${formatDayKey(now)}:${dueIds.join(',')}`;
   if (autoSyncedScheduleWindows.has(key)) {
     return;

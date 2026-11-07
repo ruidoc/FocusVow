@@ -29,6 +29,43 @@ export function clockDurationMinutes(startMin: number, endMin: number): number {
   return 0;
 }
 
+const SLEEP_PROMPT_START_MIN: number = 22 * 60 + 30;
+const SLEEP_PROMPT_END_MIN: number = 5 * 60 + 30;
+const SLEEP_GUIDE_MIN_DURATION_MIN: number = 3 * 60;
+
+function clockSegments(startMin: number, endMin: number): number[][] {
+  const dayMin = 24 * 60;
+  if (endMin > startMin) {
+    return [[startMin, endMin]];
+  }
+  if (endMin < startMin) {
+    return [[startMin, dayMin], [0, endMin]];
+  }
+  return [];
+}
+
+function segmentsOverlap(left: number[][], right: number[][]): boolean {
+  for (let i = 0; i < left.length; i++) {
+    for (let j = 0; j < right.length; j++) {
+      if (left[i][0] < right[j][1] && left[i][1] > right[j][0]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** 与 RN shouldPromptHomeSleepPlan 相同：22:30–次日 05:30 且至少 3 小时 */
+export function shouldPromptHomeSleepPlan(startMin: number, endMin: number): boolean {
+  if (clockDurationMinutes(startMin, endMin) < SLEEP_GUIDE_MIN_DURATION_MIN) {
+    return false;
+  }
+  return segmentsOverlap(
+    clockSegments(startMin, endMin),
+    clockSegments(SLEEP_PROMPT_START_MIN, SLEEP_PROMPT_END_MIN)
+  );
+}
+
 export function validateSleepClockWindow(startMin: number, endMin: number): string {
   if (startMin < SLEEP_START_MIN_BOUND || startMin > SLEEP_START_MAX_BOUND) {
     return '入睡时间需在 21:00–23:30';
