@@ -3,7 +3,10 @@ import { showToast } from '../../common/Toast';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { backRoute, pushPrivacyPolicy, pushUserAgreement } from '../../router/PageRoutes';
+import { ActiveLockState, createIdleLockState, isLocked } from '../../models/ActiveLockModel';
+import { forceReleaseStaleScreenLock } from '../../services/ActiveLockLifecycleService';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
+import { LockStore } from '../../stores/LockStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { ThemeStore } from '../../stores/ThemeStore';
 import { UserStore } from '../../stores/UserStore';
@@ -15,11 +18,52 @@ bootstrapStores();
 struct SettingsPage {
   @StorageLink(StoreKeys.UserIsLoggedIn) isLoggedIn: boolean = false;
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
+  @StorageLink(StoreKeys.LockActiveState) activeLock: ActiveLockState = createIdleLockState();
+  @State forceUnlockBusy: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     UserStore.hydrate(hostContext);
     ThemeStore.hydrate(hostContext);
+    LockStore.hydrate(hostContext);
+  }
+
+  private showForceUnlockRow(): boolean {
+    return !isLocked(this.activeLock);
+  }
+
+  private confirmForceUnlock(): void {
+    this.getUIContext().showAlertDialog({
+      title: '强制解锁',
+      message: '异常无法解锁时再用。没锁的话，点了也没关系。',
+      autoCancel: true,
+      primaryButton: {
+        value: '确认解锁',
+        fontColor: AppTheme.colors.danger,
+        action: () => {
+          void this.runForceUnlock();
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private async runForceUnlock(): Promise<void> {
+    if (this.forceUnlockBusy) {
+      return;
+    }
+    this.forceUnlockBusy = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      const result = await forceReleaseStaleScreenLock(hostContext);
+      showToast(result.message, this.getUIContext());
+    } finally {
+      this.forceUnlockBusy = false;
+    }
   }
 
   private async logout(): Promise<void> {
@@ -144,9 +188,14 @@ struct SettingsPage {
         this.buildMenuRow('隐私政策', $r('sys.symbol.person'), true, () => {
           pushPrivacyPolicy();
         })
-        this.buildMenuRow('用户协议', $r('sys.symbol.doc_plaintext'), false, () => {
+        this.buildMenuRow('用户协议', $r('sys.symbol.doc_plaintext'), true, () => {
           pushUserAgreement();
         })
+        if (this.showForceUnlockRow()) {
+          this.buildMenuRow('强制解锁', $r('sys.symbol.lock'), false, () => {
+            this.confirmForceUnlock();
+          })
+        }
       }
       .width('100%')
       .backgroundColor(AppTheme.colors.surface)

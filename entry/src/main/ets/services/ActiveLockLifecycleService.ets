@@ -11,7 +11,7 @@ import { DuoBgSyncService } from './DuoBgSyncService';
 import { FocusSyncService } from './FocusSyncService';
 import { AnalyticsService } from './AnalyticsService';
 import { FIRST_FOCUS_TITLE } from './FirstFocusPromptService';
-import { GuardResult, releaseScreenRestriction, removePlanGuardStrategy, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
+import { GuardResult, releaseScreenRestriction, removePlanGuardStrategy, stopAllRunningGuardStrategies, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import { LockStore } from '../stores/LockStore';
 import { refreshStats } from '../stores/StatsStore';
 import { UserStore } from '../stores/UserStore';
@@ -421,4 +421,15 @@ export async function endCycleGuardLock(context: common.Context): Promise<GuardR
   } finally {
     endingLock = false;
   }
+}
+
+/** 设置页强制解锁：直接停当前执行。没在锁时 stop 会被系统忽略 */
+export async function forceReleaseStaleScreenLock(
+  context: common.UIAbilityContext
+): Promise<GuardResult<boolean>> {
+  const result = await stopAllRunningGuardStrategies();
+  if (result.ok) {
+    LockStore.clear(context);
+  }
+  return result;
 }

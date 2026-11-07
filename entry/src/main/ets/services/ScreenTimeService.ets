@@ -841,6 +841,24 @@ export async function removeAllSessionGuardStrategies(): Promise<GuardResult<boo
   }
 }
 
+/** 停掉已注册策略的当前执行。未在执行时系统会忽略，策略本身还在 */
+export async function stopAllRunningGuardStrategies(): Promise<GuardResult<boolean>> {
+  try {
+    const existingStrategies = await guardService.queryGuardStrategies();
+    for (const strategy of existingStrategies) {
+      await stopPlanGuardStrategy(strategy.name);
+    }
+    return { ok: true, data: true, message: '已强制解锁' };
+  } catch (error) {
+    logGuardError('stopAllRunningGuardStrategies', error as Object);
+    return {
+      ok: false,
+      data: false,
+      message: toBusinessMessage('强制解锁失败')
+    };
+  }
+}
+
 /** 退出登录 / 卸载前：移除本应用注册的全部屏时策略（含 plan_、session_、周期守护等） */
 export async function removeAllGuardStrategies(): Promise<GuardResult<boolean>> {
   try {
