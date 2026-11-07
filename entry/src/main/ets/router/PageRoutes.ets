@@ -31,6 +31,7 @@ export class PageRoutes {
   static readonly SleepRecords: string = 'pages/plans/SleepRecordsPage';
   static readonly PlanDetail: string = 'pages/plans/PlanDetailPage';
   static readonly QuickTaskForm: string = 'pages/plans/QuickTaskFormPage';
+  static readonly DuoQuickTaskForm: string = 'pages/plans/DuoQuickTaskFormPage';
   static readonly QuickTaskDetail: string = 'pages/plans/QuickTaskDetailPage';
   static readonly StatsDetail: string = 'pages/stats/StatsDetailPage';
   static readonly CertificatePreview: string = 'pages/certificate/CertificatePreviewPage';

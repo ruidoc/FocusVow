@@ -13,12 +13,17 @@ import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { StoreKeys } from '../stores/StoreKeys';
 import { bootstrapStores } from '../stores/StoreBootstrap';
-import { DuoBgSyncService } from './DuoBgSyncService';
+import { DuoBgSyncService, publishFocusBoundaryNotice } from './DuoBgSyncService';
 import { ExtensionNetworkService } from './ExtensionNetworkService';
 import { loadAccessToken } from './UserPersistenceService';
 import { clearMembershipUrgencyCountdown } from '../utils/OnboardingMembershipUtil';
 import { ensureDelayStartAllowed, recordDelayedStartUsage } from './ProQuotaService';
 import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from './ScheduledPlanValidation';
+import {
+  GuardWindowEvent,
+  removeGuardWindowStart,
+  upsertGuardWindowEvent,
+} from './GuardWindowEventService';
 
 const PENDING_KEY: string = 'pending.quick_start';
 
@@ -41,6 +46,23 @@ async function startDelayedQuickFocus(
   const lockMinutes = resolveInstantLockMinutes(pending.durationMinutes, pending.timerMode);
   // UI 用精确时长，不对齐 TimeGuard 整分，否则会多出当前分钟剩余秒数
   const endAtMs = startedAtMs + lockMinutes * 60_000;
+  if (planId.length > 0) {
+    const startEvent: GuardWindowEvent = {
+      occurrence_id: planId,
+      session_id: '',
+      plan_id: planId,
+      kind: 'start',
+      result: '',
+      fail_reason: '',
+      started_at: startedAtMs,
+      ended_at: 0,
+      title: pending.title,
+      duration_min: pending.durationMinutes,
+      timer_mode: pending.timerMode,
+      mode: pending.mode,
+    };
+    upsertGuardWindowEvent(context, startEvent);
+  }
 
   LockStore.startQuickFocus(
     context,
@@ -58,6 +80,12 @@ async function startDelayedQuickFocus(
       skipStartedNotify: true,
       isDelayedSolo: true,
     },
+  );
+  void publishFocusBoundaryNotice(
+    context,
+    'start',
+    pending.title.length > 0 ? pending.title : '快速专注',
+    pending.durationMinutes,
   );
   // 对齐 iOS：开锁后立刻 POST，不先等策略同步
   const notifyTask: Promise<boolean> = FocusStartedNotifyService.reportAndWait(context, {
@@ -78,7 +106,10 @@ async function startDelayedQuickFocus(
     pending.selectedTokens,
     pending.mode,
   );
-  await notifyTask;
+  const notified = await notifyTask;
+  if (notified && planId.length > 0) {
+    removeGuardWindowStart(context, planId);
+  }
 }
 
 const PROD_QUICK_START_DELAY_OPTIONS: number[] = [0, 5, 10, 15, 20, 30, 45, 60];

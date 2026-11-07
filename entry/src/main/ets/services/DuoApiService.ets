@@ -261,9 +261,21 @@ export class DuoApiService {
 
   static async completeScheduledWindow(
     sessionId: string,
-    context?: common.Context
+    context?: common.Context,
+    occurrenceId: string = '',
+    startedAt: number = 0,
+    endedAt: number = 0,
+    result: string = '',
+    failReason: string = ''
   ): Promise<ApiEnvelope> {
     const body: Record<string, Object> = {};
+    if (occurrenceId.length > 0) {
+      body['occurrence_id'] = occurrenceId;
+      body['started_at'] = startedAt;
+      body['ended_at'] = endedAt;
+      body['result'] = result.length > 0 ? result : 'SUCCESS';
+      body['fail_reason'] = failReason;
+    }
     return HttpService.post(
       `/duo/scheduled/${encodeURIComponent(sessionId)}/complete-window`,
       body,

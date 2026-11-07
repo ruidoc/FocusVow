@@ -10,6 +10,7 @@ import {
 } from '../models/ActiveLockModel';
 import { LockStore } from '../stores/LockStore';
 import { StoreKeys } from '../stores/StoreKeys';
+import { readStoredString } from './PreferencesService';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'DuoBgSync';
@@ -19,6 +20,8 @@ const TICK_MS: number = 1000;
 const SYNC_EVERY_TICKS: number = 5;
 /** 上传/下载类实况窗 typeCode，见长时任务 DATA_TRANSFER 更新示例 */
 const LIVE_VIEW_TYPE_DATA_TRANSFER: number = 8;
+const FOCUS_NOTICE_START_ID: number = 9101;
+const FOCUS_NOTICE_END_ID: number = 9102;
 
 type DuoBgPollFn = (context: common.UIAbilityContext) => Promise<void>;
 
@@ -366,5 +369,39 @@ export class DuoBgSyncService {
     } catch (error) {
       hilog.warn(DOMAIN, TAG, 'update continuous task notification failed: %{public}s', String(error));
     }
+  }
+}
+
+/** 后台锁住/结束时发一条普通通知。调用方不要 await。前台不发。失败只打日志。 */
+export async function publishFocusBoundaryNotice(
+  context: common.Context,
+  kind: 'start' | 'end',
+  titleName: string,
+  minutes: number,
+): Promise<void> {
+  if (readStoredString(context, StoreKeys.AppIsForeground, '0') === '1') {
+    return;
+  }
+  const minutesText = Math.max(1, minutes);
+  const name = titleName.length > 0 ? titleName : '专注契约';
+  const title = kind === 'start' ? '专注开始' : '专注结束';
+  const text = kind === 'start'
+    ? `${name}，${minutesText}分钟`
+    : `已完成${minutesText}分钟专注，太棒了！`;
+  const request: notificationManager.NotificationRequest = {
+    id: kind === 'start' ? FOCUS_NOTICE_START_ID : FOCUS_NOTICE_END_ID,
+    notificationSlotType: notificationManager.SlotType.SERVICE_INFORMATION,
+    content: {
+      notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+      normal: {
+        title,
+        text,
+      },
+    },
+  };
+  try {
+    await notificationManager.publish(request);
+  } catch (error) {
+    hilog.warn(DOMAIN, TAG, 'focus boundary notice failed: %{public}s', String(error));
   }
 }

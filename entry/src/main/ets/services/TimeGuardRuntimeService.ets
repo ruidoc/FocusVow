@@ -26,9 +26,24 @@ import {
   ScheduledGuardSnapshot
 } from './ScheduledSessionPersistenceService';
 import { activateDelayedOnceIfNeeded } from './PendingQuickStartService';
+import { publishFocusBoundaryNotice } from './DuoBgSyncService';
 import { completeOnceQuickFocusFromGuardStop } from './ActiveLockLifecycleService';
-import { isOnceStrategyName, sessionIdFromGuardName } from './ScreenTimeService';
 import { loadExitPlanIds } from './ExitPlanIdsService';
+import {
+  GuardWindowEvent,
+  removeGuardWindowOccurrence,
+  removeGuardWindowStart,
+  scheduledOccurrenceId,
+  upsertGuardWindowEvent,
+} from './GuardWindowEventService';
+import { isOnceStrategyName, sessionIdFromGuardName } from './ScreenTimeService';
+
+function noticeMinutes(startedAt: number, endAt: number): number {
+  if (endAt > startedAt) {
+    return Math.max(1, Math.round((endAt - startedAt) / 60000));
+  }
+  return 1;
+}
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'PlanGuardRuntime';
@@ -237,6 +252,54 @@ function buildScheduledLockStatusMessage(
   return `契约「${title}」正在系统锁定中${duoHint}`;
 }
 
+function rememberScheduledStart(
+  context: common.Context,
+  sessionId: string,
+  state: ActiveLockState
+): void {
+  const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
+  const event: GuardWindowEvent = {
+    occurrence_id: scheduledOccurrenceId(sessionId, state.startedAt),
+    session_id: sessionId,
+    plan_id: state.planId,
+    kind: 'start',
+    result: '',
+    fail_reason: '',
+    started_at: state.startedAt,
+    ended_at: 0,
+    title: state.title,
+    duration_min: durationMin,
+    timer_mode: state.timerMode.length > 0 ? state.timerMode : 'countdown',
+    mode: state.mode,
+  };
+  upsertGuardWindowEvent(context, event);
+}
+
+function rememberScheduledStop(
+  context: common.Context,
+  sessionId: string,
+  state: ActiveLockState,
+  endedAt: number,
+  result: string
+): void {
+  const durationMin = Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
+  const event: GuardWindowEvent = {
+    occurrence_id: scheduledOccurrenceId(sessionId, state.startedAt),
+    session_id: sessionId,
+    plan_id: state.planId,
+    kind: 'stop',
+    result: result,
+    fail_reason: result === 'VIOLATION' ? 'tear' : '',
+    started_at: state.startedAt,
+    ended_at: endedAt,
+    title: state.title,
+    duration_min: durationMin,
+    timer_mode: state.timerMode.length > 0 ? state.timerMode : 'countdown',
+    mode: state.mode,
+  };
+  upsertGuardWindowEvent(context, event);
+}
+
 async function finalizeScheduledCovenantStart(
   context: common.Context,
   sessionId: string,
@@ -244,11 +307,16 @@ async function finalizeScheduledCovenantStart(
   initialState: ActiveLockState
 ): Promise<void> {
   ScheduledListStore.markNeedsRefreshPersisted(context);
+  rememberScheduledStart(context, sessionId, initialState);
   const activationMeta = await resolveScheduledActivationMeta(context, sessionId);
   if (activationMeta.duoSessionId.length === 0) {
     hilog.warn(DOMAIN, TAG, 'activate scheduled failed session=%{public}s', sessionId);
     return;
   }
+  removeGuardWindowStart(
+    context,
+    scheduledOccurrenceId(sessionId, initialState.startedAt)
+  );
 
   const enrichedState = buildCovenantLockFromSnapshot(snapshot, activationMeta);
   saveCovenantLockState(
@@ -297,6 +365,12 @@ export async function handlePlanStrategyStart(context: common.Context, strategyN
       initialState,
       buildScheduledLockStatusMessage(snapshot.title, '')
     );
+    void publishFocusBoundaryNotice(
+      context,
+      'start',
+      snapshot.title,
+      noticeMinutes(initialState.startedAt, initialState.endAt),
+    );
     await finalizeScheduledCovenantStart(context, sessionId, snapshot, initialState);
     return;
   }
@@ -315,6 +389,12 @@ export async function handlePlanStrategyStart(context: common.Context, strategyN
       context,
       initialState,
       `契约「${plan.name}」正在系统锁定中`
+    );
+    void publishFocusBoundaryNotice(
+      context,
+      'start',
+      plan.name,
+      noticeMinutes(initialState.startedAt, initialState.endAt),
     );
     if (plan.duoSessionId.length > 0) {
       const snapshot = loadScheduledGuardSnapshot(context, plan.duoSessionId);
@@ -341,11 +421,71 @@ export async function handlePlanStrategyStart(context: common.Context, strategyN
   hilog.warn(DOMAIN, TAG, 'onStart plan not found, wrote fallback lock %{public}s', strategyName);
 }
 
+async function settleScheduledStop(
+  context: common.Context,
+  sessionId: string,
+  lock: ActiveLockState,
+  result: string
+): Promise<void> {
+  let state = lock;
+  const lockSession = resolveDuoSessionIdFromLock(lock);
+  if (lock.kind !== 'covenant' || lockSession !== sessionId || lock.startedAt <= 0) {
+    const snapshot = loadScheduledGuardSnapshot(context, sessionId);
+    if (!snapshot) {
+      return;
+    }
+    state = buildCovenantLockFromSnapshot(snapshot, createEmptyActivationMeta());
+  }
+  const endedAt = Date.now();
+  rememberScheduledStop(context, sessionId, state, endedAt, result);
+  const occurrenceId = scheduledOccurrenceId(sessionId, state.startedAt);
+  const response = await DuoApiService.completeScheduledWindow(
+    sessionId,
+    context,
+    occurrenceId,
+    state.startedAt,
+    endedAt,
+    result,
+    result === 'VIOLATION' ? 'tear' : ''
+  );
+  if (response.statusCode === 200) {
+    removeGuardWindowOccurrence(context, occurrenceId);
+  }
+  if (result === 'SUCCESS') {
+    void publishFocusBoundaryNotice(
+      context,
+      'end',
+      state.title,
+      noticeMinutes(state.startedAt, state.endAt > 0 ? state.endAt : endedAt),
+    );
+  }
+}
+
+function isPlanTornToday(context: common.Context, planId: string): boolean {
+  if (planId.length === 0) {
+    return false;
+  }
+  const exits = loadExitPlanIds(context);
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const entry = `${year}-${month}-${day}:${planId}`;
+  return exits.includes(entry);
+}
+
 export async function handlePlanStrategyStop(context: common.Context, strategyName: string): Promise<void> {
   const nowMs = Date.now();
   const currentLock = loadPersistedActiveLockState(context) ?? createIdleLockState();
+  const exitPlanIds = loadExitPlanIds(context);
 
   if (isOnceStrategyName(strategyName)) {
+    if (isPlanTornToday(context, strategyName)) {
+      savePersistedActiveLockState(context, createIdleLockState());
+      updateSettingsStatusMessage(context, '当前没有进行中的系统锁定');
+      hilog.info(DOMAIN, TAG, 'onStop skipped once tear %{public}s', strategyName);
+      return;
+    }
     if (currentLock.kind === 'quick_focus' && currentLock.planId === strategyName) {
       // 对齐 RN：原生到点停锁，不依赖 App 打开
       await completeOnceQuickFocusFromGuardStop(context, currentLock);
@@ -377,11 +517,19 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
 
   if (isSessionStrategyName(strategyName)) {
     const sessionId = sessionIdFromStrategy(strategyName);
-    await DuoApiService.completeScheduledWindow(sessionId, context);
+    if (!isScheduledTornToday(sessionId, exitPlanIds, nowMs)) {
+      await settleScheduledStop(context, sessionId, currentLock, 'SUCCESS');
+    } else {
+      hilog.info(DOMAIN, TAG, 'onStop skipped scheduled tear %{public}s', strategyName);
+    }
   } else {
     const plan = findPlanByStrategyName(context, strategyName);
     if (plan?.duoSessionId && plan.duoSessionId.length > 0) {
-      await DuoApiService.completeScheduledWindow(plan.duoSessionId, context);
+      if (!isScheduledTornToday(plan.duoSessionId, exitPlanIds, nowMs)) {
+        await settleScheduledStop(context, plan.duoSessionId, currentLock, 'SUCCESS');
+      } else {
+        hilog.info(DOMAIN, TAG, 'onStop skipped plan scheduled tear %{public}s', strategyName);
+      }
     }
   }
 

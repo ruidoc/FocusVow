@@ -17,6 +17,7 @@
     "pages/plans/SleepRecordsPage",
     "pages/plans/PlanDetailPage",
     "pages/plans/QuickTaskFormPage",
+    "pages/plans/DuoQuickTaskFormPage",
     "pages/plans/QuickTaskDetailPage",
     "pages/stats/StatsDetailPage",
     "pages/certificate/CertificatePreviewPage",

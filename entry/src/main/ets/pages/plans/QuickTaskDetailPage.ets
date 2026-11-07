@@ -62,7 +62,7 @@ struct QuickTaskDetailPage {
   }
 
   private buildTogglePayload(task: QuickTask, enabled: boolean): QuickTaskUpsertPayload {
-    return {
+    const base: QuickTaskUpsertPayload = {
       title: task.title,
       duration_min: task.duration_min,
       timer_mode: task.timer_mode,
@@ -72,6 +72,11 @@ struct QuickTaskDetailPage {
       apps: task.apps,
       enabled: enabled,
     };
+    if (isDuoQuickTask(task)) {
+      base.partner_user_id = (task.partner_user_id ?? '').trim();
+      base.partner_nickname = (task.partner_nickname ?? '').trim();
+    }
+    return base;
   }
 
   private applySwitch(enabled: boolean): void {
@@ -135,7 +140,11 @@ struct QuickTaskDetailPage {
       return;
     }
     AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, this.task.id);
-    pushRoute(PageRoutes.QuickTaskForm);
+    pushRoute(
+      isDuoQuickTask(this.task)
+        ? PageRoutes.DuoQuickTaskForm
+        : PageRoutes.QuickTaskForm,
+    );
   }
 
   private confirmCancel(): void {
@@ -189,7 +198,16 @@ struct QuickTaskDetailPage {
     if (this.task && this.task.title.length > 0) {
       return this.task.title;
     }
-    return '快捷任务';
+    return this.isDuoDetail() ? '互督任务' : '快捷任务';
+  }
+
+  private isDuoDetail(): boolean {
+    return this.task !== null && isDuoQuickTask(this.task);
+  }
+
+  private getPartnerLabel(): string {
+    const name = (this.task?.partner_nickname ?? '').trim();
+    return name.length > 0 ? name : '搭子';
   }
 
   private getDelayTagLabel(): string {
@@ -259,7 +277,9 @@ struct QuickTaskDetailPage {
             .fontColor(AppTheme.colors.textPrimary)
             .layoutWeight(1)
 
-          this.buildStatusTag(this.getDelayTagLabel())
+          if (!this.isDuoDetail()) {
+            this.buildStatusTag(this.getDelayTagLabel())
+          }
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
@@ -267,10 +287,14 @@ struct QuickTaskDetailPage {
         Column({ space: 12 }) {
           this.buildViewRow('专注时长', this.getDurationLabel())
           this.buildViewRow('计时方式', this.getTimerModeLabel())
-          this.buildViewRow('开始时间', this.getStartDelayText())
+          if (this.isDuoDetail()) {
+            this.buildViewRow('互督搭子', this.getPartnerLabel())
+          } else {
+            this.buildViewRow('开始时间', this.getStartDelayText())
+          }
           this.buildViewRow('应用数量', this.getAppCountLabel())
           this.buildViewRow('锁机模式', this.getModeLabel())
-          if (this.showNoStop()) {
+          if (!this.isDuoDetail() && this.showNoStop()) {
             this.buildViewRow('全程专注', '已开启')
           }
         }

@@ -5,7 +5,7 @@ import { font, window } from '@kit.ArkUI';
 import { MsgContent, PushAgent } from '@umeng/push';
 import { AppContextHolder } from '../common/AppContextHolder';
 import { ExtensionNetworkService } from '../services/ExtensionNetworkService';
-import { getPreferencesStorageDir, warmUpPreferencesStore } from '../services/PreferencesService';
+import { getPreferencesStorageDir, warmUpPreferencesStore, writeStoredString } from '../services/PreferencesService';
 import { DuoBgSyncService } from '../services/DuoBgSyncService';
 import { DuoPushHandler } from '../services/DuoPushHandler';
 import { reconcileLockLifecycle } from '../services/LockReconcileService';
@@ -34,6 +34,7 @@ export default class EntryAbility extends UIAbility {
     AnalyticsService.ensureInitialized(this.context);
     webview.WebviewController.initializeWebEngine();
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
+    writeStoredString(this.context, StoreKeys.AppIsForeground, '0');
     ExtensionNetworkService.persistClientMeta(this.context);
     DuoBgSyncService.bindPoll((ctx) => {
       return DuoPushHandler.syncActiveDuoSessionIfNeeded(ctx, { isForeground: false });
@@ -117,6 +118,7 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, true);
+    writeStoredString(this.context, StoreKeys.AppIsForeground, '1');
     AppStorage.setOrCreate(StoreKeys.AppForegroundAt, Date.now());
     const context = AppContextHolder.get();
     if (context) {
@@ -136,6 +138,7 @@ export default class EntryAbility extends UIAbility {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
     AppStorage.setOrCreate(StoreKeys.AppIsForeground, false);
+    writeStoredString(this.context, StoreKeys.AppIsForeground, '0');
     DuoBgSyncService.ensure(this.context);
   }
 

@@ -5,8 +5,8 @@ import { FocusDurationCard } from "../../components/focus/FocusDurationCard";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
 import { filterSessionAppsForHarmony, mergeSessionAppsForHarmony } from "../../models/DuoModel";
-import { QuickTask, QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
-import { PageRoutes, backRoute } from "../../router/PageRoutes";
+import { isDuoQuickTask, QuickTask, QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
+import { PageRoutes, backRoute, pushRoute } from "../../router/PageRoutes";
 import {
   chooseRestrictedApps,
   requestScreenTimeAuthorization,
@@ -63,6 +63,11 @@ struct QuickTaskFormPage {
         (item: QuickTask) => item.id === this.editingId,
       );
       if (existing) {
+        if (isDuoQuickTask(existing)) {
+          AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, existing.id);
+          pushRoute(PageRoutes.DuoQuickTaskForm);
+          return;
+        }
         this.applyTask(existing);
       } else {
         void QuickTaskStore.loadAll().then(() => {
@@ -78,6 +83,11 @@ struct QuickTaskFormPage {
   }
 
   private applyTask(task: QuickTask): void {
+    if (isDuoQuickTask(task)) {
+      AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, task.id);
+      pushRoute(PageRoutes.DuoQuickTaskForm);
+      return;
+    }
     this.title = task.title;
     this.durationMinutes = task.duration_min;
     this.timerMode = task.timer_mode;

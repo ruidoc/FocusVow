@@ -223,6 +223,8 @@ export struct HomeNoticePrimaryBanner {
       }
       .width('100%')
       .margin({ top: 12 })
+      .borderRadius(28)
+      .clip(true)
     } else if (this.showDuoWaitPrimary()) {
       Column() {
         HomeDuoWaitBanner({ embedInNoticeHub: true })
@@ -241,6 +243,8 @@ export struct HomeNoticePrimaryBanner {
       }
       .width('100%')
       .margin({ top: 12 })
+      .borderRadius(28)
+      .clip(true)
     } else if (this.showScheduledSyncPrimary()) {
       Column() {
         HomeScheduledSyncBanner({ embedInNoticeHub: true })

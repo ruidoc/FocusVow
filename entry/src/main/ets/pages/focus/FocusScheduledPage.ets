@@ -181,11 +181,8 @@ struct FocusScheduledPage {
       SystemNavPage({
         title: '预约专注',
         showBack: true,
-        showTitleBar: false,
         usePageScroll: false,
-        horizontalPadding: 0,
-        hiddenTitleTopPadding: 0,
-        bottomSpacerHeight: 0,
+        horizontalPadding: 16,
         useFloatingTabInset: false,
         onBack: (): void => {
           backRoute();

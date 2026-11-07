@@ -21,6 +21,7 @@ import { ScheduledListStore } from '../stores/ScheduledListStore';
 import { refreshStats } from '../stores/StatsStore';
 import { SettingsStore } from '../stores/SettingsStore';
 import { UserStore } from '../stores/UserStore';
+import { flushGuardWindowEvents } from './GuardWindowEventService';
 
 let covenantCompletionInFlight: boolean = false;
 
@@ -71,6 +72,9 @@ export async function reconcileCovenantNaturalCompletion(
 }
 
 export async function reconcileLockLifecycle(context: common.UIAbilityContext): Promise<void> {
+  if (UserStore.isLoggedIn()) {
+    await flushGuardWindowEvents(context);
+  }
   await reconcileScheduledCovenantActivation(context);
   await reconcileCovenantNaturalCompletion(context);
   await reconcileMissedScheduledLock(context);

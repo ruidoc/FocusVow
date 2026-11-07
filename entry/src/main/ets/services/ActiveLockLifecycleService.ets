@@ -7,7 +7,7 @@ import {
 import { FocusSyncResult } from '../models/FocusSyncModel';
 import { endCurrentCycleGuardLockAndRestart, restartCycleGuardIfEnabled } from './CycleGuardService';
 import { DuoApiService } from './DuoApiService';
-import { DuoBgSyncService } from './DuoBgSyncService';
+import { DuoBgSyncService, publishFocusBoundaryNotice } from './DuoBgSyncService';
 import { FocusSyncService } from './FocusSyncService';
 import { AnalyticsService } from './AnalyticsService';
 import { FIRST_FOCUS_TITLE } from './FirstFocusPromptService';
@@ -29,6 +29,7 @@ import { isFocusTooShort } from '../utils/FocusValidity';
 import { queueHonorCertificate } from './CertificatePendingService';
 import { savePersistedActiveLockState } from './ActiveLockPersistenceService';
 import { addExitPlanId } from './ExitPlanIdsService';
+import { GuardWindowEvent, upsertGuardWindowEvent } from './GuardWindowEventService';
 
 let endingLock: boolean = false;
 
@@ -39,6 +40,36 @@ export interface FocusLifecycleResult {
 
 function notifyDuoBgSync(): void {
   DuoBgSyncService.ensure();
+}
+
+function rememberOnceWindow(
+  context: common.Context,
+  state: ActiveLockState,
+  kind: 'start' | 'stop',
+  endedAt: number,
+  result: string
+): void {
+  if (!state.planId.startsWith('once_')) {
+    return;
+  }
+  const durationMin = state.minDurationMin > 0
+    ? state.minDurationMin
+    : Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));
+  const event: GuardWindowEvent = {
+    occurrence_id: state.planId,
+    session_id: '',
+    plan_id: state.planId,
+    kind: kind,
+    result: result,
+    fail_reason: result === 'VIOLATION' ? 'tear' : '',
+    started_at: state.startedAt,
+    ended_at: kind === 'stop' ? endedAt : 0,
+    title: state.title,
+    duration_min: durationMin,
+    timer_mode: state.timerMode.length > 0 ? state.timerMode : 'countdown',
+    mode: state.mode,
+  };
+  upsertGuardWindowEvent(context, event);
 }
 
 function trackSessionFinished(
@@ -139,6 +170,7 @@ export async function completeOnceQuickFocusFromGuardStop(
     trackSessionFinished(state, endedAt, 'failed', 'too_short');
   } else {
     trackSessionFinished(state, endedAt, 'completed');
+    rememberOnceWindow(context, state, 'stop', endedAt, 'SUCCESS');
     saveQuickFocusPending(context, state, 'SUCCESS', endedAt);
     if (UserStore.isLoggedIn()) {
       queueHonorCertificate(state, endedAt);
@@ -154,6 +186,14 @@ export async function completeOnceQuickFocusFromGuardStop(
   }
   await releaseScreenRestriction(state.selectedTokens, state.mode);
   await restartCycleGuardIfEnabled(context);
+  if (!tooShort) {
+    void publishFocusBoundaryNotice(
+      context,
+      'end',
+      state.title.length > 0 ? state.title : '快速专注',
+      Math.max(1, Math.round((endedAt - state.startedAt) / 60000)),
+    );
+  }
 }
 
 export async function endQuickFocus(
@@ -260,7 +300,13 @@ export async function tearQuickFocus(
       }
     } else if (UserStore.isLoggedIn() || sessionId.length > 0) {
       // 未登录第一次单人失败：不落 pending，登录后也不补推耻辱记录
+      rememberOnceWindow(context, state, 'stop', endedAt, 'VIOLATION');
       saveQuickFocusPending(context, state, 'VIOLATION', endedAt);
+    }
+
+    // 先于停策略写入，避免 TimeGuard onStop 把撕毁当成自然结束记 success
+    if (state.planId.length > 0 && !tooShort) {
+      addExitPlanId(context, state.planId);
     }
 
     let unlockOk = false;
@@ -348,9 +394,11 @@ export async function tearCovenantWindow(
   try {
     const tooShort = await syncScheduledCovenantTerminal(context, state, 'VIOLATION');
     const sessionId = resolveDuoSessionIdFromLock(state);
+    if (state.planId.length > 0 && !tooShort) {
+      addExitPlanId(context, state.planId);
+    }
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
     if (stopResult.ok && state.planId.length > 0) {
-      addExitPlanId(context, state.planId);
       const sessions = ScheduledListStore.getAllSessions();
       for (let i = 0; i < sessions.length; i++) {
         if (sessions[i].session_id === sessionId) {
