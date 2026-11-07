@@ -3,7 +3,7 @@ import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { request } from '@kit.BasicServicesKit';
 import { AppContextHolder } from '../common/AppContextHolder';
-import { getAppVersionSync, getDeviceModel } from '../common/AppInfo';
+import { getAppVersionSync, getClientOsVersion, getDeviceModel } from '../common/AppInfo';
 import { ApiConfig } from '../config/ApiConfig';
 import { ApiEnvelope } from '../models/UserModel';
 import { FocusSyncService } from './FocusSyncService';
@@ -366,15 +366,22 @@ export class HttpService {
     context?: common.Context
   ): Record<string, string> {
     const appVersion = getAppVersionSync();
+    const deviceModel = getDeviceModel();
+    const osVersion = getClientOsVersion();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'project-tag': ApiConfig.PROJECT_TAG,
       'os': ApiConfig.OS_TAG,
       'x-platform': ApiConfig.OS_TAG,
-      'device-model': getDeviceModel(),
+      'device-model': deviceModel,
+      'x-device-model': deviceModel,
       'app-version': appVersion,
       'x-app-version': appVersion
     };
+    if (osVersion.length > 0) {
+      headers['os-version'] = osVersion;
+      headers['x-os-version'] = osVersion;
+    }
 
     if (requiresAuth) {
       const authContext = context ?? AppContextHolder.get();

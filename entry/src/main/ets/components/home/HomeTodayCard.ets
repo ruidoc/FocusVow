@@ -1,11 +1,14 @@
 import { common } from "@kit.AbilityKit";
 import { showToast } from "../../common/Toast";
 import { createEmptyUserInfo, UserInfo } from "../../models/UserModel";
+import { DuoSessionView } from "../../models/DuoModel";
 import {
   FocusPlan,
-  findNextUpcomingPlanToday,
+  findNextUpcomingPlanForHome,
   getPlanSecondsUntilStart,
 } from "../../models/PlanModel";
+import { loadScheduledListOnLogin } from "../../services/ScheduledCovenantService";
+import { ScheduledListStore } from "../../stores/ScheduledListStore";
 import {
   PageRoutes,
   openScheduledTaskTabOnce,
@@ -62,7 +65,8 @@ function formatNextPlanCountdown(totalSeconds: number): string {
 @Component
 export struct HomeTodayCard {
   @StorageLink(StoreKeys.UserInfo) userInfo: UserInfo = createEmptyUserInfo();
-  @StorageLink(StoreKeys.PlanCollection) planCollection: FocusPlan[] = [];
+  @StorageLink(StoreKeys.PlanCollection) @Watch("onPlanSourcesChanged") planCollection: FocusPlan[] = [];
+  @StorageLink(StoreKeys.ScheduledListAll) @Watch("onPlanSourcesChanged") scheduledSessions: DuoSessionView[] = [];
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = "light";
   @Prop actualMins: number = 0;
   @Prop taskCount: number = 0;
@@ -90,10 +94,26 @@ export struct HomeTodayCard {
   });
 
   aboutToAppear(): void {
+    ScheduledListStore.hydrate();
     this.refreshNextPlan();
     this.startTimer();
     this.refreshAppUpdate();
     void this.loadContractPoints();
+    this.ensureScheduledListLoaded();
+  }
+
+  private onPlanSourcesChanged(): void {
+    this.refreshNextPlan();
+  }
+
+  private ensureScheduledListLoaded(): void {
+    if (!UserStore.isLoggedIn()) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (ScheduledListStore.isDirty() || this.scheduledSessions.length === 0) {
+      void loadScheduledListOnLogin(hostContext);
+    }
   }
 
   private async loadContractPoints(): Promise<void> {
@@ -184,7 +204,13 @@ export struct HomeTodayCard {
 
   private refreshNextPlan(): void {
     const _tick = this.cardTick;
-    const nextPlan = findNextUpcomingPlanToday(this.planCollection);
+    if (!UserStore.isLoggedIn()) {
+      this.showNextPlan = false;
+      this.nextPlanName = "";
+      this.nextPlanSecondsLeft = 0;
+      return;
+    }
+    const nextPlan = findNextUpcomingPlanForHome(this.planCollection, this.scheduledSessions);
     if (!nextPlan) {
       this.showNextPlan = false;
       this.nextPlanName = "";
@@ -205,7 +231,7 @@ export struct HomeTodayCard {
   }
 
   private onNextPlanPress(): void {
-    const nextPlan = findNextUpcomingPlanToday(this.planCollection);
+    const nextPlan = findNextUpcomingPlanForHome(this.planCollection, this.scheduledSessions);
     if (!nextPlan) {
       return;
     }
@@ -329,17 +355,20 @@ export struct HomeTodayCard {
                 SymbolGlyph($r("sys.symbol.alarm"))
                   .fontSize(17)
                   .fontColor(["#FFFFFF"])
+                  .flexShrink(0)
                 Text(this.nextPlanHeaderText())
                   .fontSize(13)
                   .fontColor("rgba(255,255,255,0.86)")
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .layoutWeight(1)
+                  .flexShrink(1)
                 SymbolGlyph($r("sys.symbol.chevron_right"))
                   .fontSize(14)
                   .fontColor(["rgba(255,255,255,0.86)"])
+                  .flexShrink(0)
               }
               .layoutWeight(1)
+              .justifyContent(FlexAlign.Start)
               .onClick(() => {
                 this.onNextPlanPress();
               });

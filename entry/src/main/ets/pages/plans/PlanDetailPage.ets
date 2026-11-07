@@ -488,7 +488,7 @@ struct PlanDetailPage {
     await removeGuardForSession(hostContext, this.session.session_id);
     ScheduledListStore.markDirty();
     showToast('已退出契约', this.getUIContext());
-    navigateToMainTab('plans');
+    backRoute();
   }
 
   private async cancelSession(): Promise<void> {
@@ -504,7 +504,7 @@ struct PlanDetailPage {
     await removeGuardForSession(hostContext, this.session.session_id);
     ScheduledListStore.markDirty();
     showToast('契约已作废', this.getUIContext());
-    navigateToMainTab('plans');
+    backRoute();
   }
 
   @Builder

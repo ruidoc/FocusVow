@@ -8,6 +8,7 @@
     "pages/focus/DuoMatchPage",
     "pages/focus/DuoPickFriendPage",
     "pages/focus/FocusResultPage",
+    "pages/focus/FocusScheduledPage",
     "pages/onboarding/WelcomePage",
     "pages/onboarding/OnboardingPage",
     "pages/plans/PlanListPage",

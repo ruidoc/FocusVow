@@ -1,5 +1,3 @@
-import { common } from '@kit.AbilityKit';
-import { showErrorToast } from '../../common/Toast';
 import { AppTheme } from '../../constants/Theme';
 import {
   CertificatePendingSnapshot,
@@ -15,9 +13,8 @@ import {
   openShameCertificatePreview,
 } from '../../services/CertificateNavigationService';
 import { onCertificateGuideDismissed } from '../../services/GuestSoloFocusService';
-import { WeComCustomerService } from '../../services/WeComCustomerService';
 import { UserStore } from '../../stores/UserStore';
-import { PageRoutes, pushRoute, returnToMainTab } from '../../router/PageRoutes';
+import { PageRoutes, pushContact, pushRoute, returnToMainTab } from '../../router/PageRoutes';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 
 bootstrapStores();
@@ -79,12 +76,8 @@ struct FocusResultPage {
     returnToMainTab('focus');
   }
 
-  private async onContactSupport(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext, 'focus_result');
-    if (errorMessage !== null) {
-      showErrorToast(errorMessage, this.getUIContext());
-    }
+  private onContactSupport(): void {
+    pushContact('focus_result');
   }
 
   build() {
@@ -203,7 +196,7 @@ struct FocusResultPage {
           .fontSize(14)
           .fontColor(AppTheme.colors.primary)
           .onClick(() => {
-            void this.onContactSupport();
+            this.onContactSupport();
           })
       }
       .margin({ top: 12 })

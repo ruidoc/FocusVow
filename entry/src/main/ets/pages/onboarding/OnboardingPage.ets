@@ -6,7 +6,7 @@ import { OnboardingPlanReveal } from '../../components/onboarding/OnboardingPlan
 import { PageBackgroundDecoration } from '../../components/common/PageBackgroundDecoration';
 import { AppTheme } from '../../constants/Theme';
 import { FeatureFlagKeys } from '../../config/FeatureFlags';
-import { backRoute, PageRoutes, pushQuickStart, pushRoute, returnToMainTab } from '../../router/PageRoutes';
+import { backRoute, pushContact, pushQuickStart, returnToMainTab } from '../../router/PageRoutes';
 import {
   FIRST_FOCUS_MINUTES,
   FIRST_FOCUS_TITLE
@@ -17,7 +17,6 @@ import {
   OnboardingApiService
 } from '../../services/OnboardingApiService';
 import { ReferralApiService } from '../../services/ReferralApiService';
-import { WeComCustomerService } from '../../services/WeComCustomerService';
 import { AnalyticsService } from '../../services/AnalyticsService';
 import {
   checkScreenTimeAuthorized,
@@ -99,6 +98,7 @@ struct OnboardingPage {
   @State referralCode: string = '';
   @State referralStatus: string = 'idle'; // idle | checking | valid | invalid
   @State showSkipConfirm: boolean = false;
+  @State showReferralModal: boolean = false;
   @State screenTimeOk: boolean = false;
   @State screenTimeDenied: boolean = false;
   @State busy: boolean = false;
@@ -154,11 +154,7 @@ struct OnboardingPage {
           'login_method': 'email',
         }));
       }
-      if (this.viaOldUser) {
-        this.step = this.stepPermission();
-      } else {
-        this.step = this.stepReferral();
-      }
+      this.step = this.stepPermission();
     }
     this.progressWidthPercent = Math.max(8, (this.step / this.totalSteps) * 100);
     if (isOnboardingCompleted(hostContext) && !this.viaOldUser && !this.permOnly) {
@@ -310,12 +306,8 @@ struct OnboardingPage {
     return FeatureFlagStore.isFeatureOff(FeatureFlagKeys.OB_LOGIN_SKIP);
   }
 
-  private async onContactSupport(entrySource: string): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext, entrySource);
-    if (errorMessage !== null) {
-      showErrorToast(errorMessage, this.getUIContext());
-    }
+  private onContactSupport(entrySource: string): void {
+    pushContact(entrySource);
   }
 
   private stepPlan(): number {
@@ -330,10 +322,6 @@ struct OnboardingPage {
     return this.showPartnerStep() ? 5 : 4;
   }
 
-  private stepReferral(): number {
-    return this.showPartnerStep() ? 6 : 5;
-  }
-
   private stepPermission(): number {
     if (this.permOnly) {
       return 1;
@@ -341,7 +329,7 @@ struct OnboardingPage {
     if (this.viaOldUser) {
       return this.showPartnerStep() ? 5 : 4;
     }
-    return this.showPartnerStep() ? 7 : 6;
+    return this.showPartnerStep() ? 6 : 5;
   }
 
   private getTotalSteps(): number {
@@ -516,38 +504,17 @@ struct OnboardingPage {
       'problem': goalToProblem(this.goal),
       'meta': meta,
     });
-    if (onboardingPath === 'focus_first' || this.viaOldUser || skipReferral) {
-      if (action === 'skip') {
-        clearPendingReferralCode();
-      }
-      this.applyStep(this.stepPermission());
-      void this.syncPermission();
-      return;
-    }
-    AnalyticsService.trackEvent('onboarding_referral_viewed', {
-      'entry_source': 'onboarding_signup_benefit',
-    });
-    this.applyStep(this.stepReferral());
-  }
-
-  private continueFromReferral(skipped: boolean): void {
-    AnalyticsService.trackEvent('onboarding_referral_continued', {
-      'referral_code_status': skipped ? 'idle' : this.referralStatus,
-      'has_valid_referral_code': !skipped && this.referralStatus === 'valid',
-      'skipped': skipped,
-    });
-    this.upsert({
-      'current_step': 'referral',
-      'identity': this.identity,
-      'goal': this.goal,
-      'problem': goalToProblem(this.goal),
-    });
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!skipped && this.referralStatus === 'valid' && UserStore.isLoggedIn()) {
-      void UserStore.flushPendingReferral(hostContext);
-    }
-    if (skipped) {
+    if (action === 'skip') {
       clearPendingReferralCode();
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (
+      onboardingPath === 'register_first' &&
+      !skipReferral &&
+      this.referralStatus === 'valid' &&
+      UserStore.isLoggedIn()
+    ) {
+      void UserStore.flushPendingReferral(hostContext);
     }
     this.applyStep(this.stepPermission());
     void this.syncPermission();
@@ -561,7 +528,27 @@ struct OnboardingPage {
     if (!valid) {
       return;
     }
-    this.continueFromReferral(false);
+    AnalyticsService.trackEvent('onboarding_referral_continued', {
+      'referral_code_status': 'valid',
+      'has_valid_referral_code': true,
+      'entry_surface': 'signup_benefit_modal',
+    });
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    if (UserStore.isLoggedIn()) {
+      void UserStore.flushPendingReferral(hostContext);
+    }
+    this.showReferralModal = false;
+  }
+
+  private openReferralModal(): void {
+    AnalyticsService.trackEvent('onboarding_referral_modal_opened', {
+      'entry_source': 'onboarding_signup_benefit',
+    });
+    this.showReferralModal = true;
+  }
+
+  private closeReferralModal(): void {
+    this.showReferralModal = false;
   }
 
   private async ensurePrivacy(): Promise<boolean> {
@@ -637,13 +624,6 @@ struct OnboardingPage {
     clearMembershipSignupSkipped(hostContext);
     const benefitEligible = UserStore.lastLoginIsNew;
     this.goInviteContinue('login', loginMethod, benefitEligible, !UserStore.lastLoginIsNew);
-  }
-
-  private onInviteEmailRegister(): void {
-    clearPendingReferralCode();
-    this.trackSignupBenefitContinue('email_register', 'email', false, 'register_first');
-    AppStorage.setOrCreate(StoreKeys.LoginFrom, 'onboarding_signup_benefit');
-    pushRoute(PageRoutes.Register);
   }
 
   private referralHasInput(): boolean {
@@ -764,13 +744,6 @@ struct OnboardingPage {
       return false;
     }
     return this.step === this.stepInvite();
-  }
-
-  private isReferralStep(): boolean {
-    if (this.permOnly || this.viaOldUser) {
-      return false;
-    }
-    return this.step === this.stepReferral();
   }
 
   private isPermissionStep(): boolean {
@@ -1058,6 +1031,161 @@ struct OnboardingPage {
   }
 
   @Builder
+  private buildInviteReferralLink(): void {
+    if (this.referralStatus === 'valid') {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+          .fontSize(18)
+          .fontColor([AppTheme.colors.success])
+        Text('邀请码已验证，登录后自动生效')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.success)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .margin({ top: 10, bottom: 16 })
+      .borderRadius(12)
+      .backgroundColor('rgba(22, 163, 74, 0.1)')
+    } else {
+      Text('有邀请码？点这里')
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.colors.primary)
+        .textAlign(TextAlign.Center)
+        .width('100%')
+        .margin({ top: 10 })
+        .padding({ top: 4, bottom: 12 })
+        .onClick(() => {
+          this.openReferralModal();
+        })
+    }
+  }
+
+  @Builder
+  private buildReferralModal(): void {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.45)')
+        .onClick(() => {
+          this.closeReferralModal();
+        })
+
+      Column() {
+        Row() {
+          Blank()
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([AppTheme.colors.textMuted])
+            .onClick(() => {
+              this.closeReferralModal();
+            })
+        }
+        .width('100%')
+        .padding({ bottom: 8 })
+
+        Text('有邀请码吗？')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.colors.textPrimary)
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .margin({ bottom: 8 })
+
+        Text('填写邀请码领会员，完成互督发放')
+          .fontSize(14)
+          .lineHeight(20)
+          .fontColor(AppTheme.colors.textSecondary)
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .margin({ bottom: 20 })
+
+        Row({ space: 8 }) {
+          TextInput({ placeholder: '输入邀请码', text: this.referralCode })
+            .layoutWeight(1)
+            .height(48)
+            .fontSize(17)
+            .maxLength(11)
+            .textAlign(TextAlign.Center)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .onChange((value: string) => {
+              this.referralCode = value.slice(0, 11);
+              if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
+                this.referralStatus = 'idle';
+              }
+              if (normalizeReferralCode(this.referralCode).length === 0) {
+                this.referralStatus = 'idle';
+                clearPendingReferralCode();
+              }
+            })
+          if (this.referralStatus === 'checking') {
+            LoadingProgress()
+              .width(18)
+              .height(18)
+              .color(AppTheme.colors.primary)
+          } else if (this.referralStatus === 'valid') {
+            SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+              .fontSize(20)
+              .fontColor([AppTheme.colors.success])
+          }
+        }
+        .width('100%')
+        .constraintSize({ minHeight: 48 })
+        .padding({ left: 8, right: 8, bottom: 6 })
+        .border({
+          width: { bottom: 1 },
+          color: this.referralStatus === 'invalid' ? AppTheme.colors.danger :
+            (this.referralStatus === 'valid' ? AppTheme.colors.success : AppTheme.colors.border)
+        })
+
+        if (this.referralStatus === 'invalid') {
+          Text('邀请码无效，请重试或者跳过')
+            .fontSize(12)
+            .fontColor(AppTheme.colors.danger)
+            .lineHeight(18)
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .margin({ top: 8 })
+        }
+
+        Button('验证')
+          .width('100%')
+          .height(48)
+          .type(ButtonType.Normal)
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .backgroundColor(
+            !this.referralHasInput() || this.referralStatus === 'checking' ?
+              'rgba(122, 90, 248, 0.22)' : AppTheme.colors.primary)
+          .fontColor(
+            !this.referralHasInput() || this.referralStatus === 'checking' ?
+              AppTheme.colors.primaryMutedForeground : Color.White)
+          .borderRadius(AppTheme.radius.button)
+          .margin({ top: 20 })
+          .enabled(this.referralHasInput() && this.referralStatus !== 'checking')
+          .onClick(() => {
+            void this.onReferralVerify();
+          })
+      }
+      .width('88%')
+      .constraintSize({ maxWidth: 360 })
+      .padding({
+        top: 24,
+        left: 24,
+        right: 24,
+        bottom: 24,
+      })
+      .backgroundColor(AppTheme.colors.surface)
+      .borderRadius(28)
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
   private buildInviteStep(): void {
     Column() {
       Scroll() {
@@ -1084,7 +1212,9 @@ struct OnboardingPage {
             }, (line: string) => line)
           }
           .alignItems(HorizontalAlign.Start)
-          .margin({ bottom: 80 })
+          .margin({ bottom: 32 })
+
+          this.buildInviteReferralLink()
 
           Button() {
             Row({ space: 8 }) {
@@ -1138,29 +1268,6 @@ struct OnboardingPage {
             void this.onInviteWechatLogin();
           })
 
-          Button() {
-            Row({ space: 8 }) {
-              SymbolGlyph($r('sys.symbol.envelope'))
-                .fontSize(20)
-                .fontColor([AppTheme.colors.textPrimary])
-              Text('邮箱注册')
-                .fontSize(16)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(AppTheme.colors.textPrimary)
-            }
-          }
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Normal)
-          .buttonStyle(ButtonStyleMode.NORMAL)
-          .backgroundColor(AppTheme.colors.surfaceSecondary)
-          .borderRadius(AppTheme.radius.button)
-          .clip(true)
-          .enabled(!this.wechatLoading && !this.huaweiLoading)
-          .onClick(() => {
-            this.onInviteEmailRegister();
-          })
-
           AgreementConsentRow({
             agreed: this.agreedToTerms,
             centered: true,
@@ -1184,7 +1291,7 @@ struct OnboardingPage {
           .fontColor(AppTheme.colors.textMuted)
           .padding({ top: 8, bottom: 8 })
           .onClick(() => {
-            void this.onContactSupport('onboarding_login');
+            this.onContactSupport('onboarding_login');
           })
       } else {
         Text('先体验专注')
@@ -1195,148 +1302,6 @@ struct OnboardingPage {
             this.openSkipConfirm();
           })
       }
-    }
-    .width('100%')
-    .layoutWeight(1)
-    .padding({
-      bottom: Math.max(this.bottomInset, 8) + 16
-    })
-  }
-
-  @Builder
-  private buildReferralStep(): void {
-    Column() {
-      Scroll() {
-        Column() {
-          Text('有邀请码吗？')
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(AppTheme.colors.textPrimary)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .margin({ bottom: 8 })
-
-          Text('填写邀请码领会员，或联系客服')
-            .fontSize(15)
-            .lineHeight(24)
-            .fontColor(AppTheme.colors.textSecondary)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .margin({ bottom: 32 })
-
-          Row({ space: 8 }) {
-            TextInput({ placeholder: '输入邀请码', text: this.referralCode })
-              .layoutWeight(1)
-              .height(48)
-              .fontSize(17)
-              .maxLength(11)
-              .textAlign(TextAlign.Center)
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .onChange((value: string) => {
-                this.referralCode = value.slice(0, 11);
-                if (this.referralStatus !== 'idle' && this.referralStatus !== 'checking') {
-                  this.referralStatus = 'idle';
-                }
-                if (normalizeReferralCode(this.referralCode).length === 0) {
-                  this.referralStatus = 'idle';
-                  clearPendingReferralCode();
-                }
-              })
-            if (this.referralStatus === 'checking') {
-              LoadingProgress()
-                .width(18)
-                .height(18)
-                .color(AppTheme.colors.primary)
-            } else if (this.referralStatus === 'valid') {
-              SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-                .fontSize(20)
-                .fontColor([AppTheme.colors.success])
-            }
-          }
-          .width('100%')
-          .constraintSize({ minHeight: 48 })
-          .padding({ left: 8, right: 8, bottom: 6 })
-          .border({
-            width: { bottom: 1 },
-            color: this.referralStatus === 'invalid' ? AppTheme.colors.danger :
-              (this.referralStatus === 'valid' ? AppTheme.colors.success : AppTheme.colors.border)
-          })
-
-          if (this.referralStatus === 'invalid') {
-            Text('邀请码无效，请重试或者跳过')
-              .fontSize(12)
-              .fontColor(AppTheme.colors.danger)
-              .lineHeight(18)
-              .width('100%')
-              .textAlign(TextAlign.Center)
-              .margin({ top: 8 })
-          }
-
-          Button('验证')
-            .width('100%')
-            .height(52)
-            .type(ButtonType.Normal)
-            .buttonStyle(ButtonStyleMode.NORMAL)
-            .backgroundColor(
-              !this.referralHasInput() || this.referralStatus === 'checking' ?
-                'rgba(122, 90, 248, 0.22)' : AppTheme.colors.primary)
-            .fontColor(
-              !this.referralHasInput() || this.referralStatus === 'checking' ?
-                AppTheme.colors.primaryMutedForeground : Color.White)
-            .borderRadius(AppTheme.radius.button)
-            .margin({ top: 16 })
-            .enabled(this.referralHasInput() && this.referralStatus !== 'checking')
-            .onClick(() => {
-              void this.onReferralVerify();
-            })
-
-          Text('没有邀请码？参与调研可领取会员权益')
-            .fontSize(14)
-            .lineHeight(20)
-            .fontColor(AppTheme.colors.textSecondary)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .margin({ top: 56, bottom: 16 })
-
-          Button() {
-            Row({ space: 8 }) {
-              SymbolGlyph($r('sys.symbol.headphones'))
-                .fontSize(22)
-                .fontColor([Color.Black])
-              Text('联系客服领会员')
-                .fontSize(16)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(Color.Black)
-            }
-          }
-          .width('100%')
-          .height(52)
-          .type(ButtonType.Normal)
-          .buttonStyle(ButtonStyleMode.NORMAL)
-          .backgroundColor(Color.White)
-          .borderRadius(AppTheme.radius.button)
-          .onClick(() => {
-            void this.onContactSupport('onboarding_referral');
-          })
-
-          Text('跳过，下一步')
-            .fontSize(14)
-            .fontColor(AppTheme.colors.textMuted)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .padding({ top: 16, bottom: 8 })
-            .onClick(() => {
-              this.continueFromReferral(true);
-            })
-        }
-        .width('100%')
-        .padding({ left: 32, right: 32, top: 24, bottom: 24 })
-        .alignItems(HorizontalAlign.Center)
-      }
-      .layoutWeight(1)
-      .scrollBar(BarState.Off)
-      .align(Alignment.Top)
     }
     .width('100%')
     .layoutWeight(1)
@@ -1681,8 +1646,6 @@ struct OnboardingPage {
       this.buildPartnerStep()
     } else if (this.isInviteStep()) {
       this.buildInviteStep()
-    } else if (this.isReferralStep()) {
-      this.buildReferralStep()
     } else if (this.isPermissionStep()) {
       this.buildPermissionStep()
     }
@@ -1702,6 +1665,9 @@ struct OnboardingPage {
 
       if (this.showSkipConfirm) {
         this.buildSkipConfirmModal()
+      }
+      if (this.showReferralModal) {
+        this.buildReferralModal()
       }
     }
     .width('100%')

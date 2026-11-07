@@ -1,45 +1,46 @@
-import { common } from '@kit.AbilityKit';
-import { ScheduledSessionCard } from './ScheduledSessionCard';
-import { ScheduledSceneCards } from './ScheduledSceneCards';
-import { FeatureIntroCard, isFeatureIntroDismissed } from '../common/FeatureIntroCard';
-import { AppTheme } from '../../constants/Theme';
-import { ScheduledScenePreset } from '../../models/ScheduledScenePreset';
-import { showErrorToast, showToast } from '../../common/Toast';
-import { DuoSessionView, sortScheduledSessions } from '../../models/DuoModel';
-import { PageRoutes, pushPlanAddFromPreset, pushRoute } from '../../router/PageRoutes';
-import { isSleepSchedule } from '../../utils/ScheduledClockUtil';
-import { DuoApiService } from '../../services/DuoApiService';
+import { common } from "@kit.AbilityKit";
+import { ScheduledSessionCard } from "./ScheduledSessionCard";
+import { ScheduledSceneCards } from "./ScheduledSceneCards";
+import { FeatureIntroCard, isFeatureIntroDismissed } from "../common/FeatureIntroCard";
+import { AppTheme } from "../../constants/Theme";
+import { ScheduledScenePreset } from "../../models/ScheduledScenePreset";
+import { showErrorToast, showToast } from "../../common/Toast";
+import { DuoSessionView, sortScheduledSessions } from "../../models/DuoModel";
+import { PageRoutes, pushPlanAddFromPreset, pushRoute } from "../../router/PageRoutes";
+import { isSleepSchedule } from "../../utils/ScheduledClockUtil";
+import { DuoApiService } from "../../services/DuoApiService";
 import {
   hydrateScheduledGuardSyncFlags,
   reconcileStaleScheduledWindows,
   applyScheduledGuardSyncCheckAfterListLoad,
-  syncScheduledGuardsManually
-} from '../../services/ScheduledCovenantService';
-import { ensureScreenTimeAuthorization } from '../../services/ScreenTimeService';
-import { ScheduledListFilter, ScheduledListStore } from '../../stores/ScheduledListStore';
-import { SettingsStore } from '../../stores/SettingsStore';
-import { StoreKeys } from '../../stores/StoreKeys';
-import { UserStore } from '../../stores/UserStore';
-import { bootstrapStores } from '../../stores/StoreBootstrap';
+  syncScheduledGuardsManually,
+} from "../../services/ScheduledCovenantService";
+import { ensureScreenTimeAuthorization } from "../../services/ScreenTimeService";
+import { ScheduledListFilter, ScheduledListStore } from "../../stores/ScheduledListStore";
+import { SettingsStore } from "../../stores/SettingsStore";
+import { StoreKeys } from "../../stores/StoreKeys";
+import { UserStore } from "../../stores/UserStore";
+import { bootstrapStores } from "../../stores/StoreBootstrap";
 
 bootstrapStores();
 
 /** 定时契约暂不展示「我发起的 / 我加入的」，默认全部；改 true 可恢复 */
 const SHOW_SCHEDULED_ROLE_FILTER: boolean = false;
-
 @Component
 export struct PlanListContent {
-  @Prop @Watch('onIsPageActiveChanged') isPageActive: boolean = true;
+  @Prop @Watch("onIsPageActiveChanged") isPageActive: boolean = true;
 
   onScrollerReady?: (scroller: Scroller) => void;
   onCreatePlan?: () => void;
 
   private listScroller: Scroller = new Scroller();
-  @StorageLink(StoreKeys.ScheduledListDirty) @Watch('onListDirtyChanged') listDirty: boolean = true;
-  @StorageLink(StoreKeys.ScheduledListAll) @Watch('onAllSessionsChanged') allSessions: DuoSessionView[] = [];
-  @State activeFilter: ScheduledListFilter = 'all';
+  @StorageLink(StoreKeys.ScheduledListDirty) @Watch("onListDirtyChanged") listDirty: boolean = true;
+  @StorageLink(StoreKeys.ScheduledListAll)
+  @Watch("onAllSessionsChanged")
+  allSessions: DuoSessionView[] = [];
+  @State activeFilter: ScheduledListFilter = "all";
   @State displaySessions: DuoSessionView[] = [];
-  @State statusMessage: string = '';
+  @State statusMessage: string = "";
   @State isLoading: boolean = false;
   @State isRefreshing: boolean = false;
   @State syncingGuards: boolean = false;
@@ -65,8 +66,10 @@ export struct PlanListContent {
 
   private refreshDisplaySessions(): void {
     const filter = this.getCurrentFilter();
-    const filtered = this.allSessions.filter((session: DuoSessionView) =>
-      !isSleepSchedule(session.schedule_json) && this.matchesFilter(session, filter));
+    const filtered = this.allSessions.filter(
+      (session: DuoSessionView) =>
+        !isSleepSchedule(session.schedule_json) && this.matchesFilter(session, filter),
+    );
     this.displaySessions = sortScheduledSessions(filtered);
   }
 
@@ -97,19 +100,19 @@ export struct PlanListContent {
 
   private getCurrentFilter(): ScheduledListFilter {
     if (!SHOW_SCHEDULED_ROLE_FILTER) {
-      return 'all';
+      return "all";
     }
     return this.activeFilter;
   }
 
   private matchesFilter(session: DuoSessionView, filter: ScheduledListFilter): boolean {
-    if (filter === 'all') {
+    if (filter === "all") {
       return true;
     }
-    if (filter === 'initiated') {
-      return session.viewer_role === 'initiator';
+    if (filter === "initiated") {
+      return session.viewer_role === "initiator";
     }
-    return session.viewer_role === 'partner';
+    return session.viewer_role === "partner";
   }
 
   private async loadAll(fromPull: boolean = false): Promise<void> {
@@ -120,19 +123,20 @@ export struct PlanListContent {
     }
 
     if (!UserStore.isLoggedIn()) {
-      this.statusMessage = '';
+      this.statusMessage = "";
       this.isLoading = false;
       this.isRefreshing = false;
       return;
     }
 
-    this.statusMessage = '';
+    this.statusMessage = "";
     const response = await DuoApiService.getScheduledList();
     const list = DuoApiService.parseScheduledList(response);
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const reconciled = response.statusCode === 200
-      ? await reconcileStaleScheduledWindows(list.items, hostContext)
-      : list.items;
+    const reconciled =
+      response.statusCode === 200
+        ? await reconcileStaleScheduledWindows(list.items, hostContext)
+        : list.items;
     ScheduledListStore.setAllSessions(reconciled);
     this.refreshDisplaySessions();
 
@@ -146,8 +150,8 @@ export struct PlanListContent {
     this.isRefreshing = false;
   }
 
-  private toggleFilter(filter: 'initiated' | 'joined'): void {
-    const next: ScheduledListFilter = this.activeFilter === filter ? 'all' : filter;
+  private toggleFilter(filter: "initiated" | "joined"): void {
+    const next: ScheduledListFilter = this.activeFilter === filter ? "all" : filter;
     this.activeFilter = next;
     ScheduledListStore.setFilter(next);
     this.refreshDisplaySessions();
@@ -188,14 +192,14 @@ export struct PlanListContent {
       const authResult = await ensureScreenTimeAuthorization(hostContext);
       SettingsStore.updateAuthorization(hostContext, authResult.ok, authResult.message);
       if (!authResult.ok) {
-        showErrorToast('未完成系统授权，无法同步定时任务', this.getUIContext());
+        showErrorToast("未完成系统授权，无法同步定时任务", this.getUIContext());
         return;
       }
 
       const result = await syncScheduledGuardsManually(hostContext);
       if (result.ok) {
         this.syncHelpOpen = false;
-        showToast('已同步到本机', this.getUIContext());
+        showToast("已同步到本机", this.getUIContext());
       } else if (result.message.length > 0) {
         showErrorToast(result.message, this.getUIContext());
       }
@@ -209,16 +213,16 @@ export struct PlanListContent {
     Column({ space: 8 }) {
       Row({ space: 6 }) {
         if (!this.syncingGuards) {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+          SymbolGlyph($r("sys.symbol.arrow_clockwise"))
             .fontSize(18)
-            .fontColor([AppTheme.colors.primary])
+            .fontColor([AppTheme.colors.primary]);
         }
-        Text(this.syncingGuards ? '同步中...' : '同步定时任务')
+        Text(this.syncingGuards ? "同步中..." : "同步定时任务")
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.primary)
       }
-      .width('100%')
+      .width("100%")
       .height(44)
       .justifyContent(FlexAlign.Center)
       .backgroundColor(AppTheme.colors.surface)
@@ -229,114 +233,121 @@ export struct PlanListContent {
           void this.syncLocalGuards();
         }
       })
-
-      Text('登录后需要点击同步，否则定时任务不生效')
+      Text("登录后需要点击同步，否则定时任务不生效")
         .fontSize(12)
         .lineHeight(18)
         .fontColor(AppTheme.colors.textMuted)
-        .width('100%')
+        .width("100%")
         .textAlign(TextAlign.Center)
     }
-    .width('100%')
-    .padding({ top: 4, bottom: 4 })
+    .width("100%")
+    .padding({ top: 4, bottom: 4 });
   }
 
   @Builder
   private buildFeatureIntro(): void {
     FeatureIntroCard({
-      introId: 'scheduled_plan',
-      title: '到点自动锁机',
-      description: '主动开始困难？刷手机过头？在这里设置一个时间段，到点自动开始，每天帮你夺回时间',
-      confirmTitle: '确定关闭功能介绍？',
-      confirmMessage: '如果了解了定时任务功能，可以点击确认关闭，关闭后不再显示此介绍',
-    })
+      introId: "scheduled_plan",
+      title: "到点自动锁机",
+      description: "主动开始困难？刷手机过头？在这里设置一个时间段，到点自动开始，每天帮你夺回时间",
+      confirmTitle: "确定关闭功能介绍？",
+      confirmMessage: "如果了解了定时任务功能，可以点击确认关闭，关闭后不再显示此介绍",
+    });
   }
 
   private isScheduledIntroVisible(): boolean {
-    return !isFeatureIntroDismissed('scheduled_plan');
+    return !isFeatureIntroDismissed("scheduled_plan");
+  }
+
+  /** ForEach 同 id 不重建子组件；启用状态原先不在 key 里，返回列表仍显示旧状态 */
+  private sessionCardKey(session: DuoSessionView): string {
+    const enabled = session.enabled ? "1" : "0";
+    const partner = session.partner?.nickname ?? "";
+    const repeat = session.schedule_repeat ?? "";
+    const endDate = session.end_date ?? "";
+    return `${this.activeFilter}_${session.session_id}_${enabled}_${session.status}_${session.title}_${session.schedule_start}_${session.schedule_end}_${repeat}_${session.participation_mode}_${partner}_${endDate}`;
   }
 
   @Builder
   private buildTaskListBody(): void {
     Column({ space: 0 }) {
       this.buildMyTasksHeading()
-      ForEach(this.displaySessions, (session: DuoSessionView, index: number) => {
-        ScheduledSessionCard({
-          session,
-          onPress: () => {
-            this.openSession(session);
-          }
-        })
-          .margin({ bottom: index < this.displaySessions.length - 1 ? 14 : 0 })
-      }, (session: DuoSessionView) =>
-        `${this.activeFilter}_${session.session_id}_${session.status}_${session.title}_${session.schedule_start}_${session.schedule_end}`)
-    }
-    .width('100%')
+      ForEach(
+        this.displaySessions,
+        (session: DuoSessionView, index: number) => {
+          ScheduledSessionCard({
+            session,
+            onPress: () => {
+              this.openSession(session);
+            },
+          }).margin({ bottom: index < this.displaySessions.length - 1 ? 14 : 0 });
+        },
+        (session: DuoSessionView) => this.sessionCardKey(session),
+      )
+    }.width("100%");
   }
 
   @Builder
   private buildScheduledMainContent(): void {
     Column({ space: 0 }) {
       if (this.isScheduledIntroVisible()) {
-        this.buildFeatureIntro()
+        this.buildFeatureIntro();
       }
       if (this.showPendingSync()) {
-        this.buildSyncButton()
+        this.buildSyncButton();
       }
       if (this.displaySessions.length > 0) {
-        this.buildTaskListBody()
+        this.buildTaskListBody();
       } else if (!this.isLoading) {
-        this.buildEmptyState()
+        this.buildEmptyState();
       }
-    }
-    .width('100%')
+    }.width("100%");
   }
 
   @Builder
   private buildMyTasksHeading(): void {
-    Text('我的任务')
+    Text("我的任务")
       .fontSize(14)
       .fontColor(AppTheme.colors.textSecondary)
-      .width('100%')
-      .margin({ left: 4, bottom: 10 })
+      .width("100%")
+      .margin({ left: 4, bottom: 10 });
   }
 
   @Builder
   private buildEmptyState(): void {
     Column({ space: 8 }) {
-      SymbolGlyph($r('sys.symbol.clock'))
+      SymbolGlyph($r("sys.symbol.clock"))
         .fontSize(50)
         .fontColor([AppTheme.colors.textMuted])
         .opacity(0.85)
         .margin({ bottom: 12 })
-
-      Text(this.getCurrentFilter() === 'all' ? '还没有定时任务' : '没有符合筛选的契约')
+      Text(this.getCurrentFilter() === "all" ? "还没有定时任务" : "没有符合筛选的契约")
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
-
-      Text(this.getCurrentFilter() === 'all'
-        ? '到点自动锁机，不用每次手动点开启'
-        : '试试取消筛选，或新建一条契约。')
+      Text(
+        this.getCurrentFilter() === "all"
+          ? "到点自动锁机，不用每次手动点开启"
+          : "试试取消筛选，或新建一条契约。",
+      )
         .fontSize(14)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textMuted)
         .textAlign(TextAlign.Center)
-        .width('100%')
+        .width("100%")
 
-      if (this.shouldShowScenePresets() && this.getCurrentFilter() === 'all') {
+      if (this.shouldShowScenePresets() && this.getCurrentFilter() === "all") {
         ScheduledSceneCards({
           onSelect: (preset: ScheduledScenePreset) => {
             this.handleSelectPreset(preset);
           },
-        })
-          .margin({ top: 24, bottom: 8 })
+        }).margin({ top: 24, bottom: 8 });
       }
 
-      if (this.getCurrentFilter() === 'all' || this.getCurrentFilter() === 'initiated') {
-        if (this.shouldShowScenePresets() && this.getCurrentFilter() === 'all') {
-          Button('我要自定义')
-            .width('100%')
+      if (this.getCurrentFilter() === "all" || this.getCurrentFilter() === "initiated") {
+        if (this.shouldShowScenePresets() && this.getCurrentFilter() === "all") {
+          Button("我要自定义")
+            .width("100%")
             .height(46)
             .type(ButtonType.Normal)
             .buttonStyle(ButtonStyleMode.NORMAL)
@@ -348,88 +359,86 @@ export struct PlanListContent {
             .margin({ top: 8 })
             .onClick(() => {
               this.handleCreatePlan();
-            })
+            });
         } else {
-          Button('新建定时任务')
-            .width('100%')
+          Button("新建定时任务")
+            .width("100%")
             .height(46)
             .type(ButtonType.Normal)
             .buttonStyle(ButtonStyleMode.NORMAL)
             .borderRadius(AppTheme.radius.button)
             .clip(true)
             .backgroundColor(AppTheme.colors.primary)
-            .fontColor('#FFFFFF')
+            .fontColor("#FFFFFF")
             .fontWeight(FontWeight.Medium)
             .margin({ top: 12 })
             .onClick(() => {
               this.handleCreatePlan();
-            })
+            });
         }
       }
     }
-    .width('100%')
+    .width("100%")
     .padding({
       left: 24,
       right: 24,
       top: 72,
-      bottom: 72
+      bottom: 72,
     })
     .constraintSize({ minHeight: 320 })
-    .alignItems(HorizontalAlign.Center)
+    .alignItems(HorizontalAlign.Center);
   }
 
   @Builder
   private buildNotWorkingEntry(): void {
     Row({ space: 6 }) {
-      SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
-        .fontSize(16)
-        .fontColor([AppTheme.colors.warning])
-      Text('定时任务未生效？')
+      Text("定时任务未生效？")
         .fontSize(14)
         .fontColor(AppTheme.colors.warning)
     }
-    .width('100%')
+    .width("100%")
     .justifyContent(FlexAlign.Center)
     .padding({ top: 4, bottom: 4 })
     .onClick(() => {
       this.syncHelpOpen = true;
-    })
+    });
   }
 
   @Builder
   private buildSyncHelpSheet(): void {
     Column({ space: 0 }) {
       Row() {
-        Text('定时任务未生效')
+        Text("定时任务未生效")
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.textPrimary)
-          .width('100%')
+          .width("100%")
           .textAlign(TextAlign.Center)
       }
-      .width('100%')
+      .width("100%")
       .height(56)
       .padding({ left: 40, right: 40 })
       .justifyContent(FlexAlign.Center)
-
-      Text('仅仅在定时未生效时，尝试重置定时任务，请不要频繁重置。重置不会删除当前定时任务，只是刷新，解决偶尔不生效的问题。')
+      Text(
+        "仅仅在定时未生效时，尝试重置定时任务，请不要频繁重置。重置不会删除当前定时任务，只是刷新，解决偶尔不生效的问题。",
+      )
         .fontSize(14)
         .lineHeight(22)
         .fontColor(AppTheme.colors.textSecondary)
-        .width('100%')
+        .width("100%")
         .margin({ top: 4, bottom: 16 })
       Row({ space: 6 }) {
         if (!this.syncingGuards) {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+          SymbolGlyph($r("sys.symbol.arrow_clockwise"))
             .fontSize(18)
-            .fontColor([AppTheme.colors.primary])
+            .fontColor([AppTheme.colors.primary]);
         }
-        Text(this.syncingGuards ? '重置中...' : '重置定时任务')
+        Text(this.syncingGuards ? "重置中..." : "重置定时任务")
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.colors.primary)
       }
-      .width('100%')
+      .width("100%")
       .height(44)
       .margin({ top: 4 })
       .justifyContent(FlexAlign.Center)
@@ -442,104 +451,128 @@ export struct PlanListContent {
         }
       })
     }
-    .width('100%')
+    .width("100%")
     .padding({ left: 20, right: 20, bottom: 24 })
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(HorizontalAlign.Start);
   }
 
   build() {
     Column() {
       Refresh({ refreshing: $$this.isRefreshing }) {
-      List({ space: 0, scroller: this.listScroller }) {
-        if (SHOW_SCHEDULED_ROLE_FILTER) {
-          ListItem() {
-            Row({ space: 10 }) {
-              Text('我发起的')
-                .fontSize(13)
-                .fontWeight(this.activeFilter === 'initiated' ? FontWeight.Medium : FontWeight.Regular)
-                .fontColor(this.activeFilter === 'initiated' ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
-                .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-                .backgroundColor(this.activeFilter === 'initiated' ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
-                .borderRadius(AppTheme.radius.pill)
-                .border({
-                  width: 1,
-                  color: this.activeFilter === 'initiated' ? AppTheme.colors.primary : AppTheme.colors.border
-                })
-                .onClick(() => {
-                  this.toggleFilter('initiated');
-                })
-
-              Text('我加入的')
-                .fontSize(13)
-                .fontWeight(this.activeFilter === 'joined' ? FontWeight.Medium : FontWeight.Regular)
-                .fontColor(this.activeFilter === 'joined' ? AppTheme.colors.primary : AppTheme.colors.textSecondary)
-                .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-                .backgroundColor(this.activeFilter === 'joined' ? AppTheme.colors.primarySoft : AppTheme.colors.surface)
-                .borderRadius(AppTheme.radius.pill)
-                .border({
-                  width: 1,
-                  color: this.activeFilter === 'joined' ? AppTheme.colors.primary : AppTheme.colors.border
-                })
-                .onClick(() => {
-                  this.toggleFilter('joined');
-                })
+        List({ space: 0, scroller: this.listScroller }) {
+          if (SHOW_SCHEDULED_ROLE_FILTER) {
+            ListItem() {
+              Row({ space: 10 }) {
+                Text("我发起的")
+                  .fontSize(13)
+                  .fontWeight(
+                    this.activeFilter === "initiated" ? FontWeight.Medium : FontWeight.Regular,
+                  )
+                  .fontColor(
+                    this.activeFilter === "initiated"
+                      ? AppTheme.colors.primary
+                      : AppTheme.colors.textSecondary,
+                  )
+                  .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+                  .backgroundColor(
+                    this.activeFilter === "initiated"
+                      ? AppTheme.colors.primarySoft
+                      : AppTheme.colors.surface,
+                  )
+                  .borderRadius(AppTheme.radius.pill)
+                  .border({
+                    width: 1,
+                    color:
+                      this.activeFilter === "initiated"
+                        ? AppTheme.colors.primary
+                        : AppTheme.colors.border,
+                  })
+                  .onClick(() => {
+                    this.toggleFilter("initiated");
+                  })
+                Text("我加入的")
+                  .fontSize(13)
+                  .fontWeight(
+                    this.activeFilter === "joined" ? FontWeight.Medium : FontWeight.Regular,
+                  )
+                  .fontColor(
+                    this.activeFilter === "joined"
+                      ? AppTheme.colors.primary
+                      : AppTheme.colors.textSecondary,
+                  )
+                  .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+                  .backgroundColor(
+                    this.activeFilter === "joined"
+                      ? AppTheme.colors.primarySoft
+                      : AppTheme.colors.surface,
+                  )
+                  .borderRadius(AppTheme.radius.pill)
+                  .border({
+                    width: 1,
+                    color:
+                      this.activeFilter === "joined"
+                        ? AppTheme.colors.primary
+                        : AppTheme.colors.border,
+                  })
+                  .onClick(() => {
+                    this.toggleFilter("joined");
+                  })
+              }
+              .width("100%")
+              .padding({ top: 16 })
             }
-            .width('100%')
-            .padding({ top: 16 })
+            .margin({ bottom: 8 });
           }
-          .margin({ bottom: 8 })
-        }
 
-        if (this.statusMessage.length > 0) {
+          if (this.statusMessage.length > 0) {
+            ListItem() {
+              Text(this.statusMessage)
+                .width("100%")
+                .fontSize(12)
+                .fontColor(AppTheme.colors.textSecondary)
+            };
+          }
           ListItem() {
-            Text(this.statusMessage)
-              .width('100%')
-              .fontSize(12)
-              .fontColor(AppTheme.colors.textSecondary)
+            this.buildScheduledMainContent()
+          }
+
+          if (this.displaySessions.length > 0 && this.shouldShowScenePresets()) {
+            ListItem() {
+              ScheduledSceneCards({
+                onSelect: (preset: ScheduledScenePreset) => {
+                  this.handleSelectPreset(preset);
+                },
+              })
+                .margin({ top: 28 })
+            };
           }
         }
-
-        ListItem() {
-          this.buildScheduledMainContent()
-        }
-
-        if (this.displaySessions.length > 0 && this.shouldShowScenePresets()) {
-          ListItem() {
-            ScheduledSceneCards({
-              onSelect: (preset: ScheduledScenePreset) => {
-                this.handleSelectPreset(preset);
-              },
-            })
-              .margin({ top: 28 })
-          }
-        }
+        .width("100%")
+        .height("100%")
+        .padding({ top: SHOW_SCHEDULED_ROLE_FILTER ? 0 : 16 })
+        .edgeEffect(EdgeEffect.Spring)
+        .scrollBar(BarState.Off)
       }
-      .width('100%')
-      .height('100%')
-      .padding({ top: SHOW_SCHEDULED_ROLE_FILTER ? 0 : 16 })
-      .edgeEffect(EdgeEffect.Spring)
-      .scrollBar(BarState.Off)
-    }
-    .pullToRefresh(true)
-    .onRefreshing(() => {
-      void this.loadAll(true);
-    })
-    .layoutWeight(1)
-    .width('100%')
-    .align(Alignment.TopStart)
-    .padding({ left: 20, right: 20 })
-    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean) => {
-      if (isVisible && this.isPageActive) {
-        void this.syncOnVisible();
-      }
-    })
+      .pullToRefresh(true)
+      .onRefreshing(() => {
+        void this.loadAll(true);
+      })
+      .layoutWeight(1)
+      .width("100%")
+      .align(Alignment.TopStart)
+      .padding({ left: 20, right: 20 })
+      .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean) => {
+        if (isVisible && this.isPageActive) {
+          void this.syncOnVisible();
+        }
+      })
 
       if (this.allSessions.length > 0) {
-        this.buildNotWorkingEntry()
+        this.buildNotWorkingEntry();
       }
     }
-    .width('100%')
-    .height('100%')
+    .width("100%")
+    .height("100%")
     .bindSheet($$this.syncHelpOpen, this.buildSyncHelpSheet(), {
       height: SheetSize.FIT_CONTENT,
       preferType: SheetType.BOTTOM,
@@ -548,7 +581,7 @@ export struct PlanListContent {
       backgroundColor: AppTheme.colors.surface,
       onDisappear: () => {
         this.syncHelpOpen = false;
-      }
-    })
+      },
+    });
   }
 }

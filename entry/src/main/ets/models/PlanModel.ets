@@ -1,4 +1,6 @@
 import { RestrictionMode } from './ActiveLockModel';
+import { DuoSessionView, isInactiveScheduledSession } from './DuoModel';
+import { repeatDaysOfSession } from '../utils/ScheduledClockUtil';
 
 export type PlanFilterScope = 'today' | 'all';
 
@@ -220,6 +222,90 @@ export function findNextUpcomingPlanToday(plans: FocusPlan[], nowAt: number = Da
     }
   }
   return bestPlan;
+}
+
+function isScheduledSessionEligibleForHomeNext(session: DuoSessionView): boolean {
+  if (session.type !== 'scheduled') {
+    return false;
+  }
+  if (session.enabled === false) {
+    return false;
+  }
+  if (isInactiveScheduledSession(session)) {
+    return false;
+  }
+  return session.status === 'scheduled' || session.status === 'active';
+}
+
+export function scheduledSessionToFocusPlan(session: DuoSessionView): FocusPlan {
+  const scheduleJson = session.schedule_json;
+  const startTime = normalizeTimeText(
+    session.schedule_start && session.schedule_start.length > 0
+      ? session.schedule_start
+      : String(scheduleJson?.['start'] ?? '09:00'),
+    '09:00'
+  );
+  const endTime = normalizeTimeText(
+    session.schedule_end && session.schedule_end.length > 0
+      ? session.schedule_end
+      : String(scheduleJson?.['end'] ?? '18:00'),
+    '18:00'
+  );
+  const repeatDays = normalizePlanRepeatDays(repeatDaysOfSession(session));
+  const title = session.title.trim();
+  return {
+    id: `session_${session.session_id}`,
+    name: title.length > 0 ? title : '定时契约',
+    startTime: startTime,
+    endTime: endTime,
+    repeatDays: repeatDays,
+    selectedTokens: [],
+    selectedCount: 0,
+    mode: session.mode === 'shield' ? 'shield' : 'allow',
+    enabled: true,
+    duoSessionId: session.session_id,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+}
+
+/** 对齐 RN planStore.today_plans + resetPlan：合并服务端定时列表与本机计划 */
+export function buildHomePlanCandidates(
+  localPlans: FocusPlan[],
+  scheduledSessions: DuoSessionView[],
+): FocusPlan[] {
+  const remoteSessionIds = new Set<string>();
+  const fromSessions: FocusPlan[] = [];
+  for (let i = 0; i < scheduledSessions.length; i++) {
+    const session = scheduledSessions[i];
+    if (!isScheduledSessionEligibleForHomeNext(session)) {
+      continue;
+    }
+    remoteSessionIds.add(session.session_id);
+    fromSessions.push(scheduledSessionToFocusPlan(session));
+  }
+  const locals: FocusPlan[] = [];
+  for (let i = 0; i < localPlans.length; i++) {
+    const plan = localPlans[i];
+    if (!plan.enabled) {
+      continue;
+    }
+    const duoId = plan.duoSessionId.trim();
+    if (duoId.length > 0 && remoteSessionIds.has(duoId)) {
+      continue;
+    }
+    locals.push(plan);
+  }
+  return locals.concat(fromSessions);
+}
+
+export function findNextUpcomingPlanForHome(
+  localPlans: FocusPlan[],
+  scheduledSessions: DuoSessionView[],
+  nowAt: number = Date.now(),
+): FocusPlan | null {
+  const candidates = buildHomePlanCandidates(localPlans, scheduledSessions);
+  return findNextUpcomingPlanToday(candidates, nowAt);
 }
 
 function getNextPlanOccurrence(plan: FocusPlan, nowAt: number): PlanNextOccurrence | undefined {

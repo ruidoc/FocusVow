@@ -3,6 +3,24 @@ import { QuickTask, QuickTaskUpsertPayload, parseQuickTask } from '../models/Qui
 import { HttpService } from './HttpService';
 
 function buildUpsertBody(payload: QuickTaskUpsertPayload): Record<string, Object> {
+  const partnerId = (payload.partner_user_id ?? '').trim();
+  if (partnerId.length > 0) {
+    const body: Record<string, Object> = {
+      'title': payload.title,
+      'duration_min': payload.duration_min,
+      'timer_mode': payload.timer_mode,
+      'mode': payload.mode,
+      'delay_min': payload.delay_min,
+      'no_stop': payload.no_stop,
+      'apps': payload.apps,
+      'partner_user_id': partnerId,
+      'partner_nickname': (payload.partner_nickname ?? '').trim()
+    };
+    if (payload.enabled !== undefined) {
+      body['enabled'] = payload.enabled === true;
+    }
+    return body;
+  }
   const body: Record<string, Object> = {
     'title': payload.title,
     'duration_min': payload.duration_min,
@@ -14,11 +32,6 @@ function buildUpsertBody(payload: QuickTaskUpsertPayload): Record<string, Object
   };
   if (payload.enabled !== undefined) {
     body['enabled'] = payload.enabled === true;
-  }
-  const partnerId = (payload.partner_user_id ?? '').trim();
-  if (partnerId.length > 0) {
-    body['partner_user_id'] = partnerId;
-    body['partner_nickname'] = (payload.partner_nickname ?? '').trim();
   }
   return body;
 }

@@ -4,10 +4,17 @@ import { UsersIcon } from '../common/UsersIcon';
 import { AppTheme } from '../../constants/Theme';
 import { homeGlassCardBg, homeGlassPrimaryIconBg } from '../../constants/HomeCardStyle';
 import { DuoSessionView } from '../../models/DuoModel';
-import { PageRoutes, pushRoute } from '../../router/PageRoutes';
+import { PageRoutes, pushFocusScheduled, pushRoute } from '../../router/PageRoutes';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService } from '../../services/DuoInviteClipboardService';
-import { getPendingRemainSeconds, hasPendingQuickStart } from '../../services/PendingQuickStartService';
+import {
+  formatPendingQuickStartClockTime,
+  formatPendingRemainClock,
+  getPendingQuickStart,
+  getPendingRemainSeconds,
+  hasPendingQuickStart,
+  isClockPendingQuickStart,
+} from '../../services/PendingQuickStartService';
 import { hydrateScheduledGuardSyncFlags } from '../../services/ScheduledCovenantService';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { HomeDuoWaitBanner } from './HomeDuoWaitBanner';
@@ -24,15 +31,23 @@ export struct HomeNoticePrimaryBanner {
   @State friendInviteToken: string = '';
   @State friendInviteName: string = '';
   @State friendInviteMinutes: number = 0;
+  @StorageLink(StoreKeys.PendingQuickStartStartAtMs) @Watch('onPendingQuickStartChanged') pendingStartAtMs: number = 0;
+  @StorageLink(StoreKeys.PendingQuickStartTitle) @Watch('onPendingQuickStartChanged') pendingTitle: string = '';
+  @State pendingSubtitle: string = '';
   private pollTimer: number = -1;
+  private remainTimer: number = -1;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     hydrateScheduledGuardSyncFlags(hostContext);
+    this.refreshPendingSubtitle();
     void this.loadFriendInvite();
     this.pollTimer = setInterval(() => {
       void this.loadFriendInvite();
     }, 8000);
+    this.remainTimer = setInterval(() => {
+      this.refreshPendingSubtitle();
+    }, 1000);
   }
 
   aboutToDisappear(): void {
@@ -40,10 +55,18 @@ export struct HomeNoticePrimaryBanner {
       clearInterval(this.pollTimer);
       this.pollTimer = -1;
     }
+    if (this.remainTimer >= 0) {
+      clearInterval(this.remainTimer);
+      this.remainTimer = -1;
+    }
   }
 
   private onLoggedInChanged(): void {
     void this.loadFriendInvite();
+  }
+
+  private onPendingQuickStartChanged(): void {
+    this.refreshPendingSubtitle();
   }
 
   private async loadFriendInvite(): Promise<void> {
@@ -78,6 +101,29 @@ export struct HomeNoticePrimaryBanner {
     return this.isLoggedIn && this.needsScheduledGuardSync && this.scheduledSessions.length > 0;
   }
 
+  private showPendingQuickStartPrimary(): boolean {
+    return this.pendingStartAtMs > 0 && this.pendingTitle.length > 0;
+  }
+
+  private refreshPendingSubtitle(): void {
+    if (!this.showPendingQuickStartPrimary()) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const pending = getPendingQuickStart(hostContext);
+    if (pending === null) {
+      this.pendingSubtitle = this.pendingTitle;
+      return;
+    }
+    if (isClockPendingQuickStart(pending)) {
+      const clock = formatPendingQuickStartClockTime(pending.startAtMs);
+      this.pendingSubtitle = `${clock} 开始 · ${pending.title}`;
+      return;
+    }
+    const time = formatPendingRemainClock(getPendingRemainSeconds(hostContext));
+    this.pendingSubtitle = `${time} 后开始 · ${pending.title}`;
+  }
+
   private openFriendInvite(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (hasPendingQuickStart(hostContext) && getPendingRemainSeconds(hostContext) <= 20 * 60) {
@@ -86,6 +132,45 @@ export struct HomeNoticePrimaryBanner {
     }
     DuoInviteClipboardService.stashJoinToken(this.friendInviteToken);
     pushRoute(PageRoutes.DuoJoin);
+  }
+
+  @Builder
+  private buildPendingQuickStartBanner(): void {
+    Row({ space: 12 }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.clock'))
+          .fontSize(18)
+          .fontColor([AppTheme.colors.primary])
+      }
+      .width(36)
+      .height(36)
+      .justifyContent(FlexAlign.Center)
+      .borderRadius(18)
+      .backgroundColor(homeGlassPrimaryIconBg())
+
+      Column({ space: 2 }) {
+        Text('预约专注')
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.colors.textPrimary)
+          .maxLines(1)
+        Text(this.pendingSubtitle)
+          .fontSize(12)
+          .fontColor(AppTheme.colors.textSecondary)
+          .maxLines(2)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(16)
+        .fontColor([AppTheme.colors.textMuted])
+    }
+    .width('100%')
+    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+    .onClick(() => {
+      pushFocusScheduled();
+    })
   }
 
   @Builder
@@ -126,7 +211,19 @@ export struct HomeNoticePrimaryBanner {
   }
 
   build() {
-    if (this.showDuoWaitPrimary()) {
+    if (this.showPendingQuickStartPrimary()) {
+      Column() {
+        HomeGlassSurface({
+          glassBackgroundColor: homeGlassCardBg(),
+          fitContent: true,
+          content: (): void => {
+            this.buildPendingQuickStartBanner();
+          },
+        })
+      }
+      .width('100%')
+      .margin({ top: 12 })
+    } else if (this.showDuoWaitPrimary()) {
       Column() {
         HomeDuoWaitBanner({ embedInNoticeHub: true })
       }

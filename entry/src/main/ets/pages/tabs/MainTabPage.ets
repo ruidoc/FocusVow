@@ -50,21 +50,15 @@ bootstrapStores();
 @Entry
 @Component
 struct MainTabPage {
-  @State currentTab: MainTabKey = "focus";
+  @State @Watch("onCurrentTabChanged") currentTab: MainTabKey = "focus";
   @State private bottomGestureInsetVp: number = 0;
   @State private useImmersiveTab: boolean = false;
   @StorageLink(StoreKeys.LockActiveState)
   @Watch("onHideTabBarSourceChanged")
   activeLock: ActiveLockState = createIdleLockState();
-  @StorageLink(StoreKeys.PendingQuickStartTitle)
-  @Watch("onHideTabBarSourceChanged")
-  pendingQuickStartTitle: string = "";
-  @StorageLink(StoreKeys.PendingQuickStartStartAtMs)
-  @Watch("onHideTabBarSourceChanged")
-  pendingQuickStartStartAtMs: number = 0;
   @StorageLink(StoreKeys.AppForegroundAt) @Watch("onAppForeground") foregroundAt: number = 0;
   @StorageLink(StoreKeys.MainTabTarget) @Watch("onMainTabTargetChanged") pendingTab: string = "";
-  @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
+  @StorageLink(StoreKeys.ThemeMode) @Watch('onThemeModeChanged') themeMode: string = 'light';
 
   private timerId: number = -1;
   private isEndingLock: boolean = false;
@@ -112,10 +106,11 @@ struct MainTabPage {
   }
 
   onPageShow(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    ThemeStore.reapplySystemBarStyle(hostContext);
     markQuickPayForeground("main");
     this.promptHealthUsageIfNeeded();
     // 引导页压在 MainTab 之上时不弹；回首页后再申请通知（激活弹窗优先）
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
     if (hasPendingOnboardingActivationModal(hostContext)
       || AppStorage.get<boolean>(StoreKeys.OnboardingActivationModalVisible) === true) {
       return;
@@ -128,9 +123,19 @@ struct MainTabPage {
     this.promptHealthUsageIfNeeded();
   }
 
+  private onThemeModeChanged(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    ThemeStore.reapplySystemBarStyle(hostContext);
+  }
+
+  private onCurrentTabChanged(): void {
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    ThemeStore.reapplySystemBarStyle(hostContext);
+  }
+
   private promptHealthUsageIfNeeded(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    void promptScreenTimeIfRevoked(hostContext);
+    void promptScreenTimeIfRevoked(hostContext, this.getUIContext());
   }
 
   private clearTimer(): void {
@@ -226,11 +231,7 @@ struct MainTabPage {
   }
 
   private shouldHideTabBar(): boolean {
-    return shouldHideMainTabBar(
-      this.activeLock,
-      this.pendingQuickStartStartAtMs,
-      this.pendingQuickStartTitle
-    );
+    return shouldHideMainTabBar(this.activeLock);
   }
 
   private handleTabChange(tab: MainTabKey): void {

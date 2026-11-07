@@ -5,7 +5,10 @@ import { AppTheme } from "../constants/Theme";
 import { PageRoutes, pushRoute } from "../router/PageRoutes";
 import { StoreKeys } from "../stores/StoreKeys";
 import { UserStore } from "../stores/UserStore";
-import { isMembershipReclaimEligible } from "../utils/OnboardingMembershipUtil";
+import {
+  isMembershipReclaimEligible,
+  isOnboardingMembershipPromoEnabled,
+} from "../utils/OnboardingMembershipUtil";
 import { AnalyticsService } from "./AnalyticsService";
 import { readStoredString, writeStoredString } from "../services/PreferencesService";
 import { buildOnboardingAnalyticsProps } from "../utils/OnboardingMetaUtil";
@@ -109,7 +112,7 @@ export function afterGuestSoloFocusEnded(
     return;
   }
   markGuestSoloFocusUsed(host);
-  if (isMembershipReclaimEligible(host)) {
+  if (isOnboardingMembershipPromoEnabled() && isMembershipReclaimEligible(host)) {
     pendingLoginPromptAfterCert = false;
     AppStorage.setOrCreate(StoreKeys.ShowGuestMembershipReclaim, true);
     AnalyticsService.trackEvent('onboarding_guest_focus_done', buildOnboardingAnalyticsProps({

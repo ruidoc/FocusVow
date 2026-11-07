@@ -22,6 +22,7 @@ export class PageRoutes {
   static readonly DuoMatch: string = 'pages/focus/DuoMatchPage';
   static readonly DuoPickFriend: string = 'pages/focus/DuoPickFriendPage';
   static readonly FocusResult: string = 'pages/focus/FocusResultPage';
+  static readonly FocusScheduled: string = 'pages/focus/FocusScheduledPage';
   static readonly Welcome: string = 'pages/onboarding/WelcomePage';
   static readonly Onboarding: string = 'pages/onboarding/OnboardingPage';
   static readonly PlanList: string = 'pages/plans/PlanListPage';
@@ -175,6 +176,10 @@ export function pushPlanAddFromPreset(
   }).catch((error: BusinessError) => {
     logRouteError('pushPlanAddFromPreset', error);
   });
+}
+
+export function pushFocusScheduled(): void {
+  pushRoute(PageRoutes.FocusScheduled);
 }
 
 export function pushQuickStart(

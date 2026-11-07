@@ -140,7 +140,7 @@ struct CycleGuardPage {
   @Builder
   private buildBody(): void {
     Column({ space: 16 }) {
-      Text("选择娱乐应用并设置总时长。用满后自动锁定，结束锁定后额度归零继续累计。")
+      Text("选择短视频应用并设置总时长。用满后自动锁定，结束后使用时长重新累计。")
         .fontSize(13)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textSecondary)
@@ -148,22 +148,21 @@ struct CycleGuardPage {
 
       this.buildAppsCard()
       FocusDurationCard({
-        title: '娱乐总时长',
+        title: "娱乐总时长",
         durationMinutes: this.draftQuotaMinutes,
         onDurationChange: (value: number) => {
           this.draftQuotaMinutes = this.normalizeMinutes(value);
         },
       })
       FocusDurationCard({
-        title: '锁定最短时长',
+        title: "锁定最短时长",
         durationMinutes: this.draftLockMinutes,
         onDurationChange: (value: number) => {
           this.draftLockMinutes = this.normalizeMinutes(value);
         },
       })
-
       AppActionButton({
-        label: this.cycleConfigured ? '保存' : '添加',
+        label: this.cycleConfigured ? "保存" : "添加",
         isEnabled: !this.isSaving && !this.cycleEnabled,
         onPress: () => {
           void this.saveDraft();

@@ -7,6 +7,7 @@ import {
   PayResp,
   SendAuthReq,
   SendAuthResp,
+  SendReqResultWrap,
   WXApi,
   WXApiEventHandler,
   WXAPIFactory
@@ -101,6 +102,10 @@ export class WeChatOpenService {
       console.warn(`WeChat isWXAppInstalled failed: ${String(error)}`);
       return false;
     }
+  }
+
+  private static async resolveSendReqLaunched(wrap: SendReqResultWrap): Promise<boolean> {
+    return Promise.resolve(wrap);
   }
 
   private static dispatchResp(resp: BaseResp): void {
@@ -219,20 +224,31 @@ export class WeChatOpenService {
     req.transaction = `auth_${Date.now()}`;
     req.callbackAbility = 'EntryAbility';
 
-    return new Promise<WeChatAuthResult>(async (resolve: (r: WeChatAuthResult) => void) => {
+    return new Promise<WeChatAuthResult>((resolve: (r: WeChatAuthResult) => void) => {
       WeChatOpenService.pendingAuthResolve = resolve;
       try {
-        const finishedWrap = WeChatOpenService.getApi().sendReq(context, req);
-        const finished = await Promise.resolve(finishedWrap);
-        if (!finished) {
-          WeChatOpenService.pendingAuthResolve = null;
-          resolve({
-            ok: false,
-            code: '',
-            message: '无法打开微信，请确认已安装',
-            cancelled: false
+        const finishedWrap: SendReqResultWrap = WeChatOpenService.getApi().sendReq(context, req);
+        void WeChatOpenService.resolveSendReqLaunched(finishedWrap)
+          .then((finished: boolean) => {
+            if (!finished) {
+              WeChatOpenService.pendingAuthResolve = null;
+              resolve({
+                ok: false,
+                code: '',
+                message: '无法打开微信，请确认已安装',
+                cancelled: false
+              });
+            }
+          })
+          .catch((error: Object) => {
+            WeChatOpenService.pendingAuthResolve = null;
+            resolve({
+              ok: false,
+              code: '',
+              message: `拉起微信失败：${String(error)}`,
+              cancelled: false
+            });
           });
-        }
       } catch (error) {
         WeChatOpenService.pendingAuthResolve = null;
         resolve({
@@ -278,19 +294,29 @@ export class WeChatOpenService {
     req.transaction = `pay_${Date.now()}`;
     req.callbackAbility = 'EntryAbility';
 
-    return new Promise<WeChatPayResult>(async (resolve: (r: WeChatPayResult) => void) => {
+    return new Promise<WeChatPayResult>((resolve: (r: WeChatPayResult) => void) => {
       WeChatOpenService.pendingPayResolve = resolve;
       try {
-        const finishedWrap = WeChatOpenService.getApi().sendReq(context, req);
-        const finished = await Promise.resolve(finishedWrap);
-        if (!finished) {
-          WeChatOpenService.pendingPayResolve = null;
-          resolve({
-            ok: false,
-            message: '无法打开微信，请确认已安装',
-            cancelled: false
+        const finishedWrap: SendReqResultWrap = WeChatOpenService.getApi().sendReq(context, req);
+        void WeChatOpenService.resolveSendReqLaunched(finishedWrap)
+          .then((finished: boolean) => {
+            if (!finished) {
+              WeChatOpenService.pendingPayResolve = null;
+              resolve({
+                ok: false,
+                message: '无法打开微信，请确认已安装',
+                cancelled: false
+              });
+            }
+          })
+          .catch((error: Object) => {
+            WeChatOpenService.pendingPayResolve = null;
+            resolve({
+              ok: false,
+              message: `拉起微信支付失败：${String(error)}`,
+              cancelled: false
+            });
           });
-        }
       } catch (error) {
         WeChatOpenService.pendingPayResolve = null;
         resolve({

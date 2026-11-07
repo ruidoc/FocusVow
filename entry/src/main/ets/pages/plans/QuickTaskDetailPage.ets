@@ -4,14 +4,14 @@ import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
 import { minutesToHours } from '../../models/ActiveLockModel';
 import { filterSessionAppsForHarmony } from '../../models/DuoModel';
-import { QuickTask, QuickTaskUpsertPayload, startWhenLabel } from '../../models/QuickTaskModel';
+import { isDuoQuickTask, QuickTask, QuickTaskUpsertPayload, startWhenLabel } from '../../models/QuickTaskModel';
 import { PageRoutes, backRoute, navigateToMainTab, pushRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { QuickTaskStore } from '../../stores/QuickTaskStore';
 import { UserStore } from '../../stores/UserStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
-import { promptEnableQuickTaskSlot, upsellIfProSlotQuota } from '../../services/ProQuotaService';
+import { promptEnableDuoTaskSlot, promptEnableQuickTaskSlot, upsellIfProSlotQuota } from '../../services/ProQuotaService';
 
 bootstrapStores();
 
@@ -85,7 +85,10 @@ struct QuickTaskDetailPage {
       return;
     }
     if (next) {
-      if (!promptEnableQuickTaskSlot(task.id)) {
+      const allowEnable = isDuoQuickTask(task)
+        ? promptEnableDuoTaskSlot(task.id)
+        : promptEnableQuickTaskSlot(task.id);
+      if (!allowEnable) {
         this.applySwitch(false);
         return;
       }
@@ -95,7 +98,7 @@ struct QuickTaskDetailPage {
       const loaded = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === task.id) ?? null;
       if (response.statusCode !== 200 || !loaded || !loaded.enabled) {
         const message = response.message ?? '保存失败';
-        if (response.statusCode !== 200 && !upsellIfProSlotQuota(message, 'quick')) {
+        if (response.statusCode !== 200 && !upsellIfProSlotQuota(message, isDuoQuickTask(task) ? 'duo' : 'quick')) {
           showErrorToast(message, this.getUIContext());
         }
         this.applySwitch(false);

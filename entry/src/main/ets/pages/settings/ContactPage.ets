@@ -1,12 +1,18 @@
 import { common } from '@kit.AbilityKit';
+import { http } from '@kit.NetworkKit';
+import { image } from '@kit.ImageKit';
 import { router } from '@kit.ArkUI';
-import { showErrorToast } from '../../common/Toast';
+import { showErrorToast, showToast } from '../../common/Toast';
+import { GallerySaveButton } from '../../components/common/GallerySaveButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
+import { LegalUrls } from '../../constants/LegalUrls';
 import { backRoute } from '../../router/PageRoutes';
+import { savePixelMapToGallery } from '../../services/CertificateImageService';
 import { WeComCustomerService } from '../../services/WeComCustomerService';
 
 const WECHAT_ACCENT: string = '#07C160';
+const ADMIN_QR_SIZE: number = 220;
 
 function readEntrySource(): string {
   try {
@@ -20,10 +26,34 @@ function readEntrySource(): string {
   return 'contact_page';
 }
 
+async function loadAdminQrPixelMap(): Promise<image.PixelMap> {
+  const client = http.createHttp();
+  try {
+    const response = await client.request(LegalUrls.ADMIN_WECHAT_QR, {
+      method: http.RequestMethod.GET,
+      expectDataType: http.HttpDataType.ARRAY_BUFFER,
+      connectTimeout: 12000,
+      readTimeout: 20000,
+    });
+    if (response.responseCode !== 200 || !(response.result instanceof ArrayBuffer)) {
+      throw new Error('download failed');
+    }
+    const source = image.createImageSource(response.result as ArrayBuffer);
+    try {
+      return await source.createPixelMap();
+    } finally {
+      await source.release();
+    }
+  } finally {
+    client.destroy();
+  }
+}
+
 @Entry
 @Component
 struct ContactPage {
   @State entrySource: string = 'contact_page';
+  @State savingQr: boolean = false;
 
   aboutToAppear(): void {
     this.entrySource = readEntrySource();
@@ -37,6 +67,23 @@ struct ContactPage {
     }
   }
 
+  private async saveAdminQr(): Promise<void> {
+    if (this.savingQr) {
+      return;
+    }
+    this.savingQr = true;
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      const pixelMap = await loadAdminQrPixelMap();
+      await savePixelMapToGallery(hostContext, pixelMap);
+      showToast('已保存到相册', this.getUIContext());
+    } catch (_error) {
+      showErrorToast('保存失败，请重试', this.getUIContext());
+    } finally {
+      this.savingQr = false;
+    }
+  }
+
   @Builder
   private buildWecomCard(): void {
     Column({ space: 12 }) {
@@ -45,12 +92,12 @@ struct ContactPage {
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
-      Text('工作日优先回复；账号、会员、屏时权限等问题可直接说明。')
+      Text('优先尝试在线客服；若无法连接，请使用下方二维码')
         .fontSize(14)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
-      Button('打开微信客服')
+      Button('联系在线客服')
         .width('100%')
         .height(48)
         .type(ButtonType.Normal)
@@ -72,18 +119,34 @@ struct ContactPage {
   }
 
   @Builder
-  private buildAdminHint(): void {
-    Column({ space: 8 }) {
-      Text('其他联系方式')
+  private buildAdminCard(): void {
+    Column({ space: 12 }) {
+      Text('添加管理员微信')
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.colors.textPrimary)
         .width('100%')
-      Text('可在「意见反馈」提交问题，或通过微信客服索取管理员微信二维码。')
+      Text('保存二维码后，打开微信扫一扫添加')
         .fontSize(14)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textSecondary)
         .width('100%')
+      Image(LegalUrls.ADMIN_WECHAT_QR)
+        .width(ADMIN_QR_SIZE)
+        .height(ADMIN_QR_SIZE)
+        .borderRadius(12)
+        .objectFit(ImageFit.Contain)
+        .alignSelf(ItemAlign.Center)
+        .margin({ top: 8, bottom: 8 })
+      Row() {
+        GallerySaveButton({
+          saving: this.savingQr,
+          onSave: () => {
+            void this.saveAdminQr();
+          },
+        })
+      }
+      .width('100%')
     }
     .width('100%')
     .padding(20)
@@ -97,7 +160,7 @@ struct ContactPage {
   private buildContent(): void {
     Column({ space: 16 }) {
       this.buildWecomCard()
-      this.buildAdminHint()
+      this.buildAdminCard()
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

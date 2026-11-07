@@ -66,6 +66,11 @@ struct UserProfilePage {
   @State profile: ContractProfile | null = null;
   @State followBusy: boolean = false;
   @State topInset: number = 0;
+  @State bottomInset: number = 0;
+
+  private sheetBg(): string {
+    return isDarkThemeMode() ? AppTheme.colors.surface : '#FFFFFF';
+  }
 
   aboutToAppear(): void {
     const id = readRouteParam('userId');
@@ -82,6 +87,8 @@ struct UserProfilePage {
       }
       const statusAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       this.topInset = Math.max(ui.px2vp(statusAvoid.topRect.height), 0);
+      const navAvoid = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+      this.bottomInset = Math.max(ui.px2vp(navAvoid.bottomRect.height), 0);
     });
     void this.reload();
   }
@@ -278,23 +285,27 @@ struct UserProfilePage {
       SymbolGlyph(symbol)
         .fontSize(18)
         .fontColor([AppTheme.colors.textMuted])
-      if (kind === 'time') {
-        this.buildDurationValue(Math.max(0, Math.floor(this.profile !== null ? this.profile.totalMins : 0)), color)
-      } else if (kind === 'total') {
-        this.buildNumUnit(
-          `${(this.profile !== null ? this.profile.successCount : 0) + (this.profile !== null ? this.profile.breakCount : 0)}`,
-          '次',
-          color,
-        )
-      } else if (kind === 'keep') {
-        this.buildNumUnit(`${this.profile !== null ? this.profile.successCount : 0}`, '次', color)
-      } else {
-        this.buildNumUnit(`${this.profile !== null ? this.profile.breakCount : 0}`, '次', color)
+      Column() {
+        if (kind === 'time') {
+          this.buildDurationValue(Math.max(0, Math.floor(this.profile !== null ? this.profile.totalMins : 0)), color)
+        } else if (kind === 'total') {
+          this.buildNumUnit(
+            `${(this.profile !== null ? this.profile.successCount : 0) + (this.profile !== null ? this.profile.breakCount : 0)}`,
+            '次',
+            color,
+          )
+        } else if (kind === 'keep') {
+          this.buildNumUnit(`${this.profile !== null ? this.profile.successCount : 0}`, '次', color)
+        } else {
+          this.buildNumUnit(`${this.profile !== null ? this.profile.breakCount : 0}`, '次', color)
+        }
       }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .margin({ top: 8, bottom: 6 })
       Text(label)
         .fontSize(11)
         .fontColor(AppTheme.colors.textMuted)
-        .margin({ top: 2 })
         .maxLines(1)
     }
     .alignItems(HorizontalAlign.Start)
@@ -529,8 +540,9 @@ struct UserProfilePage {
     .width('100%')
     .padding({ left: 20, right: 20, top: 22, bottom: 16 })
     .margin({ top: -24 })
+    .layoutWeight(1)
     .borderRadius({ topLeft: 24, topRight: 24 })
-    .backgroundColor(isDarkThemeMode() ? AppTheme.colors.surface : '#FFFFFF')
+    .backgroundColor(this.sheetBg())
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -550,8 +562,8 @@ struct UserProfilePage {
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
-      .padding({ top: 10, bottom: 16 })
-      .backgroundColor(isDarkThemeMode() ? AppTheme.colors.surface : '#FFFFFF')
+      .padding({ top: 10, bottom: Math.max(this.bottomInset, 12) + 8 })
+      .backgroundColor(this.sheetBg())
     } else if (this.profile !== null && !this.profile.isMe && UserStore.isLoggedIn()) {
       Column({ space: 8 }) {
         Row({ space: 4 }) {
@@ -594,8 +606,8 @@ struct UserProfilePage {
         }
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 10, bottom: 16 })
-      .backgroundColor(isDarkThemeMode() ? AppTheme.colors.surface : '#FFFFFF')
+      .padding({ left: 20, right: 20, top: 10, bottom: Math.max(this.bottomInset, 12) + 8 })
+      .backgroundColor(this.sheetBg())
     }
   }
 
@@ -617,20 +629,15 @@ struct UserProfilePage {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
       } else {
-        Scroll() {
-          Column() {
-            this.buildHero()
-            this.buildSheet()
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .justifyContent(FlexAlign.Start)
+        Column() {
+          this.buildHero()
+          this.buildSheet()
         }
         .layoutWeight(1)
         .width('100%')
-        .align(Alignment.Top)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
+        .alignItems(HorizontalAlign.Start)
+        .justifyContent(FlexAlign.Start)
+        .backgroundColor(this.sheetBg())
         this.buildBottomBar()
       }
     }
@@ -638,6 +645,6 @@ struct UserProfilePage {
     .height('100%')
     .justifyContent(FlexAlign.Start)
     .alignItems(HorizontalAlign.Start)
-    .backgroundColor(isDarkThemeMode() ? AppTheme.colors.background : '#FFFFFF')
+    .backgroundColor(this.sheetBg())
   }
 }

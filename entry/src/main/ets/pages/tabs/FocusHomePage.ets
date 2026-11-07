@@ -70,7 +70,6 @@ import { reconcileOnboardingOnLaunch } from "../../services/OnboardingApiService
 import { AnalyticsService } from "../../services/AnalyticsService";
 import { buildOnboardingAnalyticsProps } from "../../utils/OnboardingMetaUtil";
 import {
-  cancelPendingQuickStart,
   hasPendingQuickStart,
   hydratePendingQuickStart,
   reconcilePendingQuickStart as runPendingQuickStartReconcile,
@@ -118,6 +117,8 @@ import {
   wakeWindowLabel,
 } from "../../utils/CheckinUtil";
 import { HomeChallengeSignalsUtil } from "../../utils/HomeChallengeSignals";
+import { loadScheduledListOnLogin } from "../../services/ScheduledCovenantService";
+import { ScheduledListStore } from "../../stores/ScheduledListStore";
 
 bootstrapStores();
 
@@ -133,7 +134,6 @@ export struct FocusHomePage {
   @StorageLink(StoreKeys.DuoWaitIsScheduled) duoWaitIsScheduled: boolean = false;
   @StorageLink(StoreKeys.DuoWaitScheduleLabel) duoWaitScheduleLabel: string = "";
   @StorageLink(StoreKeys.PendingQuickStartTitle) pendingQuickStartTitle: string = "";
-  @StorageLink(StoreKeys.PendingQuickStartDelayMin) pendingQuickStartDelayMin: number = 0;
   @StorageLink(StoreKeys.PendingQuickStartStartAtMs) pendingQuickStartStartAtMs: number = 0;
   @StorageLink(StoreKeys.ThemeMode) themeMode: string = 'light';
   @State homeStatis: RecordStatisSnapshot = {
@@ -224,6 +224,10 @@ export struct FocusHomePage {
     void this.runPostOnboardingHomeFlow(hostContext);
     void reconcileOrgClassroomOnForeground(hostContext);
     if (UserStore.isLoggedIn()) {
+      ScheduledListStore.hydrate();
+      if (ScheduledListStore.isDirty()) {
+        void loadScheduledListOnLogin(hostContext);
+      }
       void InboxStore.fetchUnread();
       void this.loadHomeTodayStats(hostContext);
     } else if (!this.isActiveLocked()) {
@@ -401,20 +405,6 @@ export struct FocusHomePage {
 
   private hasPendingQuickStart(): boolean {
     return this.pendingQuickStartStartAtMs > 0 && this.pendingQuickStartTitle.length > 0;
-  }
-
-  private formatPendingRemainLabel(): string {
-    // 引用 tick，保证每秒刷新；不要用独立 00:00 初始值，避免回首页先闪一下
-    const _tick = this.pendingRemainTick;
-    let remainSec = 0;
-    if (this.pendingQuickStartStartAtMs > 0) {
-      remainSec = Math.max(0, Math.ceil((this.pendingQuickStartStartAtMs - Date.now()) / 1000));
-    } else if (this.pendingQuickStartDelayMin > 0) {
-      remainSec = this.pendingQuickStartDelayMin * 60;
-    }
-    const minutes = Math.floor(remainSec / 60);
-    const seconds = remainSec % 60;
-    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   }
 
   private async reconcilePendingQuickStart(): Promise<void> {
@@ -1409,57 +1399,6 @@ export struct FocusHomePage {
   }
 
   @Builder
-  private buildPendingQuickStartState(): void {
-    Column({ space: 0 }) {
-      Row({ space: 4 }) {
-        SymbolGlyph($r("sys.symbol.clock"))
-          .fontSize(18)
-          .fontColor([AppTheme.colors.primary])
-        Text("等待开始")
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textSecondary)
-      }
-      .margin({ bottom: 20 })
-
-      Text(this.formatPendingRemainLabel())
-        .fontSize(64)
-        .fontWeight(FontWeight.Lighter)
-        .fontColor(AppTheme.colors.textPrimary)
-        .textAlign(TextAlign.Center)
-
-      Text(this.pendingQuickStartTitle)
-        .fontSize(22)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.colors.textPrimary)
-        .textAlign(TextAlign.Center)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ top: 40 })
-        .constraintSize({ maxWidth: 280 })
-
-      Text(`${this.pendingQuickStartDelayMin} 分钟后自动锁机`)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textSecondary)
-        .textAlign(TextAlign.Center)
-        .margin({ top: 12 })
-
-      Text("取消预约")
-        .fontSize(15)
-        .fontColor(AppTheme.colors.warning)
-        .textAlign(TextAlign.Center)
-        .margin({ top: 64 })
-        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        .onClick(() => {
-          const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-          void cancelPendingQuickStart(hostContext);
-        })
-    }
-    .width("100%")
-    .alignItems(HorizontalAlign.Center)
-  }
-
-  @Builder
   private buildDuoSection(): void {
     Column({ space: 12 }) {
       this.buildHomeSectionHeading('搭子互督', '双人战，一人退出，双方失败')
@@ -1599,23 +1538,10 @@ export struct FocusHomePage {
         Refresh({ refreshing: $$this.isRefreshing }) {
           Scroll() {
             Column() {
-              if (this.hasPendingQuickStart()) {
-                Column() {
-                  this.buildPendingQuickStartState()
-                }
-                .width('100%')
-                .constraintSize({ minHeight: '100%' })
-                .justifyContent(FlexAlign.Center)
-                .alignItems(HorizontalAlign.Center)
-                .padding({ left: 20, right: 20, bottom: this.homeContentLiftVp });
-              } else {
-                Column() {
-                  this.buildIdleHomeContent()
-                }
-                .width('100%')
-                .alignItems(HorizontalAlign.Start)
-              }
+              this.buildIdleHomeContent()
             }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
             .width('100%')
           }
           .width('100%')

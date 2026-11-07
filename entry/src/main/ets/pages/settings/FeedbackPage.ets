@@ -4,9 +4,8 @@ import { showErrorToast } from '../../common/Toast';
 import { AppActionButton } from '../../components/common/AppActionButton';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme } from '../../constants/Theme';
-import { backRoute } from '../../router/PageRoutes';
+import { backRoute, pushContact } from '../../router/PageRoutes';
 import { FeedbackApiService } from '../../services/FeedbackApiService';
-import { WeComCustomerService } from '../../services/WeComCustomerService';
 
 const WECHAT_ACCENT: string = '#07C160';
 
@@ -40,38 +39,37 @@ struct FeedbackPage {
   }
 
   private async submitFeedback(): Promise<void> {
-    if (!this.isFormValid() || this.loading) {
+    if (!this.isFormValid() || this.loading || this.submitted) {
       return;
     }
 
     this.loading = true;
-    const appVersion = await getAppVersion();
-    const response = await FeedbackApiService.submitFeedback(
-      this.feedbackType,
-      this.content.trim(),
-      this.contact.trim(),
-      appVersion
-    );
-    this.loading = false;
+    try {
+      const appVersion = await getAppVersion();
+      const response = await FeedbackApiService.submitFeedback(
+        this.feedbackType,
+        this.content.trim(),
+        this.contact.trim(),
+        appVersion
+      );
 
-    if (response.statusCode !== 200) {
-      showErrorToast(response.message ?? '提交失败', this.getUIContext());
-      return;
+      if (response.statusCode !== 200) {
+        showErrorToast(response.message ?? '提交失败', this.getUIContext());
+        return;
+      }
+
+      const data = response.data;
+      const id = data ? String(data['id'] ?? '') : '';
+      this.feedbackId = id;
+      this.submitted = true;
+    } finally {
+      this.loading = false;
     }
-
-    const data = response.data;
-    const id = data ? String(data['id'] ?? '') : '';
-    this.feedbackId = id;
-    this.submitted = true;
   }
 
-  private async onContactSupport(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+  private onContactSupport(): void {
     const entrySource = this.feedbackId.length > 0 ? `feedback:${this.feedbackId}` : 'feedback';
-    const errorMessage = await WeComCustomerService.open(hostContext, entrySource);
-    if (errorMessage !== null) {
-      showErrorToast(errorMessage, this.getUIContext());
-    }
+    pushContact(entrySource);
   }
 
   @Builder
@@ -221,9 +219,18 @@ struct FeedbackPage {
   private buildSuccessContent(): void {
     Column({ space: 0 }) {
       Column({ space: 12 }) {
-        SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
-          .fontSize(40)
-          .fontColor([AppTheme.colors.primary])
+        Stack({ alignContent: Alignment.Center }) {
+          Column()
+            .width(64)
+            .height(64)
+            .borderRadius(32)
+            .backgroundColor(AppTheme.colors.primarySoft)
+          SymbolGlyph($r('sys.symbol.checkmark_circle_fill'))
+            .fontSize(40)
+            .fontColor([AppTheme.colors.primary])
+        }
+        .width(64)
+        .height(64)
         Text('已收到你的反馈')
           .fontSize(20)
           .fontWeight(FontWeight.Medium)
@@ -257,7 +264,7 @@ struct FeedbackPage {
             .fontColor(WECHAT_ACCENT)
         }
         .onClick(() => {
-          void this.onContactSupport();
+          this.onContactSupport();
         })
       }
       .width('100%')
@@ -295,7 +302,8 @@ struct FeedbackPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  build() {
+  @Builder
+  private buildFormPage(): void {
     Stack() {
       SystemNavPage({
         title: '意见反馈',
@@ -307,15 +315,41 @@ struct FeedbackPage {
           backRoute();
         },
         content: (): void => {
-          if (this.submitted) {
-            this.buildSuccessContent();
-          } else {
-            this.buildFeedbackContent();
-          }
+          this.buildFeedbackContent();
         }
       })
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  private buildSuccessPage(): void {
+    Stack() {
+      SystemNavPage({
+        title: '意见反馈',
+        showBack: true,
+        usePageScroll: false,
+        horizontalPadding: 24,
+        topSpacerHeight: 48,
+        showTitleBar: false,
+        onBack: () => {
+          backRoute();
+        },
+        content: (): void => {
+          this.buildSuccessContent();
+        }
+      })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  build() {
+    if (this.submitted) {
+      this.buildSuccessPage();
+    } else {
+      this.buildFormPage();
+    }
   }
 }

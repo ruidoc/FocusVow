@@ -134,17 +134,45 @@ export class ThemeStore {
   }
 
   static async applySystemBarStyle(context: common.Context, mode: ThemeMode): Promise<void> {
+    const lightContent = mode === 'dark';
+    await ThemeStore.applySystemBarContentColors(context, lightContent);
+  }
+
+  /** Tab 切换 / 沉浸式底栏可能抢改状态栏前景色，延迟再刷一轮对齐主题 */
+  static reapplySystemBarStyle(context: common.Context): void {
+    const mode = ThemeStore.getMode();
+    void ThemeStore.applySystemBarStyle(context, mode);
+    setTimeout(() => {
+      void ThemeStore.applySystemBarStyle(context, mode);
+    }, 50);
+    setTimeout(() => {
+      void ThemeStore.applySystemBarStyle(context, mode);
+    }, 180);
+  }
+
+  /** 深色顶栏等场景：强制浅色状态栏图标；传 false 时按当前主题恢复 */
+  static async applyStatusBarLightIcons(context: common.Context, lightIcons: boolean): Promise<void> {
+    try {
+      const mode = ThemeStore.getMode();
+      await ThemeStore.applySystemBarContentColors(context, lightIcons || mode === 'dark');
+    } catch (error) {
+      console.error(`ThemeStore.applyStatusBarLightIcons failed: ${String(error)}`);
+    }
+  }
+
+  private static async applySystemBarContentColors(context: common.Context, lightContent: boolean): Promise<void> {
     try {
       const win = await window.getLastWindow(context);
+      const contentColor = lightContent ? '#FFFFFFFF' : '#FF0F172A';
       const barProps: window.SystemBarProperties = {
         statusBarColor: '#00000000',
         navigationBarColor: '#00000000',
-        statusBarContentColor: mode === 'dark' ? '#FFFFFFFF' : '#FF0F172A',
-        navigationBarContentColor: mode === 'dark' ? '#FFFFFFFF' : '#FF0F172A',
+        statusBarContentColor: contentColor,
+        navigationBarContentColor: contentColor,
       };
       win.setWindowSystemBarProperties(barProps);
     } catch (error) {
-      console.error(`ThemeStore.applySystemBarStyle failed: ${String(error)}`);
+      console.error(`ThemeStore.applySystemBarContentColors failed: ${String(error)}`);
     }
   }
 }

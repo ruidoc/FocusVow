@@ -1,7 +1,9 @@
 import { common } from "@kit.AbilityKit";
 import { pasteboard } from "@kit.BasicServicesKit";
 import { window } from "@kit.ArkUI";
+import { ThemeStore } from "../../stores/ThemeStore";
 import { showErrorToast, showToast } from "../../common/Toast";
+import { RankMedalIcon } from "../../components/common/RankMedalIcon";
 import { UsersIcon } from "../../components/common/UsersIcon";
 import { AppTheme, isDarkThemeMode } from "../../constants/Theme";
 import {
@@ -92,20 +94,23 @@ struct OrgDetailPage {
     }
     this.orgId = String(AppStorage.get<string>(StoreKeys.OrgDetailId) ?? "");
     this.loadTopSafeInset(hostContext);
-    this.setStatusBarContentWhite(true);
+    void ThemeStore.applyStatusBarLightIcons(hostContext, true);
     void this.loadInitial();
   }
 
   onPageShow(): void {
-    this.setStatusBarContentWhite(true);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void ThemeStore.applyStatusBarLightIcons(hostContext, true);
   }
 
   onPageHide(): void {
-    this.setStatusBarContentWhite(false);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void ThemeStore.applySystemBarStyle(hostContext, ThemeStore.getMode());
   }
 
   aboutToDisappear(): void {
-    this.setStatusBarContentWhite(false);
+    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    void ThemeStore.applySystemBarStyle(hostContext, ThemeStore.getMode());
     this.clearClassroomTimer();
   }
 
@@ -135,26 +140,6 @@ struct OrgDetailPage {
     const active = await OrgStore.getActiveClassroom(this.orgId);
     this.activeClassroom = isOrgClassroomJoinable(active) ? active : null;
     this.startClassroomTimer();
-  }
-
-  private setStatusBarContentWhite(lightIcons: boolean): void {
-    const ctx = this.getUIContext().getHostContext();
-    if (ctx === undefined) {
-      return;
-    }
-    const hostContext = ctx as common.UIAbilityContext;
-    window.getLastWindow(hostContext, (err, win) => {
-      if (err.code) {
-        return;
-      }
-      const barProps: window.SystemBarProperties = {
-        statusBarColor: "#00000000",
-        navigationBarColor: "#00000000",
-        statusBarContentColor: lightIcons ? "#FFFFFFFF" : "#FF0F172A",
-        navigationBarContentColor: "#FF0F172A",
-      };
-      win.setWindowSystemBarProperties(barProps);
-    });
   }
 
   private loadTopSafeInset(hostContext: common.UIAbilityContext): void {
@@ -714,17 +699,13 @@ struct OrgDetailPage {
   private buildRankRow(item: OrgRankItem): void {
     Row({ space: 8 }) {
       if (item.rank <= 3) {
-        Text(`${item.rank}`)
-          .width(28)
-          .height(28)
-          .textAlign(TextAlign.Center)
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.getRankMedalStyle(item.rank)?.fg ?? AppTheme.colors.textSecondary)
-          .backgroundColor(
-            this.getRankMedalStyle(item.rank)?.badgeBg ?? AppTheme.colors.surfaceSecondary,
-          )
-          .borderRadius(14);
+        Row() {
+          RankMedalIcon({ place: item.rank, iconSize: 28 })
+        }
+        .width(28)
+        .height(28)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
       } else {
         Text(`${item.rank}`)
           .width(28)

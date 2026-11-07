@@ -74,6 +74,10 @@ struct AvatarCropPage {
     let cropped: image.PixelMap | undefined = undefined;
     try {
       cropped = await this.model.crop();
+      if (cropped === undefined) {
+        showErrorToast('裁剪失败，请重试', this.getUIContext());
+        return;
+      }
       const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const packed = await packAvatarPixelMap(hostContext, cropped);
       // 先释放 PixelMap，再上传文件，避免占用导致异常

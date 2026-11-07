@@ -307,6 +307,10 @@ struct DuoWaitPage {
     }
     this.clearTimers();
     clearDuoWaitContext();
+    if (this.isScheduled) {
+      backRoute();
+      return;
+    }
     this.exitToPlansOrFocus();
   }
 

@@ -1,3 +1,4 @@
+import { RankMedalIcon } from '../../components/common/RankMedalIcon';
 import { SystemNavPage } from '../../components/common/SystemNavPage';
 import { AppTheme, isDarkThemeMode } from '../../constants/Theme';
 import {
@@ -138,16 +139,6 @@ struct GlobalRankPage {
     return isDark
       ? { row: '#1F1610', border: 'rgba(232,192,154,0.35)', fg: '#D4A574' }
       : { row: '#FFF5EC', border: '#E8C09A', fg: '#8A5528' };
-  }
-
-  private medalEmoji(place: number): string {
-    if (place === 1) {
-      return '🥇';
-    }
-    if (place === 2) {
-      return '🥈';
-    }
-    return '🥉';
   }
 
   private pedestalHeight(place: number): number {
@@ -296,8 +287,7 @@ struct GlobalRankPage {
       .opacity(0.35)
     } else {
       Column() {
-        Text(this.medalEmoji(place))
-          .fontSize(place === 1 ? 30 : 24)
+        RankMedalIcon({ place: place, iconSize: place === 1 ? 30 : 24 })
         Row() {
           this.buildRowAvatar(row, this.podiumAvatarSize(place), this.isMyRow(row), false)
         }

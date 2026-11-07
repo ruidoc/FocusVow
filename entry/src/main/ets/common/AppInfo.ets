@@ -94,3 +94,20 @@ export function getDeviceModel(): string {
   }
   return '';
 }
+
+/** 请求头 os-version：飞书反馈等展示为「鸿蒙 5」 */
+export function getClientOsVersion(): string {
+  try {
+    const major = deviceInfo.majorVersion;
+    if (typeof major === 'number' && major > 0) {
+      return String(major);
+    }
+    const full = toAsciiSafe(String(deviceInfo.osFullName ?? ''));
+    if (full.length > 0) {
+      return full;
+    }
+  } catch (error) {
+    console.error(`getClientOsVersion failed: ${String(error)}`);
+  }
+  return '';
+}

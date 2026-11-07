@@ -8,4 +8,6 @@ export class LegalUrls {
    * 挑战 H5（与 RN /challenges 对齐）；若线上路径调整，只改此处。
    */
   static readonly CHALLENGE_WEB_BASE: string = 'https://focus.freeshore.cn/app/challenges';
+  /** 联系客服页管理员微信，与 RN connect-me.png / focus-web 对齐 */
+  static readonly ADMIN_WECHAT_QR: string = 'https://focus.freeshore.cn/imgs/connect-me.png';
 }

@@ -1,23 +1,25 @@
 import { common } from "@kit.AbilityKit";
 import { ApiConfig } from "../config/ApiConfig";
 import { readStoredString, writeStoredString } from "./PreferencesService";
+import { isDuoQuickTask } from "../models/QuickTaskModel";
 import { QuickTaskStore } from "../stores/QuickTaskStore";
 import { ScheduledListStore } from "../stores/ScheduledListStore";
 import { isSleepSchedule } from "../utils/ScheduledClockUtil";
 import { ensureProMembership, isMemberActive, openVipPurchase } from "../utils/PaywallNavigationUtil";
 
 export const FREE_QUICK_TASK_LIMIT: number = 2;
+export const FREE_DUO_TASK_LIMIT: number = 1;
 export const FREE_SCHEDULED_TASK_LIMIT: number = 1;
 export const FREE_DELAYED_START_MINUTES: number = 5;
 /** 免费版每日可预约延时专注次数（会员不限） */
 export const FREE_DELAYED_START_DAILY_LIMIT: number = 1;
 const DELAYED_START_USAGE_KEY: string = "delayed_start_usage";
 
-export function countEnabledQuickTasks(excludeTaskId: string = ''): number {
+function countEnabledTasks(duo: boolean, excludeTaskId: string = ''): number {
   const tasks = QuickTaskStore.getTasks();
   let count = 0;
   for (let i = 0; i < tasks.length; i++) {
-    if (!tasks[i].enabled) {
+    if (!tasks[i].enabled || isDuoQuickTask(tasks[i]) !== duo) {
       continue;
     }
     if (excludeTaskId.length > 0 && tasks[i].id === excludeTaskId) {
@@ -28,11 +30,26 @@ export function countEnabledQuickTasks(excludeTaskId: string = ''): number {
   return count;
 }
 
+export function countEnabledQuickTasks(excludeTaskId: string = ''): number {
+  return countEnabledTasks(false, excludeTaskId);
+}
+
+export function countEnabledDuoTasks(excludeTaskId: string = ''): number {
+  return countEnabledTasks(true, excludeTaskId);
+}
+
 export function canEnableMoreQuickTasks(excludeTaskId: string = ''): boolean {
   if (isMemberActive()) {
     return true;
   }
   return countEnabledQuickTasks(excludeTaskId) < FREE_QUICK_TASK_LIMIT;
+}
+
+export function canEnableMoreDuoTasks(excludeTaskId: string = ''): boolean {
+  if (isMemberActive()) {
+    return true;
+  }
+  return countEnabledDuoTasks(excludeTaskId) < FREE_DUO_TASK_LIMIT;
 }
 
 /** @returns true 可启用；false 已弹出快付 */
@@ -41,6 +58,15 @@ export function promptEnableQuickTaskSlot(excludeTaskId: string = ''): boolean {
     return true;
   }
   openVipPurchase('quick_task_slot', { proUnlock: true });
+  return false;
+}
+
+/** @returns true 可启用；false 已弹出快付 */
+export function promptEnableDuoTaskSlot(excludeTaskId: string = ''): boolean {
+  if (canEnableMoreDuoTasks(excludeTaskId)) {
+    return true;
+  }
+  openVipPurchase('duo_task_slot', { proUnlock: true });
   return false;
 }
 
@@ -96,13 +122,21 @@ export function upsellIfProSlotQuota(message: string, kind: string): boolean {
   if (!isProSlotQuotaMessage(message)) {
     return false;
   }
-  const source = kind === 'quick' ? 'quick_task_slot' : 'scheduled_task_slot';
+  const source = kind === 'quick'
+    ? 'quick_task_slot'
+    : kind === 'duo'
+      ? 'duo_task_slot'
+      : 'scheduled_task_slot';
   openVipPurchase(source, { proUnlock: true });
   return true;
 }
 
 export function openSlotUpsell(kind: string): void {
-  const source = kind === 'quick' ? 'quick_task_slot' : 'scheduled_task_slot';
+  const source = kind === 'quick'
+    ? 'quick_task_slot'
+    : kind === 'duo'
+      ? 'duo_task_slot'
+      : 'scheduled_task_slot';
   openVipPurchase(source, { proUnlock: true });
 }
 

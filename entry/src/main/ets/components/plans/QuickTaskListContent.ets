@@ -144,6 +144,13 @@ export struct QuickTaskListContent {
     return `邀请 ${name.length > 0 ? name : '搭子'}`;
   }
 
+  /** ForEach 同 id 不重建子组件，卡片上能看到的字段都放进 key */
+  private taskCardKey(task: QuickTask): string {
+    const enabled = task.enabled ? '1' : '0';
+    const partner = task.partner_nickname ?? '';
+    return `${task.id}|${enabled}|${task.title}|${task.duration_min}|${task.timer_mode}|${task.delay_min}|${partner}`;
+  }
+
   private startLabel(task: QuickTask): string {
     if (!task.enabled) {
       return '未启用';
@@ -173,13 +180,13 @@ export struct QuickTaskListContent {
       if (this.listMode === 'duo') {
         ForEach(this.duoTasks, (task: QuickTask, index: number) => {
           this.buildTaskCard(task, index, this.duoTasks.length)
-        }, (task: QuickTask) => task.id)
+        }, (task: QuickTask) => this.taskCardKey(task))
       } else if (this.instantTasks.length > 0) {
         Column({ space: 0 }) {
           this.buildSectionTitle('即时任务')
           ForEach(this.instantTasks, (task: QuickTask, index: number) => {
             this.buildTaskCard(task, index, this.instantTasks.length)
-          }, (task: QuickTask) => task.id)
+          }, (task: QuickTask) => this.taskCardKey(task))
         }
         .width('100%')
       }
@@ -189,7 +196,7 @@ export struct QuickTaskListContent {
           this.buildSectionTitle('延时任务')
           ForEach(this.delayedTasks, (task: QuickTask, index: number) => {
             this.buildTaskCard(task, index, this.delayedTasks.length)
-          }, (task: QuickTask) => task.id)
+          }, (task: QuickTask) => this.taskCardKey(task))
         }
         .width('100%')
         .margin({ top: this.instantTasks.length > 0 ? 20 : 0 })

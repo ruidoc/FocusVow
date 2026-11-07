@@ -117,6 +117,8 @@ export function getStartDelayHint(minutes: number): string {
   return `安心玩一会手机，${minutes}分钟后自动进入专注`;
 }
 
+export type PendingQuickStartScheduleMode = 'relative' | 'clock';
+
 export interface PendingQuickStartPayload {
   title: string;
   durationMinutes: number;
@@ -128,10 +130,48 @@ export interface PendingQuickStartPayload {
   fixedStartAtMs?: number;
 }
 
-interface PendingQuickStartState extends PendingQuickStartPayload {
+export interface PendingQuickStartState extends PendingQuickStartPayload {
   planId: string;
   startAtMs: number;
   selectedTokens: string[];
+  scheduleMode?: PendingQuickStartScheduleMode;
+}
+
+export function getPendingQuickStart(context: common.Context): PendingQuickStartState | null {
+  return loadPending(context);
+}
+
+export function isClockPendingQuickStart(pending: PendingQuickStartState): boolean {
+  return pending.scheduleMode === 'clock';
+}
+
+export function formatPendingQuickStartClockTime(startAtMs: number): string {
+  const d = new Date(startAtMs);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export function formatPendingRemainClock(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainSec = seconds % 60;
+  return `${minutes}:${remainSec < 10 ? '0' : ''}${remainSec}`;
+}
+
+export interface PendingRemainHoursMinutes {
+  hours: number;
+  minutes: number;
+}
+
+export function splitPendingRemainHoursMinutes(totalSeconds: number): PendingRemainHoursMinutes {
+  const sec = Math.max(0, totalSeconds);
+  const hours = Math.floor(sec / 3600);
+  let minutes = Math.floor((sec % 3600) / 60);
+  if (hours === 0 && minutes === 0 && sec > 0) {
+    minutes = 1;
+  }
+  const result: PendingRemainHoursMinutes = { hours: hours, minutes: minutes };
+  return result;
 }
 
 function syncAppStorageValue<T>(key: string, value: T): void {
@@ -243,6 +283,7 @@ export async function schedulePendingQuickStart(
     ? fixedStartAtMs
     : Date.now() + payload.delayMinutes * 60_000;
   const selectedTokens = SettingsStore.getState().selectedTokens;
+  const isClock = fixedStartAtMs > Date.now();
   const pending: PendingQuickStartState = {
     title: payload.title,
     durationMinutes: payload.durationMinutes,
@@ -253,6 +294,7 @@ export async function schedulePendingQuickStart(
     planId,
     startAtMs,
     selectedTokens,
+    scheduleMode: isClock ? 'clock' : 'relative',
   };
   // 先落盘，避免预约 start 同步触发 onStart 时读不到
   savePending(context, pending);

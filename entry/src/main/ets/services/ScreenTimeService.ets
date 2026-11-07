@@ -1,5 +1,7 @@
 import { common } from '@kit.AbilityKit';
+import { UIContext } from '@kit.ArkUI';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
+import { showErrorToast } from '../common/Toast';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FocusPlan, normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
 import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
@@ -378,7 +380,12 @@ export async function ensureScreenTimeAuthorization(
  * 打开 App：和立即开始同一套判断。未授权就直接拉起系统申请。
  * 同一次前台只查一次。
  */
-export async function promptScreenTimeIfRevoked(context: common.UIAbilityContext): Promise<boolean> {
+const SCREEN_TIME_DENY_TOAST = '需要允许权限才能正常锁机';
+
+export async function promptScreenTimeIfRevoked(
+  context: common.UIAbilityContext,
+  uiContext?: UIContext,
+): Promise<boolean> {
   if (isHarmonyPcOr2in1()) {
     return true;
   }
@@ -396,6 +403,9 @@ export async function promptScreenTimeIfRevoked(context: common.UIAbilityContext
   try {
     const result = await ensureScreenTimeAuthorization(context);
     SettingsStore.updateAuthorization(context, result.ok, result.message);
+    if (!result.ok && uiContext) {
+      showErrorToast(SCREEN_TIME_DENY_TOAST, uiContext);
+    }
     return result.ok;
   } finally {
     screenTimePromptOpen = false;

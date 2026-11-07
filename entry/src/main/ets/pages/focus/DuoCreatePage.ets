@@ -5,17 +5,25 @@ import { FocusDurationCard } from "../../components/focus/FocusDurationCard";
 import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { AppTheme } from "../../constants/Theme";
 import { QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
-import { PageRoutes, backRoute, openDuoTaskTabOnce, pushDuoPickFriend, pushRoute, replaceRoute } from "../../router/PageRoutes";
 import {
-  chooseRestrictedApps,
-} from "../../services/ScreenTimeService";
+  PageRoutes,
+  backRoute,
+  openDuoTaskTabOnce,
+  pushDuoPickFriend,
+  pushRoute,
+  replaceRoute,
+} from "../../router/PageRoutes";
+import { chooseRestrictedApps } from "../../services/ScreenTimeService";
 import { ensureTaskPermission } from "../../utils/TaskPermissionUtil";
 import { DuoApiService } from "../../services/DuoApiService";
 import { QuickTaskApiService } from "../../services/QuickTaskApiService";
 import { DuoInviteClipboardService } from "../../services/DuoInviteClipboardService";
 import { takeDuoPartnerPick } from "../../services/DuoPartnerPickService";
 import { setInstantDuoWait } from "../../services/DuoWaitContextService";
-import { getPendingRemainSeconds, hasPendingQuickStart } from "../../services/PendingQuickStartService";
+import {
+  getPendingRemainSeconds,
+  hasPendingQuickStart,
+} from "../../services/PendingQuickStartService";
 import { promptSlotUpsellIfDisabled, upsellIfProSlotQuota } from "../../services/ProQuotaService";
 import { SettingsStore } from "../../stores/SettingsStore";
 import { UserStore } from "../../stores/UserStore";
@@ -104,17 +112,18 @@ struct DuoCreatePage {
     try {
       const response = await QuickTaskStore.createTask(payload);
       if (response.statusCode !== 200) {
-        const errMsg = typeof response.message === "string" && response.message.length > 0
-          ? response.message
-          : "保存快捷任务失败";
-        if (!upsellIfProSlotQuota(errMsg, "quick")) {
+        const errMsg =
+          typeof response.message === "string" && response.message.length > 0
+            ? response.message
+            : "保存快捷任务失败";
+        if (!upsellIfProSlotQuota(errMsg, "duo")) {
           this.toastError(errMsg);
         }
         this.isSubmitting = false;
         return;
       }
       const created = QuickTaskApiService.parseTask(response);
-      promptSlotUpsellIfDisabled(created ? created.enabled : undefined, "quick");
+      promptSlotUpsellIfDisabled(created ? created.enabled : undefined, "duo");
       showToast("已保存到互督任务", this.getUIContext());
       this.isSubmitting = false;
       openDuoTaskTabOnce();
@@ -136,10 +145,12 @@ struct DuoCreatePage {
 
   private async chooseApps(): Promise<void> {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (!(await ensureTaskPermission(hostContext, this.getUIContext(), {
-      entry_source: 'duo_create',
-      screen_name: 'duo_create',
-    }))) {
+    if (
+      !(await ensureTaskPermission(hostContext, this.getUIContext(), {
+        entry_source: "duo_create",
+        screen_name: "duo_create",
+      }))
+    ) {
       return;
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
@@ -171,26 +182,29 @@ struct DuoCreatePage {
       this.isSubmitting = false;
       return;
     }
-    if (!(await ensureTaskPermission(hostContext, this.getUIContext(), {
-      entry_source: 'duo_create',
-      screen_name: 'duo_create',
-    }))) {
+    if (
+      !(await ensureTaskPermission(hostContext, this.getUIContext(), {
+        entry_source: "duo_create",
+        screen_name: "duo_create",
+      }))
+    ) {
       this.isSubmitting = false;
       return;
     }
 
-    const response = this.targetId.length > 0
-      ? await DuoApiService.inviteFriend(
-        this.targetId,
-        this.title.trim(),
-        this.durationMinutes,
-        this.timerMode,
-      )
-      : await DuoApiService.instantCreate(
-        this.title.trim(),
-        this.durationMinutes,
-        this.timerMode,
-      );
+    const response =
+      this.targetId.length > 0
+        ? await DuoApiService.inviteFriend(
+            this.targetId,
+            this.title.trim(),
+            this.durationMinutes,
+            this.timerMode,
+          )
+        : await DuoApiService.instantCreate(
+            this.title.trim(),
+            this.durationMinutes,
+            this.timerMode,
+          );
     const session = DuoApiService.parseSession(response);
     if (!session) {
       this.toastError(response.message ?? "创建失败");
@@ -245,14 +259,6 @@ struct DuoCreatePage {
   @Builder
   private buildPageBody(): void {
     Column({ space: 18 }) {
-      Column({ space: 8 }) {
-        Text("邀请搭子一起开始；一人撕毁，两人失败。")
-          .fontSize(14)
-          .fontColor(AppTheme.colors.textSecondary)
-          .width("100%")
-      }
-      .width("100%")
-      .alignItems(HorizontalAlign.Start)
       Row() {
         Blank()
         TimerModeSegmented({
@@ -283,11 +289,22 @@ struct DuoCreatePage {
         },
       })
       Row() {
-        Text("互督搭子")
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.colors.textPrimary)
-          .layoutWeight(1)
+        Row({ space: 6 }) {
+          Text("互督搭子")
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.colors.textPrimary)
+          Text("新")
+            .fontSize(10)
+            .fontWeight(FontWeight.Bold)
+            .fontColor("#FFFFFF")
+            .lineHeight(14)
+            .padding({ left: 5, right: 5, top: 2, bottom: 2 })
+            .backgroundColor("#FF3B30")
+            .borderRadius(4)
+        }
+        .alignItems(VerticalAlign.Center)
+        .layoutWeight(1)
         Text(this.targetName.length > 0 ? this.targetName : "口令邀请")
           .fontSize(14)
           .fontColor(AppTheme.colors.textSecondary)
@@ -323,9 +340,8 @@ struct DuoCreatePage {
             .layoutWeight(1)
         }
         .width("100%")
-        .alignItems(VerticalAlign.Center)
+        .alignItems(VerticalAlign.Center);
       }
-
       Button(this.submitLabel())
         .width("100%")
         .height(52)

@@ -43,8 +43,11 @@ struct SleepRecordsPage {
   @State page: number = 1;
   @State total: number = 0;
   @State loading: boolean = true;
+  @State scrollerReady: boolean = false;
+  private listScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    this.scrollerReady = true;
     this.sessionId = readSessionId();
     void this.loadPage(1, false);
   }
@@ -131,26 +134,34 @@ struct SleepRecordsPage {
         .textAlign(TextAlign.Center)
         .margin({ top: 40 })
     } else {
-      Column({ space: 10 }) {
+      List({ space: 10, scroller: this.listScroller }) {
         ForEach(this.items, (item: SleepHistoryItem) => {
-          this.buildRow(item)
+          ListItem() {
+            this.buildRow(item)
+          }
         }, (item: SleepHistoryItem) => item.id)
 
         if (this.hasMore()) {
-          Button(this.loading ? '加载中…' : '加载更多')
-            .width('100%')
-            .height(44)
-            .type(ButtonType.Normal)
-            .backgroundColor(AppTheme.colors.surface)
-            .fontColor(AppTheme.colors.primary)
-            .enabled(!this.loading)
-            .margin({ top: 8 })
-            .onClick(() => {
-              void this.loadPage(this.page + 1, true);
-            })
+          ListItem() {
+            Button(this.loading ? '加载中…' : '加载更多')
+              .width('100%')
+              .height(44)
+              .type(ButtonType.Normal)
+              .backgroundColor(AppTheme.colors.surface)
+              .fontColor(AppTheme.colors.primary)
+              .enabled(!this.loading)
+              .margin({ top: 8 })
+              .onClick(() => {
+                void this.loadPage(this.page + 1, true);
+              })
+          }
         }
       }
       .width('100%')
+      .height('100%')
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      .backgroundColor(AppTheme.colors.background)
     }
   }
 
@@ -159,6 +170,9 @@ struct SleepRecordsPage {
       SystemNavPage({
         title: '早睡记录',
         showBack: true,
+        usePageScroll: false,
+        horizontalPadding: 16,
+        bindScrollers: this.scrollerReady ? [this.listScroller] : [],
         onBack: () => backRoute(),
         content: (): void => {
           this.buildContent();

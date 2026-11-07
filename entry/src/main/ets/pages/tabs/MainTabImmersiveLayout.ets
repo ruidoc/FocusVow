@@ -1,4 +1,6 @@
+import { common } from "@kit.AbilityKit";
 import { SymbolGlyphModifier } from "@kit.ArkUI";
+import { ThemeStore } from "../../stores/ThemeStore";
 import { HdsTabs, HdsTabsController, HdsTabsFloatingStyle } from "@kit.UIDesignKit";
 import { AppTheme } from "../../constants/Theme";
 import { MainTabKey } from "../../router/PageRoutes";
@@ -116,6 +118,10 @@ export struct MainTabImmersiveLayout {
       const nextTab = indexToMainTab(index);
       if (this.currentTab !== nextTab) {
         this.onTabChange?.(nextTab);
+      }
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx !== undefined) {
+        ThemeStore.reapplySystemBarStyle(ctx as common.UIAbilityContext);
       }
     })
     .width("100%")

@@ -11,7 +11,7 @@ import {
   checkScreenTimeAuthorized,
   requestScreenTimeAuthorization
 } from '../../services/ScreenTimeService';
-import { WeComCustomerService } from '../../services/WeComCustomerService';
+import { pushContact } from '../../router/PageRoutes';
 import { SettingsStore } from '../../stores/SettingsStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import { StoreKeys } from '../../stores/StoreKeys';
@@ -267,7 +267,7 @@ struct PermissionPage {
           .fontColor('#07C160')
           .padding({ top: 4, bottom: 4 })
           .onClick(() => {
-            void this.onContactSupport();
+            this.onContactSupport();
           })
       }
       .width('100%')
@@ -278,12 +278,8 @@ struct PermissionPage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  private async onContactSupport(): Promise<void> {
-    const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const errorMessage = await WeComCustomerService.open(hostContext, 'schedule_permissions');
-    if (errorMessage !== null) {
-      showErrorToast(errorMessage, this.getUIContext());
-    }
+  private onContactSupport(): void {
+    pushContact('schedule_permissions');
   }
 
   build() {

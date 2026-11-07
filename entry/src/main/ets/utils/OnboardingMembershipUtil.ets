@@ -7,6 +7,13 @@ import { isSignupTrialEligible } from './SignupTrialUtil';
 import { FIRST_FOCUS_MINUTES, FIRST_FOCUS_TITLE, markFirstFocusPromptDone } from '../services/FirstFocusPromptService';
 import { pushQuickStart, returnToMainTab } from '../router/PageRoutes';
 
+/** 已下线：新用户领会员 Banner、倒计时胶囊、激活弹窗、立即专注简化引导 */
+export const ONBOARDING_MEMBERSHIP_PROMO_ENABLED: boolean = false;
+
+export function isOnboardingMembershipPromoEnabled(): boolean {
+  return ONBOARDING_MEMBERSHIP_PROMO_ENABLED;
+}
+
 const SKIPPED_MEMBERSHIP_SIGNUP_KEY: string = 'onboarding_skipped_membership_signup';
 const POST_PAYWALL_ACTION_KEY: string = 'onboarding_post_paywall_action';
 const MEMBERSHIP_CLAIM_DEADLINE_KEY: string = 'onboarding_membership_claim_deadline_ms';
@@ -102,11 +109,17 @@ export function completeOnboardingAfterPaywall(context: common.Context): boolean
 }
 
 export function setPendingOnboardingActivationModal(context: common.Context): void {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    return;
+  }
   writeStoredString(context, PENDING_ACTIVATION_MODAL_KEY, '1');
   AppStorage.setOrCreate(StoreKeys.PendingOnboardingActivationModal, true);
 }
 
 export function hasPendingOnboardingActivationModal(context: common.Context): boolean {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    return false;
+  }
   if (AppStorage.get<boolean>(StoreKeys.PendingOnboardingActivationModal) === true) {
     return true;
   }
@@ -127,6 +140,9 @@ export function consumePendingOnboardingActivationModal(context: common.Context)
 }
 
 export function shouldShowOnboardingActivationBanner(context: common.Context): boolean {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    return false;
+  }
   if (!hasCompletedOnboarding(context) || getFocusCount(context) > 0) {
     return false;
   }
@@ -157,6 +173,9 @@ export function clearOnboardingActivationUiState(context: common.Context): void 
 }
 
 function canStillClaimOnboardingMembership(context: common.Context): boolean {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    return false;
+  }
   if (!hasCompletedOnboarding(context) || getFocusCount(context) > 0) {
     return false;
   }
@@ -237,6 +256,9 @@ export function shouldShowMembershipUrgencyCapsule(
   hasActiveLock: boolean,
   hasPendingQuickStart: boolean,
 ): boolean {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    return false;
+  }
   expireMembershipUrgencyIfNeeded(context);
   if (hasActiveLock || hasPendingQuickStart) {
     return false;

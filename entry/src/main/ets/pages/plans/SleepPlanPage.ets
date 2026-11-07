@@ -245,19 +245,32 @@ struct SleepPlanPage {
       .width('100%')
       .padding({ top: 20, bottom: 18 })
 
-      Divider().color(AppTheme.colors.divider)
+      Row() {
+        Divider()
+          .color(AppTheme.colors.divider)
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
 
       Row() {
         Text(`共${(this.stats?.total_days ?? 0) + (this.stats?.failed_days ?? 0)}天，失败${this.stats?.failed_days ?? 0}天`)
           .fontSize(13)
           .fontColor(AppTheme.colors.textMuted)
           .layoutWeight(1)
-        Text('查看早睡记录')
-          .fontSize(13)
-          .fontColor(AppTheme.colors.primary)
+          .margin({ right: 8 })
+        Row({ space: 2 }) {
+          Text('查看早睡记录')
+            .fontSize(13)
+            .fontColor(AppTheme.colors.primary)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(15)
+            .fontColor([AppTheme.colors.primary])
+        }
+        .alignItems(VerticalAlign.Center)
       }
       .width('100%')
-      .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .padding({ left: 16, right: 16, top: 10, bottom: 10 })
       .onClick(() => {
         if (this.session) {
           pushSleepRecords(this.session.session_id);

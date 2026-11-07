@@ -5,6 +5,7 @@ import { UserStore } from '../stores/UserStore';
 import { readStoredString, removeStoredKey, writeStoredString } from '../services/PreferencesService';
 import {
   hasSkippedMembershipSignup,
+  isOnboardingMembershipPromoEnabled,
   isWithinMembershipClaimWindow,
 } from './OnboardingMembershipUtil';
 import { isSignupTrialEligible, setSignupTrialEligible } from './SignupTrialUtil';
@@ -32,6 +33,9 @@ export function clearPendingSignupTrialCelebration(context: common.Context): voi
 }
 
 export function shouldMarkSignupTrialCelebration(context: common.Context): boolean {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    return false;
+  }
   if (!UserStore.isLoggedIn()) {
     return hasSkippedMembershipSignup(context) && isWithinMembershipClaimWindow(context);
   }
@@ -48,6 +52,10 @@ export async function tryPresentSignupTrialCelebration(
   maxAttempts: number = 8,
   intervalMs: number = 800,
 ): Promise<boolean> {
+  if (!isOnboardingMembershipPromoEnabled()) {
+    clearPendingSignupTrialCelebration(context);
+    return false;
+  }
   if (!hasPendingSignupTrialCelebration(context)) {
     return false;
   }

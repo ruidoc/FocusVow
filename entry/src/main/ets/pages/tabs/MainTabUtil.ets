@@ -37,16 +37,9 @@ export function getMainTabIcons(tab: MainTabKey): MainTabIconPair {
   };
 }
 
-/** 对齐 RN Tabs：专注进行中、预约等待开始时隐藏底部 Tab */
-export function shouldHideMainTabBar(
-  activeLock: ActiveLockState,
-  pendingStartAtMs: number = 0,
-  pendingTitle: string = ''
-): boolean {
-  if (isLocked(activeLock)) {
-    return true;
-  }
-  return pendingStartAtMs > 0 && pendingTitle.length > 0;
+/** 对齐 RN Tabs：仅专注进行中隐藏底部 Tab（预约等待留在首页横幅） */
+export function shouldHideMainTabBar(activeLock: ActiveLockState): boolean {
+  return isLocked(activeLock);
 }
 
 export function supportsImmersiveTab(): boolean {

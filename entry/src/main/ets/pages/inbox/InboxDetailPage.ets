@@ -5,13 +5,13 @@ import { MarkdownBody } from '../../components/inbox/MarkdownBody';
 import { AppTheme } from '../../constants/Theme';
 import { InboxItem, createEmptyInboxItem } from '../../models/InboxModel';
 import { backToHome, pushLogin, pushWebView } from '../../router/PageRoutes';
-import { showErrorToast } from '../../common/Toast';
 import { InboxStore } from '../../stores/InboxStore';
 import { FeatureFlagStore } from '../../stores/FeatureFlagStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { UserStore } from '../../stores/UserStore';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
-import { isWecomCustomerServiceLink, WeComCustomerService } from '../../services/WeComCustomerService';
+import { isWecomCustomerServiceLink } from '../../services/WeComCustomerService';
+import { pushContact } from '../../router/PageRoutes';
 import { openVipPurchase } from '../../utils/PaywallNavigationUtil';
 
 bootstrapStores();
@@ -76,11 +76,7 @@ struct InboxDetailPage {
       return;
     }
     if (isWecomCustomerServiceLink(url)) {
-      const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      const errorMessage = await WeComCustomerService.open(hostContext, 'inbox_link');
-      if (errorMessage !== null) {
-        showErrorToast(errorMessage, this.getUIContext());
-      }
+      pushContact('inbox_link');
       return;
     }
     const path = this.normalizeInboxPath(url);
