@@ -9,7 +9,7 @@ import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { ProQuickPayHost } from "../../components/paywall/ProQuickPayDialog";
 import { AppTheme } from "../../constants/Theme";
 import { backRoute, openQuickTaskTabOnce, returnToMainTab } from "../../router/PageRoutes";
-import { applyScreenRestriction, chooseRestrictedApps } from "../../services/ScreenTimeService";
+import { applyScreenRestriction, chooseRestrictedApps, syncDelayedOnceGuardStrategy } from "../../services/ScreenTimeService";
 import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from "../../services/ScheduledPlanValidation";
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
 import { markQuickPayForeground } from "../../utils/PaywallNavigationUtil";
@@ -419,6 +419,7 @@ struct QuickStartPage {
     const taskTitle = this.title.trim();
     this.focusStarted = true;
     clearMembershipUrgencyCountdown(hostContext);
+    const guardPlanId = `once_${Date.now()}`;
     const focusOptions: QuickFocusOptions = {
       title: taskTitle,
       duoSessionId: "",
@@ -426,6 +427,7 @@ struct QuickStartPage {
       participationMode: "solo",
       timerMode: this.timerMode,
       minDurationMin: this.timerMode === "countup" ? this.durationMinutes : 0,
+      planId: guardPlanId,
     };
     LockStore.startQuickFocus(
       hostContext,
@@ -433,6 +435,14 @@ struct QuickStartPage {
       this.durationMinutes,
       this.mode,
       focusOptions,
+    );
+    await syncDelayedOnceGuardStrategy(
+      guardPlanId,
+      Date.now(),
+      this.durationMinutes,
+      this.timerMode,
+      this.selectedTokens,
+      this.mode,
     );
     const sessionProps: Record<string, Object> = {};
     sessionProps["plan_id"] = LockStore.getState().planId;

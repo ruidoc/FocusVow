@@ -15,7 +15,7 @@ import { DuoInviteClipboardService } from './DuoInviteClipboardService';
 import { setInstantDuoWait } from './DuoWaitContextService';
 import { PageRoutes, replaceRoute } from '../router/PageRoutes';
 import { UserStore } from '../stores/UserStore';
-import { applyScreenRestriction } from './ScreenTimeService';
+import { applyScreenRestriction, syncDelayedOnceGuardStrategy } from './ScreenTimeService';
 import { ensureTaskPermission } from '../utils/TaskPermissionUtil';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
@@ -164,11 +164,13 @@ export async function startQuickTask(
     return false;
   }
 
+  const guardPlanId = `once_${Date.now()}`;
   const focusOptions: QuickFocusOptions = {
     title: title,
     participationMode: 'solo',
     timerMode: task.timer_mode,
     minDurationMin: task.timer_mode === 'countup' ? task.duration_min : 0,
+    planId: guardPlanId,
   };
   LockStore.startQuickFocus(
     context,
@@ -176,6 +178,14 @@ export async function startQuickTask(
     task.duration_min,
     task.mode,
     focusOptions
+  );
+  await syncDelayedOnceGuardStrategy(
+    guardPlanId,
+    Date.now(),
+    task.duration_min,
+    task.timer_mode,
+    selectedTokens,
+    task.mode,
   );
   AnalyticsService.trackEvent('session_started', {
     'plan_id': LockStore.getState().planId,

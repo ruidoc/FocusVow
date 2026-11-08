@@ -5,7 +5,7 @@ import { returnToMainTab } from "../router/PageRoutes";
 import { LockStore } from "../stores/LockStore";
 import { DuoBgSyncService } from "./DuoBgSyncService";
 import { FocusStartedNotifyService } from "./FocusStartedNotifyService";
-import { applyScreenRestriction } from "./ScreenTimeService";
+import { applyScreenRestriction, syncDelayedOnceGuardStrategy } from "./ScreenTimeService";
 import { blockIfOverlapsScheduledPlan } from "./ScheduledPlanValidation";
 import { clearDuoWaitContext } from "./DuoWaitContextService";
 import { INSTANT_COUNTUP_LOCK_MIN, isCountupMode, normalizeTimerMode } from "../utils/TimerMode";
@@ -239,7 +239,18 @@ export async function startOrAlignInstantDuoFocus(
     ? buildDuoAlignedOptions(session, options?.title)
     : buildDuoFullDurationOptions(session, options?.title);
   const timerMode = timerFields[0];
+  // 和延时一样把结束时刻注册进 TimeGuard，杀进程后靠 onStop 解锁
+  const guardPlanId = `once_${Date.now()}`;
+  focusOptions.planId = guardPlanId;
   LockStore.startQuickFocus(context, selectedTokens, userDuration, "allow", focusOptions);
+  await syncDelayedOnceGuardStrategy(
+    guardPlanId,
+    Date.now(),
+    userDuration,
+    timerMode,
+    selectedTokens,
+    "allow",
+  );
 
   FocusStartedNotifyService.report(context, {
     scene: alignToServerEnd ? "duo_initiate_start" : "duo_join_start",
