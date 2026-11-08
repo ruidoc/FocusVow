@@ -20,6 +20,7 @@ import { LockStore } from '../stores/LockStore';
 import { DuoApiService } from './DuoApiService';
 import { deactivateCycleGuard } from './CycleGuardService';
 import {
+  applyScreenRestriction,
   GuardResult,
   pruneSessionGuardStrategies,
   releaseScreenRestriction,
@@ -457,7 +458,10 @@ export async function recoverScheduledLockIfInWindow(context: common.Context): P
 
   const now = Date.now();
   const lock = LockStore.getState();
-  if ((lock.kind === 'covenant' || lock.kind === 'quick_focus') && !isTimedLockFinished(lock, now)) {
+  if (lock.kind === 'cycle_guard') {
+    return;
+  }
+  if (lock.kind === 'quick_focus' && !isTimedLockFinished(lock, now)) {
     return;
   }
 
@@ -507,10 +511,18 @@ export async function recoverScheduledLockIfInWindow(context: common.Context): P
     }
     return 0;
   });
+  let dueSession: DuoSessionView | null = null;
   for (let i = 0; i < sessions.length; i++) {
     if (sessions[i].session_id === dueIds[0]) {
+      dueSession = sessions[i];
       showScheduledCountdownIfMissing(context, sessions[i]);
       break;
+    }
+  }
+  if (dueSession) {
+    const snapshot = buildGuardSnapshotFromSession(dueSession, context);
+    if (snapshot) {
+      await applyScreenRestriction(snapshot.selectedTokens, snapshot.mode);
     }
   }
   const key = `${formatDayKey(now)}:${dueIds.join(',')}`;
