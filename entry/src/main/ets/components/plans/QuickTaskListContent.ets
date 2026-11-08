@@ -18,7 +18,6 @@ export struct QuickTaskListContent {
   /** solo：快捷任务；duo：互督任务 */
   @Prop listMode: string = 'solo';
 
-  onCreateTask?: () => void;
   onScrollerReady?: (scroller: Scroller) => void;
 
   private listScroller: Scroller = new Scroller();
@@ -132,10 +131,6 @@ export struct QuickTaskListContent {
     }
   }
 
-  private handleCreate(): void {
-    this.onCreateTask?.();
-  }
-
   private taskWhenLabel(task: QuickTask): string {
     if (!isDuoQuickTask(task)) {
       return startWhenLabel(task.delay_min);
@@ -207,13 +202,26 @@ export struct QuickTaskListContent {
   }
 
   @Builder
-  private buildEmptyState(): void {
-    Column({ space: 8 }) {
+  private buildEmptyIcon(): void {
+    if (this.listMode === 'duo') {
+      SymbolGlyph($r('sys.symbol.person_2'))
+        .fontSize(50)
+        .fontColor([AppTheme.colors.primary])
+        .opacity(0.85)
+        .margin({ bottom: 20 })
+    } else {
       SymbolGlyph($r('sys.symbol.bolt'))
         .fontSize(50)
-        .fontColor([AppTheme.colors.textMuted])
+        .fontColor([AppTheme.colors.primary])
         .opacity(0.85)
-        .margin({ bottom: 12 })
+        .margin({ bottom: 20 })
+    }
+  }
+
+  @Builder
+  private buildEmptyState(): void {
+    Column({ space: 8 }) {
+      this.buildEmptyIcon()
 
       Text(this.listMode === 'duo' ? '还没有互督任务' : '还没有快捷任务')
         .fontSize(18)
@@ -224,29 +232,12 @@ export struct QuickTaskListContent {
 
       Text(this.listMode === 'duo'
         ? '发起互督并选择搭子时，勾选「保存到互督任务」，下次一键邀请'
-        : '把常用的专注存成模版，每天点一下就开始。')
+        : '开始单人专注时，勾选「保存到快捷任务」，下次就能从这里一键开始。')
         .fontSize(14)
         .lineHeight(20)
         .fontColor(AppTheme.colors.textMuted)
         .textAlign(TextAlign.Center)
         .width('100%')
-
-      if (this.listMode !== 'duo') {
-        Button('新建快捷任务')
-          .width('100%')
-          .height(46)
-          .type(ButtonType.Normal)
-          .buttonStyle(ButtonStyleMode.NORMAL)
-          .borderRadius(AppTheme.radius.button)
-          .clip(true)
-          .backgroundColor(AppTheme.colors.primary)
-          .fontColor('#FFFFFF')
-          .fontWeight(FontWeight.Medium)
-          .margin({ top: 20 })
-          .onClick(() => {
-            this.handleCreate();
-          })
-      }
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 78 })

@@ -13,6 +13,7 @@ import {
   getTornTodayResumeHint,
   isInactiveScheduledListSession,
   isScheduledSessionActivationOpen,
+  isScheduledSessionInLiveExecution,
   isScheduledTornToday,
 } from '../../models/DuoModel';
 import { summarizeRepeatDays } from '../../models/PlanModel';
@@ -376,8 +377,12 @@ struct PlanDetailPage {
     if (!(this.isPartner() || this.isInitiator())) {
       return false;
     }
-    // 对齐 RN detail：仅「进行中且今日未撕毁」隐藏作废/退出
-    if (this.session.status === 'active' && !this.isSessionTornToday()) {
+    // 对齐 RN：仅「排期时段内真在进行」且今日未撕毁时隐藏作废/退出
+    if (
+      this.session.status === 'active' &&
+      isScheduledSessionInLiveExecution(this.session) &&
+      !this.isSessionTornToday()
+    ) {
       return false;
     }
     return true;

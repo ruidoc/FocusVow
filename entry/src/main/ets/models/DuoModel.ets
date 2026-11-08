@@ -409,14 +409,30 @@ export function isScheduledSessionActivationOpen(
   return isScheduledSessionInWindow(session, nowAt);
 }
 
+/** 本场仍在排期时段内执行（详情隐藏作废、须首页撕毁） */
+export function isScheduledSessionInLiveExecution(
+  session: DuoSessionView,
+  nowAt: number = Date.now()
+): boolean {
+  if (session.type !== 'scheduled' || session.status !== 'active') {
+    return false;
+  }
+  return isScheduledSessionActivationOpen(session, nowAt) &&
+    isScheduledSessionInWindow(session, nowAt);
+}
+
 /** 服务端仍为 active，但本地已判定本窗口结束，需要补报 complete-window */
 export function shouldCompleteStaleScheduledWindow(
   session: DuoSessionView,
   nowAt: number = Date.now()
 ): boolean {
-  return session.type === 'scheduled' &&
-    session.status === 'active' &&
-    !isScheduledSessionActivationOpen(session, nowAt);
+  if (session.type !== 'scheduled' || session.status !== 'active') {
+    return false;
+  }
+  if (!isScheduledSessionActivationOpen(session, nowAt)) {
+    return true;
+  }
+  return !isScheduledSessionInWindow(session, nowAt);
 }
 
 export function sortScheduledSessions(sessions: DuoSessionView[]): DuoSessionView[] {

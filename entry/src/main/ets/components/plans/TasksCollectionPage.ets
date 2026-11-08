@@ -1,12 +1,10 @@
 import { common } from '@kit.AbilityKit';
-import { showToast } from '../../common/Toast';
 import { SystemNavPage } from '../common/SystemNavPage';
 import { QuickTaskListContent } from './QuickTaskListContent';
 import { TasksTabTitleBar } from './TasksTabTitleBar';
-import { PageRoutes, backRoute, pushRoute } from '../../router/PageRoutes';
+import { backRoute } from '../../router/PageRoutes';
 import { LockStore } from '../../stores/LockStore';
 import { UserStore } from '../../stores/UserStore';
-import { QuickTaskStore } from '../../stores/QuickTaskStore';
 import { StoreKeys } from '../../stores/StoreKeys';
 import { bootstrapStores } from '../../stores/StoreBootstrap';
 import {
@@ -129,25 +127,6 @@ export struct TasksCollectionPage {
     this.swiperController.changeIndex(index, animate);
   }
 
-  private openCreate(): void {
-    if (!UserStore.isLoggedIn()) {
-      showToast('请先登录', this.getUIContext());
-      pushRoute(PageRoutes.Login);
-      return;
-    }
-    if (LockStore.isLocked()) {
-      showToast('专注进行中，不可以创建任务', this.getUIContext());
-      return;
-    }
-    QuickTaskStore.hydrate();
-    if (this.subTabIndex === 0) {
-      AppStorage.setOrCreate(StoreKeys.QuickTaskCurrentId, '');
-      pushRoute(PageRoutes.QuickTaskForm);
-      return;
-    }
-    pushRoute(PageRoutes.DuoCreate);
-  }
-
   @Builder
   private buildTabHeader(): void {
     Row() {
@@ -180,9 +159,6 @@ export struct TasksCollectionPage {
     Swiper(this.swiperController) {
       QuickTaskListContent({
         isPageActive: this.isPageActive,
-        onCreateTask: () => {
-          this.openCreate();
-        },
         onScrollerReady: (scroller: Scroller) => {
           this.quickScroller = scroller;
           this.quickScrollerReady = true;
@@ -191,9 +167,6 @@ export struct TasksCollectionPage {
       QuickTaskListContent({
         isPageActive: this.isPageActive,
         listMode: 'duo',
-        onCreateTask: () => {
-          this.openCreate();
-        },
         onScrollerReady: (scroller: Scroller) => {
           this.duoScroller = scroller;
           this.duoScrollerReady = true;

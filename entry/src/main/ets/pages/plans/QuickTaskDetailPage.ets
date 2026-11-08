@@ -38,14 +38,44 @@ struct QuickTaskDetailPage {
     this.loadTask();
   }
 
+  onPageShow(): void {
+    if (this.taskId.length === 0 || !UserStore.isLoggedIn()) {
+      return;
+    }
+    this.refreshTaskFromStore();
+  }
+
+  private applyLoadedTask(loaded: QuickTask): void {
+    this.task = loaded;
+    if (!this.toggleBusy) {
+      this.switchEnabled = loaded.enabled;
+    }
+    this.isLoading = false;
+  }
+
+  private refreshTaskFromStore(): void {
+    const cached = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === this.taskId) ?? null;
+    if (cached) {
+      this.applyLoadedTask(cached);
+      return;
+    }
+    void QuickTaskStore.loadAll().then(() => {
+      const loaded = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === this.taskId) ?? null;
+      if (!loaded) {
+        if (this.task === null) {
+          showErrorToast('任务不存在', this.getUIContext());
+          navigateToMainTab('plans');
+        }
+        return;
+      }
+      this.applyLoadedTask(loaded);
+    });
+  }
+
   private loadTask(): void {
     const cached = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === this.taskId) ?? null;
     if (cached) {
-      this.task = cached;
-      if (!this.toggleBusy) {
-        this.switchEnabled = cached.enabled;
-      }
-      this.isLoading = false;
+      this.applyLoadedTask(cached);
       return;
     }
     void QuickTaskStore.loadAll().then(() => {
@@ -55,9 +85,7 @@ struct QuickTaskDetailPage {
         navigateToMainTab('plans');
         return;
       }
-      this.task = loaded;
-      this.switchEnabled = loaded.enabled;
-      this.isLoading = false;
+      this.applyLoadedTask(loaded);
     });
   }
 
