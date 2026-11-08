@@ -36,7 +36,11 @@ import {
   scheduledOccurrenceId,
   upsertGuardWindowEvent,
 } from './GuardWindowEventService';
-import { isOnceStrategyName, sessionIdFromGuardName } from './ScreenTimeService';
+import {
+  isOnceStrategyName,
+  releaseScreenRestriction,
+  sessionIdFromGuardName
+} from './ScreenTimeService';
 
 function noticeMinutes(startedAt: number, endAt: number): number {
   if (endAt > startedAt) {
@@ -534,6 +538,7 @@ export async function handlePlanStrategyStop(context: common.Context, strategyNa
   }
 
   if (lockMatchesStrategy(currentLock, strategyName)) {
+    await releaseScreenRestriction(currentLock.selectedTokens, currentLock.mode);
     savePersistedActiveLockState(context, createIdleLockState());
     ScheduledListStore.markNeedsRefreshPersisted(context);
     hilog.info(DOMAIN, TAG, 'onStop cleared covenant lock %{public}s', strategyName);

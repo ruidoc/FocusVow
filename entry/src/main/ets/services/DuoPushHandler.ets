@@ -653,6 +653,7 @@ export class DuoPushHandler {
         await releaseQuickFocusScreenLock(state);
       } else if (state.kind === 'covenant') {
         await stopPlanGuardStrategyForWindow(state.planId);
+        await releaseScreenRestriction(state.selectedTokens, state.mode);
       }
     }
 
@@ -709,6 +710,7 @@ export class DuoPushHandler {
         await releaseQuickFocusScreenLock(state);
       } else if (state.kind === 'covenant') {
         await stopPlanGuardStrategyForWindow(state.planId);
+        await releaseScreenRestriction(state.selectedTokens, state.mode);
       }
     }
 

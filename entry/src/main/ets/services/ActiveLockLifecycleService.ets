@@ -402,6 +402,7 @@ export async function tearCovenantWindow(
       addExitPlanId(context, state.planId);
     }
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
+    await releaseScreenRestriction(state.selectedTokens, state.mode);
     if (stopResult.ok && state.planId.length > 0) {
       const sessions = ScheduledListStore.getAllSessions();
       for (let i = 0; i < sessions.length; i++) {
@@ -444,6 +445,7 @@ export async function skipCovenantWindow(
     await syncScheduledCovenantTerminal(context, state, 'SUCCESS');
     const sessionId = resolveDuoSessionIdFromLock(state);
     const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
+    await releaseScreenRestriction(state.selectedTokens, state.mode);
     LockStore.clear(context);
     notifyDuoBgSync();
     markScheduledListStale(context);
@@ -475,10 +477,15 @@ export async function endCycleGuardLock(context: common.Context): Promise<GuardR
   }
 }
 
-/** 设置页强制解锁：直接停当前执行。没在锁时 stop 会被系统忽略 */
+/** 设置页强制解锁：停定时策略，并解开补发留下的立即限制 */
 export async function forceReleaseStaleScreenLock(
   context: common.UIAbilityContext
 ): Promise<GuardResult<boolean>> {
+  const lock = LockStore.getState();
+  if (lock.kind !== 'none') {
+    await releaseScreenRestriction(lock.selectedTokens, lock.mode);
+  }
+  await releaseScreenRestriction([], 'allow');
   const result = await stopAllRunningGuardStrategies();
   if (result.ok) {
     LockStore.clear(context);

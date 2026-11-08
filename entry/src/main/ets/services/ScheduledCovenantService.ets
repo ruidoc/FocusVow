@@ -219,6 +219,10 @@ export async function removeGuardForSession(
   context: common.Context,
   sessionId: string
 ): Promise<GuardResult<boolean>> {
+  const lock = LockStore.getState();
+  if (lock.kind === 'covenant' && resolveDuoSessionIdFromLock(lock) === sessionId) {
+    await releaseScreenRestriction(lock.selectedTokens, lock.mode);
+  }
   removeScheduledGuardSnapshot(context, sessionId);
   removeScheduledGuardSyncIssue(context, sessionId);
   return removeScheduledSessionGuardStrategy(sessionId);
@@ -276,6 +280,7 @@ async function releaseActiveLockOnLogout(context: common.Context): Promise<void>
   }
   if (lock.kind === 'covenant') {
     await stopPlanGuardStrategyForWindow(lock.planId);
+    await releaseScreenRestriction(lock.selectedTokens, lock.mode);
     const activeSessionId = resolveDuoSessionId(lock);
     LockStore.clear(context);
     clearScheduledActivationTracking(activeSessionId);

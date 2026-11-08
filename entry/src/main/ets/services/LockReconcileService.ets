@@ -5,7 +5,7 @@ import {
   resolveDuoSessionIdFromLock
 } from '../models/ActiveLockModel';
 import { syncScheduledCovenantTerminal } from './ActiveLockLifecycleService';
-import { stopPlanGuardStrategyForWindow } from './ScreenTimeService';
+import { releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
 import {
   clearScheduledActivationTracking,
   markScheduledListStale,
@@ -32,6 +32,7 @@ async function reconcileMissedScheduledLock(context: common.UIAbilityContext): P
 
 async function releaseCovenantGuard(state: ActiveLockState): Promise<boolean> {
   const stopResult = await stopPlanGuardStrategyForWindow(state.planId);
+  await releaseScreenRestriction(state.selectedTokens, state.mode);
   return stopResult.ok;
 }
 
