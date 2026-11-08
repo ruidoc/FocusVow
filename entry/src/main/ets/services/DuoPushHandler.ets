@@ -3,7 +3,11 @@ import { AppContextHolder } from '../common/AppContextHolder';
 import { ActiveLockState, isLocked, resolveDuoSessionIdFromLock, withLockPartnerNickname } from '../models/ActiveLockModel';
 import { DuoPushPayload, PushDispatchOptions, UmengPushMessageBody } from '../models/DuoModel';
 import { loadPersistedActiveLockState } from './ActiveLockPersistenceService';
-import { releaseScreenRestriction, stopPlanGuardStrategyForWindow } from './ScreenTimeService';
+import {
+  releaseScreenRestriction,
+  removePlanGuardStrategy,
+  stopPlanGuardStrategyForWindow,
+} from './ScreenTimeService';
 import { DuoApiService } from './DuoApiService';
 import { clearDuoWaitContext } from './DuoWaitContextService';
 import {
@@ -46,6 +50,14 @@ type PushMessageHandler = (
   payload: DuoPushPayload,
   options?: PushDispatchOptions
 ) => Promise<void>;
+
+/** 即时专注：屏时限制 + once_ 策略都要停，否则本地已清锁系统仍锁 */
+async function releaseQuickFocusScreenLock(state: ActiveLockState): Promise<void> {
+  if (state.planId.startsWith('once_')) {
+    await removePlanGuardStrategy(state.planId);
+  }
+  await releaseScreenRestriction(state.selectedTokens, state.mode);
+}
 
 export class DuoPushHandler {
   static extractCustomBody(body: UmengPushMessageBody | undefined): string {
@@ -638,7 +650,7 @@ export class DuoPushHandler {
 
     if (isLocked(state)) {
       if (state.kind === 'quick_focus') {
-        await releaseScreenRestriction(state.selectedTokens, state.mode);
+        await releaseQuickFocusScreenLock(state);
       } else if (state.kind === 'covenant') {
         await stopPlanGuardStrategyForWindow(state.planId);
       }
@@ -694,7 +706,7 @@ export class DuoPushHandler {
 
     if (isLocked(state)) {
       if (state.kind === 'quick_focus') {
-        await releaseScreenRestriction(state.selectedTokens, state.mode);
+        await releaseQuickFocusScreenLock(state);
       } else if (state.kind === 'covenant') {
         await stopPlanGuardStrategyForWindow(state.planId);
       }
