@@ -52,6 +52,10 @@ function rememberOnceWindow(
   if (!state.planId.startsWith('once_')) {
     return;
   }
+  // 即时互督也用 once_ 策略名，补记只留给单人，避免再写一条同名单人记录
+  if (resolveDuoSessionIdFromLock(state).length > 0 || state.participationMode === 'duo') {
+    return;
+  }
   const durationMin = state.minDurationMin > 0
     ? state.minDurationMin
     : Math.max(1, Math.round((state.endAt - state.startedAt) / 60000));

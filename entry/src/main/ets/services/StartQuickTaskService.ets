@@ -15,7 +15,8 @@ import { DuoInviteClipboardService } from './DuoInviteClipboardService';
 import { setInstantDuoWait } from './DuoWaitContextService';
 import { PageRoutes, replaceRoute } from '../router/PageRoutes';
 import { UserStore } from '../stores/UserStore';
-import { applyScreenRestriction, syncDelayedOnceGuardStrategy } from './ScreenTimeService';
+import { applyScreenRestriction, ceilToNextMinuteMs, syncDelayedOnceGuardStrategy } from './ScreenTimeService';
+import { isCountupMode, resolveInstantLockMinutes } from '../utils/TimerMode';
 import { ensureTaskPermission } from '../utils/TaskPermissionUtil';
 import { LockStore } from '../stores/LockStore';
 import { SettingsStore } from '../stores/SettingsStore';
@@ -165,6 +166,7 @@ export async function startQuickTask(
   }
 
   const guardPlanId = `once_${Date.now()}`;
+  const guardStart = Date.now();
   const focusOptions: QuickFocusOptions = {
     title: title,
     participationMode: 'solo',
@@ -172,6 +174,12 @@ export async function startQuickTask(
     minDurationMin: task.timer_mode === 'countup' ? task.duration_min : 0,
     planId: guardPlanId,
   };
+  let guardEnd = 0;
+  if (!isCountupMode(task.timer_mode)) {
+    const lockMinutes = resolveInstantLockMinutes(task.duration_min, task.timer_mode);
+    guardEnd = ceilToNextMinuteMs(guardStart + lockMinutes * 60_000);
+    focusOptions.endAtMs = guardEnd;
+  }
   LockStore.startQuickFocus(
     context,
     selectedTokens,
@@ -181,11 +189,12 @@ export async function startQuickTask(
   );
   await syncDelayedOnceGuardStrategy(
     guardPlanId,
-    Date.now(),
+    guardStart,
     task.duration_min,
     task.timer_mode,
     selectedTokens,
     task.mode,
+    guardEnd,
   );
   AnalyticsService.trackEvent('session_started', {
     'plan_id': LockStore.getState().planId,

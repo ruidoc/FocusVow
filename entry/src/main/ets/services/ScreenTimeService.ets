@@ -621,18 +621,19 @@ export async function syncDelayedOnceGuardStrategy(
   durationMinutes: number,
   timerMode: string,
   selectedTokens: string[],
-  mode: 'shield' | 'allow'
+  mode: 'shield' | 'allow',
+  fixedEndAtMs: number = 0
 ): Promise<GuardResult<number>> {
+  const lockMinutes = resolveInstantLockMinutes(durationMinutes, timerMode);
+  const endAtMs = fixedEndAtMs > 0
+    ? fixedEndAtMs
+    : ceilToNextMinuteMs(startAtMs + lockMinutes * 60_000);
   if (isHarmonyPcOr2in1()) {
-    const lockMinutes = resolveInstantLockMinutes(durationMinutes, timerMode);
-    const endAtMs = ceilToNextMinuteMs(startAtMs + lockMinutes * 60_000);
     return { ok: true, data: endAtMs, message: '已预约延迟开始（PC/二合一仅计时）' };
   }
   if (selectedTokens.length === 0 && mode !== 'allow') {
     return { ok: false, data: 0, message: toBusinessMessage('请先选择要限制的应用') };
   }
-  const lockMinutes = resolveInstantLockMinutes(durationMinutes, timerMode);
-  const endAtMs = ceilToNextMinuteMs(startAtMs + lockMinutes * 60_000);
   const startDate = new Date(startAtMs);
   const endDate = new Date(endAtMs);
   const startDay = weekdayOf(startDate);
