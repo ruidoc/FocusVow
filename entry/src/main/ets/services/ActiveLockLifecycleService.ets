@@ -29,7 +29,7 @@ import { isFocusTooShort } from '../utils/FocusValidity';
 import { queueHonorCertificate } from './CertificatePendingService';
 import { savePersistedActiveLockState } from './ActiveLockPersistenceService';
 import { addExitPlanId } from './ExitPlanIdsService';
-import { GuardWindowEvent, upsertGuardWindowEvent } from './GuardWindowEventService';
+import { GuardWindowEvent, scheduledOccurrenceId, upsertGuardWindowEvent } from './GuardWindowEventService';
 
 let endingLock: boolean = false;
 
@@ -379,7 +379,15 @@ export async function syncScheduledCovenantTerminal(
     return tooShort;
   }
 
-  await DuoApiService.completeScheduledWindow(sessionId, context);
+  await DuoApiService.completeScheduledWindow(
+    sessionId,
+    context,
+    scheduledOccurrenceId(sessionId, state.startedAt),
+    state.startedAt,
+    endedAt,
+    'SUCCESS',
+    ''
+  );
   if (UserStore.isLoggedIn()) {
     await FocusSyncService.flushPending(context);
   }

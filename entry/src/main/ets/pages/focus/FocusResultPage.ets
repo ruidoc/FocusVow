@@ -42,11 +42,25 @@ struct FocusResultPage {
     return title.length > 0 ? title : '专注契约';
   }
 
+  /** 排队时 endedAt 常写成打开 App 的当前时间；倒计时真实结束以锁上的 endAt 为准 */
+  private resolveEndedAt(): number {
+    if (!this.pending) {
+      return 0;
+    }
+    const startedAt = this.pending.lock.startedAt;
+    const storedEnd = this.pending.lock.endAt;
+    let endedAt = this.pending.endedAt;
+    if (storedEnd > startedAt && endedAt > storedEnd) {
+      endedAt = storedEnd;
+    }
+    return endedAt;
+  }
+
   private actualMinutes(): number {
     if (!this.pending || this.pending.lock.startedAt <= 0) {
       return 0;
     }
-    const seconds = Math.max(0, Math.floor((this.pending.endedAt - this.pending.lock.startedAt) / 1000));
+    const seconds = Math.max(0, Math.floor((this.resolveEndedAt() - this.pending.lock.startedAt) / 1000));
     return Math.floor(seconds / 60);
   }
 
@@ -57,14 +71,15 @@ struct FocusResultPage {
     }
     const user = UserStore.getUserInfo();
     clearPendingCertificate();
+    const endedAt = this.resolveEndedAt();
     if (pending.kind === 'honor') {
-      openHonorCertificatePreview(buildHonorCertificateFromLock(pending.lock, user, pending.endedAt));
+      openHonorCertificatePreview(buildHonorCertificateFromLock(pending.lock, user, endedAt));
       return;
     }
     openShameCertificatePreview(buildShameCertificateFromLock(
       pending.lock,
       user,
-      pending.endedAt,
+      endedAt,
       pending.breachRole,
       pending.failedReason,
     ));

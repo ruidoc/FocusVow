@@ -48,6 +48,7 @@ import { StoreKeys } from '../stores/StoreKeys';
 const NEEDS_SCHEDULED_GUARD_SYNC_KEY: string = 'needs_scheduled_guard_sync';
 const AWAITING_SCHEDULED_GUARD_SYNC_CHECK_KEY: string = 'awaiting_scheduled_guard_sync_check';
 const autoSyncedScheduleWindows: Set<string> = new Set<string>();
+const appliedImmediateRestrictions: Set<string> = new Set<string>();
 let recoverScheduledLockInFlight: boolean = false;
 
 function readBoolPref(context: common.Context, key: string): boolean {
@@ -300,6 +301,7 @@ export async function clearAllScheduledGuardOnLogout(context: common.Context): P
   ScheduledListStore.setAllSessions([]);
   ScheduledListStore.markDirty();
   autoSyncedScheduleWindows.clear();
+  appliedImmediateRestrictions.clear();
   clearAllScheduledActivationTracking();
   return osResult;
 }
@@ -469,6 +471,8 @@ export async function recoverScheduledLockIfInWindow(context: common.Context): P
   if (lock.kind === 'quick_focus' && !isTimedLockFinished(lock, now)) {
     return;
   }
+  // 这场倒计时还在走：只补立即限制。再拉列表补报结束、或重挂策略，会和到点回调各写一条记录
+  const covenantStillRunning = lock.kind === 'covenant' && !isTimedLockFinished(lock, now);
 
   let sessions = ScheduledListStore.getAllSessions();
   if (sessions.length === 0) {
@@ -476,10 +480,10 @@ export async function recoverScheduledLockIfInWindow(context: common.Context): P
     if (response.statusCode !== 200) {
       return;
     }
-    const reconciled = await reconcileStaleScheduledWindows(
-      DuoApiService.parseScheduledList(response).items,
-      context
-    );
+    const items = DuoApiService.parseScheduledList(response).items;
+    const reconciled = covenantStillRunning
+      ? items
+      : await reconcileStaleScheduledWindows(items, context);
     ScheduledListStore.setAllSessions(reconciled);
     ScheduledListStore.clearDirty();
     sessions = reconciled;
@@ -525,10 +529,19 @@ export async function recoverScheduledLockIfInWindow(context: common.Context): P
     }
   }
   if (dueSession) {
-    const snapshot = buildGuardSnapshotFromSession(dueSession, context);
-    if (snapshot) {
-      await applyScreenRestriction(snapshot.selectedTokens, snapshot.mode);
+    const restrictKey = `${formatDayKey(now)}:${dueSession.session_id}`;
+    if (!appliedImmediateRestrictions.has(restrictKey)) {
+      const snapshot = buildGuardSnapshotFromSession(dueSession, context);
+      if (snapshot) {
+        const applied = await applyScreenRestriction(snapshot.selectedTokens, snapshot.mode);
+        if (applied.ok) {
+          appliedImmediateRestrictions.add(restrictKey);
+        }
+      }
     }
+  }
+  if (covenantStillRunning) {
+    return;
   }
   const key = `${formatDayKey(now)}:${dueIds.join(',')}`;
   if (autoSyncedScheduleWindows.has(key)) {

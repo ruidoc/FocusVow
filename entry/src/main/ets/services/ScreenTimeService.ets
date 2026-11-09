@@ -9,6 +9,7 @@ import { resolveInstantLockMinutes } from '../utils/TimerMode';
 import { isHarmonyPcOr2in1 } from '../utils/DeviceFormFactor';
 import { SettingsStore } from '../stores/SettingsStore';
 import { StoreKeys } from '../stores/StoreKeys';
+import { readStoredString } from './PreferencesService';
 
 export interface GuardResult<T> {
   ok: boolean;
@@ -387,6 +388,9 @@ export async function promptScreenTimeIfRevoked(
   uiContext?: UIContext,
 ): Promise<boolean> {
   if (isHarmonyPcOr2in1()) {
+    return true;
+  }
+  if (readStoredString(context, 'onboarding.completed', '') !== '1') {
     return true;
   }
   if (screenTimePromptOpen) {

@@ -416,16 +416,20 @@ struct PlanAddPage {
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     this.blurNameInput();
     if (result.data) {
-      let tokens = [...result.data];
+      const tokens = [...result.data];
       if (this.isSleepPlan() && tokens.length > 1) {
-        tokens = tokens.slice(0, 1);
-        showToast("早睡契约最多选择 1 个应用", this.getUIContext());
+        const uiContext = this.getUIContext();
+        // 系统选择页还在收起时，Toast 会被它盖住
+        setTimeout(() => {
+          showToast("早睡只能选择一个应用", uiContext);
+        }, 300);
+        return;
       }
       this.selectedTokens = tokens;
       if (this.isEditing()) {
         this.statusMessage = result.message;
       } else {
-        SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
+        SettingsStore.updateSelectedTokens(hostContext, tokens, result.message);
       }
       return;
     }
@@ -490,7 +494,8 @@ struct PlanAddPage {
         return;
       }
       if (this.selectedTokens.length > 1) {
-        this.selectedTokens = this.selectedTokens.slice(0, 1);
+        showErrorToast("早睡只能选择一个应用", uiContext);
+        return;
       }
     } else if (
       !this.isPartnerEdit() &&
@@ -527,11 +532,7 @@ struct PlanAddPage {
     this.isSaving = true;
 
     const title = this.planName.trim();
-    const apps = this.isSleepPlan()
-      ? this.selectedTokens.length > 0
-        ? [this.selectedTokens[0]]
-        : []
-      : [...this.selectedTokens];
+    const apps = [...this.selectedTokens];
     const schedulePayload: DuoScheduledCreatePayload = {
       title,
       start: this.startTime,
@@ -685,11 +686,15 @@ struct PlanAddPage {
       return;
     }
 
+    if (this.isSleepPlan() && this.selectedTokens.length > 1) {
+      showErrorToast("早睡只能选择一个应用", uiContext);
+      this.isSaving = false;
+      return;
+    }
+
     const mergedApps = mergeSessionAppsForHarmony(
       session.my_apps ?? [],
-      this.isSleepPlan() && this.selectedTokens.length > 1
-        ? this.selectedTokens.slice(0, 1)
-        : this.selectedTokens,
+      this.selectedTokens,
     );
     const payload: DuoScheduledUpdatePayload =
       session.viewer_role === "initiator"

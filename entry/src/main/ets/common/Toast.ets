@@ -1,4 +1,4 @@
-import { promptAction, UIContext, ShowToastOptions } from '@kit.ArkUI';
+import { promptAction, UIContext } from "@kit.ArkUI";
 
 const DEFAULT_TOAST_DURATION: number = 2000;
 const ERROR_TOAST_DURATION: number = 3000;
@@ -6,11 +6,14 @@ const ERROR_TOAST_DURATION: number = 3000;
 export function showToast(
   message: string,
   uiContext?: UIContext,
-  duration: number = DEFAULT_TOAST_DURATION
+  duration: number = DEFAULT_TOAST_DURATION,
 ): void {
-  const options: ShowToastOptions = {
+  const options: promptAction.ShowToastOptions = {
     message,
-    duration
+    duration,
+    alignment: Alignment.Top,
+    offset: { dx: 0, dy: 148 },
+    showMode: promptAction.ToastShowMode.TOP_MOST,
   };
 
   if (uiContext) {
@@ -24,7 +27,7 @@ export function showToast(
 export function showErrorToast(
   message: string,
   uiContext?: UIContext,
-  fallback: string = '操作失败，请稍后重试'
+  fallback: string = "操作失败，请稍后重试",
 ): void {
   const text = message.length > 0 ? message : fallback;
   showToast(text, uiContext, ERROR_TOAST_DURATION);

@@ -100,10 +100,6 @@ struct DuoPickFriendPage {
     .height(56)
     .padding({ left: 18, right: 18 })
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(AppTheme.colors.surface)
-    .borderRadius(AppTheme.radius.lg)
-    .border({ width: 1, color: AppTheme.colors.border })
-    .margin({ top: 10 })
     .onClick(() => {
       this.applyPick(friend.id, friend.username);
     })
@@ -138,9 +134,22 @@ struct DuoPickFriendPage {
           .fontColor(AppTheme.colors.textMuted)
           .width('100%')
           .margin({ top: 8, bottom: 4 })
-        ForEach(this.list, (friend: MutualFriendRow) => {
-          this.buildFriendRow(friend)
-        }, (friend: MutualFriendRow) => friend.id)
+        Column() {
+          ForEach(this.list, (friend: MutualFriendRow, index: number) => {
+            if (index > 0) {
+              Divider()
+                .color(AppTheme.colors.border)
+                .strokeWidth(0.5)
+                .margin({ left: 18, right: 18 })
+            }
+            this.buildFriendRow(friend)
+          }, (friend: MutualFriendRow) => friend.id)
+        }
+        .width('100%')
+        .backgroundColor(AppTheme.colors.surface)
+        .borderRadius(AppTheme.radius.lg)
+        .border({ width: 1, color: AppTheme.colors.border })
+        .clip(true)
       }
     }
     .width('100%')

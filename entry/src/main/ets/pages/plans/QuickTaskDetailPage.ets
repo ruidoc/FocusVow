@@ -24,6 +24,16 @@ struct QuickTaskDetailPage {
   @State private switchEnabled: boolean = true;
   @State private toggleBusy: boolean = false;
   @State private switchSlot: number = 0;
+  @State private rowTitle: string = '';
+  @State private rowDuration: string = '';
+  @State private rowTimer: string = '';
+  @State private rowExtraLabel: string = '';
+  @State private rowExtraValue: string = '';
+  @State private rowApps: string = '';
+  @State private rowMode: string = '';
+  @State private rowDelayTag: string = '';
+  @State private showDelayTag: boolean = false;
+  @State private showNoStopRow: boolean = false;
 
   aboutToAppear(): void {
     const hostContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -47,6 +57,18 @@ struct QuickTaskDetailPage {
 
   private applyLoadedTask(loaded: QuickTask): void {
     this.task = loaded;
+    const duo = isDuoQuickTask(loaded);
+    const partner = (loaded.partner_nickname ?? '').trim();
+    this.rowTitle = loaded.title.length > 0 ? loaded.title : (duo ? '互督任务' : '快捷任务');
+    this.rowDuration = minutesToHours(loaded.duration_min);
+    this.rowTimer = loaded.timer_mode === 'countup' ? '正计时' : '倒计时';
+    this.rowExtraLabel = duo ? '互督搭子' : '开始时间';
+    this.rowExtraValue = duo ? (partner.length > 0 ? partner : '搭子') : startWhenLabel(loaded.delay_min);
+    this.rowApps = `${filterSessionAppsForHarmony(loaded.apps).length} 个`;
+    this.rowMode = loaded.mode === 'shield' ? '锁定模式' : '放行模式';
+    this.rowDelayTag = loaded.delay_min > 0 ? '延时' : '即时';
+    this.showDelayTag = !duo;
+    this.showNoStopRow = !duo && loaded.no_stop === true;
     if (!this.toggleBusy) {
       this.switchEnabled = loaded.enabled;
     }
@@ -54,11 +76,6 @@ struct QuickTaskDetailPage {
   }
 
   private refreshTaskFromStore(): void {
-    const cached = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === this.taskId) ?? null;
-    if (cached) {
-      this.applyLoadedTask(cached);
-      return;
-    }
     void QuickTaskStore.loadAll().then(() => {
       const loaded = QuickTaskStore.getTasks().find((item: QuickTask) => item.id === this.taskId) ?? null;
       if (!loaded) {
@@ -204,10 +221,7 @@ struct QuickTaskDetailPage {
   }
 
   private getPageTitle(): string {
-    if (this.task && this.task.title.length > 0) {
-      return this.task.title;
-    }
-    return '任务详情';
+    return this.rowTitle.length > 0 ? this.rowTitle : '任务详情';
   }
 
   private shouldShowEditAction(): boolean {
@@ -222,108 +236,103 @@ struct QuickTaskDetailPage {
     return this.shouldShowDestructiveFooter() ? 84 : 28;
   }
 
-  private getTaskTitle(): string {
-    if (this.task && this.task.title.length > 0) {
-      return this.task.title;
-    }
-    return this.isDuoDetail() ? '互督任务' : '快捷任务';
-  }
-
-  private isDuoDetail(): boolean {
-    return this.task !== null && isDuoQuickTask(this.task);
-  }
-
-  private getPartnerLabel(): string {
-    const name = (this.task?.partner_nickname ?? '').trim();
-    return name.length > 0 ? name : '搭子';
-  }
-
-  private getDelayTagLabel(): string {
-    return this.task !== null && this.task.delay_min > 0 ? '延时' : '即时';
-  }
-
-  private getDurationLabel(): string {
-    return minutesToHours(this.task !== null ? this.task.duration_min : 0);
-  }
-
-  private getTimerModeLabel(): string {
-    return this.task?.timer_mode === 'countup' ? '正计时' : '倒计时';
-  }
-
-  private getStartDelayText(): string {
-    return startWhenLabel(this.task !== null ? this.task.delay_min : 0);
-  }
-
-  private getAppCountLabel(): string {
-    const apps = this.task !== null ? this.task.apps : [];
-    return `${filterSessionAppsForHarmony(apps).length} 个`;
-  }
-
-  private getModeLabel(): string {
-    return this.task?.mode === 'shield' ? '锁定模式' : '放行模式';
-  }
-
-  private showNoStop(): boolean {
-    return this.task?.no_stop === true;
-  }
-
-  @Builder
-  private buildStatusTag(label: string): void {
-    Text(label)
-      .fontSize(12)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(AppTheme.colors.primary)
-      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-      .backgroundColor(AppTheme.colors.primarySoft)
-      .borderRadius(AppTheme.radius.pill)
-  }
-
-  @Builder
-  private buildViewRow(label: string, value: string): void {
-    Row() {
-      Text(label)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textMuted)
-        .width(88)
-      Text(value)
-        .fontSize(15)
-        .fontColor(AppTheme.colors.textPrimary)
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Top)
-  }
-
   @Builder
   private buildViewBody(): void {
     Column({ space: 18 }) {
       Column({ space: 14 }) {
         Row() {
-          Text(this.getTaskTitle())
+          Text(this.rowTitle)
             .fontSize(20)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.colors.textPrimary)
             .layoutWeight(1)
 
-          if (!this.isDuoDetail()) {
-            this.buildStatusTag(this.getDelayTagLabel())
+          if (this.showDelayTag) {
+            Text(this.rowDelayTag)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.colors.primary)
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .backgroundColor(AppTheme.colors.primarySoft)
+              .borderRadius(AppTheme.radius.pill)
           }
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
         Column({ space: 12 }) {
-          this.buildViewRow('专注时长', this.getDurationLabel())
-          this.buildViewRow('计时方式', this.getTimerModeLabel())
-          if (this.isDuoDetail()) {
-            this.buildViewRow('互督搭子', this.getPartnerLabel())
-          } else {
-            this.buildViewRow('开始时间', this.getStartDelayText())
+          Row() {
+            Text('专注时长')
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textMuted)
+              .width(88)
+            Text(this.rowDuration)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textPrimary)
+              .layoutWeight(1)
           }
-          this.buildViewRow('应用数量', this.getAppCountLabel())
-          this.buildViewRow('锁机模式', this.getModeLabel())
-          if (!this.isDuoDetail() && this.showNoStop()) {
-            this.buildViewRow('全程专注', '已开启')
+          .width('100%')
+
+          Row() {
+            Text('计时方式')
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textMuted)
+              .width(88)
+            Text(this.rowTimer)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textPrimary)
+              .layoutWeight(1)
+          }
+          .width('100%')
+
+          Row() {
+            Text(this.rowExtraLabel)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textMuted)
+              .width(88)
+            Text(this.rowExtraValue)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textPrimary)
+              .layoutWeight(1)
+          }
+          .width('100%')
+
+          Row() {
+            Text('应用数量')
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textMuted)
+              .width(88)
+            Text(this.rowApps)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textPrimary)
+              .layoutWeight(1)
+          }
+          .width('100%')
+
+          Row() {
+            Text('锁机模式')
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textMuted)
+              .width(88)
+            Text(this.rowMode)
+              .fontSize(15)
+              .fontColor(AppTheme.colors.textPrimary)
+              .layoutWeight(1)
+          }
+          .width('100%')
+
+          if (this.showNoStopRow) {
+            Row() {
+              Text('全程专注')
+                .fontSize(15)
+                .fontColor(AppTheme.colors.textMuted)
+                .width(88)
+              Text('已开启')
+                .fontSize(15)
+                .fontColor(AppTheme.colors.textPrimary)
+                .layoutWeight(1)
+            }
+            .width('100%')
           }
         }
         .width('100%')
