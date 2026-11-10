@@ -14,7 +14,7 @@ import {
   QuickTaskUpsertPayload,
 } from '../../models/QuickTaskModel';
 import { backRoute, pushDuoPickFriend } from '../../router/PageRoutes';
-import { chooseRestrictedApps, requestScreenTimeAuthorization } from '../../services/ScreenTimeService';
+import { ALLOW_APP_SELECTION_LIMIT, chooseRestrictedApps, rejectOverAppSelection, requestScreenTimeAuthorization } from '../../services/ScreenTimeService';
 import { takeDuoPartnerPick } from '../../services/DuoPartnerPickService';
 import { upsellIfProSlotQuota } from '../../services/ProQuotaService';
 import { LockStore } from '../../stores/LockStore';
@@ -135,6 +135,9 @@ struct DuoQuickTaskFormPage {
       return;
     }
     if (!result.data) {
+      return;
+    }
+    if (rejectOverAppSelection(result.data.length, ALLOW_APP_SELECTION_LIMIT, this.getUIContext())) {
       return;
     }
     SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);

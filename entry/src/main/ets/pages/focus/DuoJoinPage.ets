@@ -5,8 +5,10 @@ import { AppTheme } from '../../constants/Theme';
 import { DuoSessionView } from '../../models/DuoModel';
 import { PageRoutes, backRoute, pushRoute, navigateToMainTab } from '../../router/PageRoutes';
 import {
+  ALLOW_APP_SELECTION_LIMIT,
   chooseRestrictedApps,
-  ensureScreenTimeAuthorization
+  ensureScreenTimeAuthorization,
+  rejectOverAppSelection
 } from '../../services/ScreenTimeService';
 import { DuoApiService } from '../../services/DuoApiService';
 import { DuoInviteClipboardService, extractDuoInviteToken } from '../../services/DuoInviteClipboardService';
@@ -118,6 +120,9 @@ struct DuoJoinPage {
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     if (result.data) {
+      if (rejectOverAppSelection(result.data.length, ALLOW_APP_SELECTION_LIMIT, this.getUIContext())) {
+        return;
+      }
       SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
       return;
     }

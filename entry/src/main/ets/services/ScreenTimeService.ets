@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { UIContext } from '@kit.ArkUI';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
-import { showErrorToast } from '../common/Toast';
+import { showErrorToast, showToast } from '../common/Toast';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FocusPlan, normalizePlanRepeatDays, normalizeTimeText } from '../models/PlanModel';
 import { ScheduledGuardSnapshot } from './ScheduledSessionPersistenceService';
@@ -415,6 +415,26 @@ export async function promptScreenTimeIfRevoked(
     screenTimePromptOpen = false;
     screenTimePromptedForegroundAt = AppStorage.get<number>(StoreKeys.AppForegroundAt) ?? screenTimePromptedForegroundAt;
   }
+}
+
+export const ALLOW_APP_SELECTION_LIMIT: number = 12;
+
+/** 系统选择页收起前 Toast 会被盖住。超限返回 true，调用方不要写入这次选择。 */
+export function rejectOverAppSelection(
+  count: number,
+  maxCount: number,
+  uiContext: UIContext
+): boolean {
+  if (maxCount <= 0 || count <= maxCount) {
+    return false;
+  }
+  const message = maxCount === 1
+    ? '早睡只能选择一个应用'
+    : `最多选择 ${maxCount} 个应用`;
+  setTimeout(() => {
+    showToast(message, uiContext);
+  }, 300);
+  return true;
 }
 
 export async function chooseRestrictedApps(

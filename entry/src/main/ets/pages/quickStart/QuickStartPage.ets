@@ -9,7 +9,7 @@ import { TimerModeSegmented } from "../../components/focus/TimerModeSegmented";
 import { ProQuickPayHost } from "../../components/paywall/ProQuickPayDialog";
 import { AppTheme } from "../../constants/Theme";
 import { backRoute, openQuickTaskTabOnce, returnToMainTab } from "../../router/PageRoutes";
-import { applyScreenRestriction, ceilToNextMinuteMs, chooseRestrictedApps, syncDelayedOnceGuardStrategy } from "../../services/ScreenTimeService";
+import { ALLOW_APP_SELECTION_LIMIT, applyScreenRestriction, ceilToNextMinuteMs, chooseRestrictedApps, rejectOverAppSelection, syncDelayedOnceGuardStrategy } from "../../services/ScreenTimeService";
 import { blockIfOverlapsScheduledPlan, conflictWindowMinutes } from "../../services/ScheduledPlanValidation";
 import { ensureSoloFocusAccess } from "../../services/GuestSoloFocusService";
 import { markQuickPayForeground } from "../../utils/PaywallNavigationUtil";
@@ -284,6 +284,10 @@ struct QuickStartPage {
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     if (result.data) {
+      const maxCount = this.mode === "allow" ? ALLOW_APP_SELECTION_LIMIT : 0;
+      if (rejectOverAppSelection(result.data.length, maxCount, this.getUIContext())) {
+        return;
+      }
       SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
       return;
     }

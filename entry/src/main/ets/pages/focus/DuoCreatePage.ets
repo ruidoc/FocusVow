@@ -13,7 +13,7 @@ import {
   pushRoute,
   replaceRoute,
 } from "../../router/PageRoutes";
-import { chooseRestrictedApps } from "../../services/ScreenTimeService";
+import { ALLOW_APP_SELECTION_LIMIT, chooseRestrictedApps, rejectOverAppSelection } from "../../services/ScreenTimeService";
 import { ensureTaskPermission } from "../../utils/TaskPermissionUtil";
 import { DuoApiService } from "../../services/DuoApiService";
 import { QuickTaskApiService } from "../../services/QuickTaskApiService";
@@ -155,6 +155,9 @@ struct DuoCreatePage {
     }
     const result = await chooseRestrictedApps(hostContext, this.selectedTokens);
     if (result.data) {
+      if (rejectOverAppSelection(result.data.length, ALLOW_APP_SELECTION_LIMIT, this.getUIContext())) {
+        return;
+      }
       SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
       return;
     }

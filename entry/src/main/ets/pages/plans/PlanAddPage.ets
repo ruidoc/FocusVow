@@ -27,7 +27,7 @@ import {
   pushRoute,
   replaceRoute,
 } from "../../router/PageRoutes";
-import { chooseRestrictedApps } from "../../services/ScreenTimeService";
+import { ALLOW_APP_SELECTION_LIMIT, chooseRestrictedApps, rejectOverAppSelection } from "../../services/ScreenTimeService";
 import { DuoApiService } from "../../services/DuoApiService";
 import { DuoInviteClipboardService } from "../../services/DuoInviteClipboardService";
 import { takeDuoPartnerPick } from "../../services/DuoPartnerPickService";
@@ -417,12 +417,8 @@ struct PlanAddPage {
     this.blurNameInput();
     if (result.data) {
       const tokens = [...result.data];
-      if (this.isSleepPlan() && tokens.length > 1) {
-        const uiContext = this.getUIContext();
-        // 系统选择页还在收起时，Toast 会被它盖住
-        setTimeout(() => {
-          showToast("早睡只能选择一个应用", uiContext);
-        }, 300);
+      const maxCount = this.isSleepPlan() ? 1 : this.mode === "allow" ? ALLOW_APP_SELECTION_LIMIT : 0;
+      if (rejectOverAppSelection(tokens.length, maxCount, this.getUIContext())) {
         return;
       }
       this.selectedTokens = tokens;

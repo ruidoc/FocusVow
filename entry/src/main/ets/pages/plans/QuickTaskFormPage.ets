@@ -8,7 +8,9 @@ import { filterSessionAppsForHarmony, mergeSessionAppsForHarmony } from "../../m
 import { isDuoQuickTask, QuickTask, QuickTaskUpsertPayload } from "../../models/QuickTaskModel";
 import { PageRoutes, backRoute, pushRoute } from "../../router/PageRoutes";
 import {
+  ALLOW_APP_SELECTION_LIMIT,
   chooseRestrictedApps,
+  rejectOverAppSelection,
   requestScreenTimeAuthorization,
 } from "../../services/ScreenTimeService";
 import {
@@ -143,6 +145,10 @@ struct QuickTaskFormPage {
       return;
     }
     if (!result.data) {
+      return;
+    }
+    const maxCount = this.mode === "allow" ? ALLOW_APP_SELECTION_LIMIT : 0;
+    if (rejectOverAppSelection(result.data.length, maxCount, this.getUIContext())) {
       return;
     }
     SettingsStore.updateSelectedTokens(hostContext, result.data, result.message);
